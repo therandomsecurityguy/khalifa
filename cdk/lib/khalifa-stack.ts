@@ -22,7 +22,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     const { neptuneEndpoint, masterAccountId } = props;
 
     const neptuneSecret = new secretsmanager.Secret(this, 'NeptuneAuthSecret', {
-      secretName: 'kalifa-neptune-auth',
+      secretName: 'khalifa-neptune-auth',
       generateSecretString: {
         secretStringTemplate: JSON.stringify({
           username: 'neptune_user',

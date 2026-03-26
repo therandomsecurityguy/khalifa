@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
-import { SecurityGraphIngestionStack } from '../lib/kalifa-stack';
+import { SecurityGraphIngestionStack } from '../lib/khalifa-stack';
 
 const app = new cdk.App();
 

@@ -40,8 +40,8 @@ EventBridge → SQS Queue → IncrementalProcessor Lambda → Neptune
 ```
 khalifa/
 ├── cdk/                    # CDK infrastructure
-│   ├── bin/kalifa.ts
-│   └── lib/kalifa-stack.ts
+│   ├── bin/khalifa.ts
+│   └── lib/khalifa-stack.ts
 ├── lambdas/
 │   ├── shared/             # Shared types and utilities
 │   ├── list-accounts/      # Lists org accounts
