@@ -1,4 +1,4 @@
-# Kalifa - Security Graph Ingestion
+# Khalifa - Security Graph Ingestion
 
 Agentless ingestion of AWS Org resources and Security Hub findings into a Neptune-backed security graph.
 
@@ -38,7 +38,7 @@ EventBridge → SQS Queue → IncrementalProcessor Lambda → Neptune
 ## Project Structure
 
 ```
-kalifa/
+khalifa/
 ├── cdk/                    # CDK infrastructure
 │   ├── bin/kalifa.ts
 │   └── lib/kalifa-stack.ts
