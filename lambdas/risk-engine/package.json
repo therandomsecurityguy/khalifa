@@ -1,0 +1,21 @@
+{
+  "name": "risk-engine",
+  "version": "1.0.0",
+  "description": "Risk and attack-path engine for Neptune security graph",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.400.0",
+    "@aws-sdk/lib-dynamodb": "^3.400.0",
+    "@aws-sdk/util-dynamodb": "^3.996.2",
+    "gremlin": "^3.7.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.131",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
