@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Role for Security Graph ingestion - deployed via StackSet'
+Parameters:
+  MasterAccountId:
+    Type: String
+    Description: 'Master account ID that will assume this role'
+Resources:
+  CollectorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SecurityGraphCollectorRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${MasterAccountId}:role/*'
+            Action: sts:AssumeRole
+            Condition:
+              StringLike:
+                sts:ExternalId: '*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      Path: /
+      Policies:
+        - PolicyName: SecurityGraphCollectorPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:Describe*
+                  - s3:GetBucketPolicy
+                  - s3:GetBucketAcl
+                  - s3:ListAllMyBuckets
+                  - s3:GetEncryptionConfiguration
+                  - rds:DescribeDBInstances
+                  - iam:GetUser
+                  - iam:GetRole
+                  - iam:GetPolicy
+                  - iam:ListUsers
+                  - iam:ListRoles
+                  - iam:ListPolicies
+                  - iam:ListGroups
+                  - iam:ListAttachedUserPolicies
+                  - iam:ListAttachedRolePolicies
+                  - kms:ListKeys
+                  - kms:DescribeKey
+                  - eks:DescribeCluster
+                  - eks:ListClusters
+                  - securityhub:GetFindings
+                  - securityhub:ListFindings
+                Resource: '*'
+Outputs:
+  CollectorRoleArn:
+    Description: 'ARN of the Collector Role'
+    Value: !GetAtt CollectorRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CollectorRoleArn'

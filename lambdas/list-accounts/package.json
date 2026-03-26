@@ -1,0 +1,8 @@
+{
+  "name": "list-accounts",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-organizations": "^3.400.0"
+  }
+}
