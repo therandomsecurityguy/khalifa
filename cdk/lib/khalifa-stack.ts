@@ -8,6 +8,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { Construct } from 'constructs';
 
 export interface SecurityGraphIngestionStackProps extends cdk.StackProps {
@@ -44,7 +45,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         queue: deadLetterQueue,
         maxReceiveCount: 3,
       },
-      retention: cdk.Duration.days(4),
+      retentionPeriod: cdk.Duration.days(4),
       visibilityTimeout: cdk.Duration.minutes(5),
     });
 
@@ -225,6 +226,51 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       ruleName: 'security-graph-queue-processor',
       schedule: events.Schedule.rate(cdk.Duration.minutes(1)),
       targets: [new targets.LambdaFunction(incrementalProcessorFn)],
+    });
+
+    const issuesTable = new dynamodb.Table(this, 'SecurityIssuesTable', {
+      tableName: 'SecurityIssues',
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'ruleId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    issuesTable.addGlobalSecondaryIndex({
+      indexName: 'RuleIdIndex',
+      partitionKey: { name: 'ruleId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING },
+    });
+    issuesTable.addGlobalSecondaryIndex({
+      indexName: 'StatusIndex',
+      partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING },
+    });
+
+    const riskEngineFn = new lambda.Function(this, 'RiskEngineFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset('../lambdas/risk-engine'),
+      role: lambdaExecutionRole,
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 512,
+      environment: {
+        NEPTUNE_ENDPOINT: neptuneEndpoint,
+        ISSUES_TABLE: issuesTable.tableName,
+        NEPTUNE_AUTH_SECRET_ARN: neptuneSecret.secretArn,
+      },
+    });
+    riskEngineFn.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
+      resources: [issuesTable.tableArn, issuesTable.tableArn + '/index/*'],
+    }));
+
+    logGroup(riskEngineFn, 'RiskEngine');
+
+    new events.Rule(this, 'RiskEngineScheduledTrigger', {
+      ruleName: 'risk-engine-scheduled-trigger',
+      schedule: events.Schedule.rate(cdk.Duration.hours(1)),
+      targets: [new targets.LambdaFunction(riskEngineFn)],
     });
   }
 }
