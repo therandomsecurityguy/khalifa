@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security-graph
+  labels:
+    name: security-graph
+    environment: production
