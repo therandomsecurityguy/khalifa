@@ -1,0 +1,54 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rule-runner
+  namespace: security-graph
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: rule-runner
+        spec:
+          serviceAccountName: rule-runner
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          containers:
+            - name: rule-runner
+              image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/security-graph-rule-runner:v1.0.0
+              imagePullPolicy: Always
+              envFrom:
+                - configMapRef:
+                    name: security-graph-config
+                - secretRef:
+                    name: security-graph-secrets
+              env:
+                - name: AWS_REGION
+                  value: "us-east-1"
+                - name: AWS_WEB_IDENTITY_TOKEN_FILE
+                  value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+                - name: AWS_ROLE_ARN
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['eks.amazonaws.com/role-arn']
+              resources:
+                requests:
+                  memory: "1Gi"
+                  cpu: "500m"
+                limits:
+                  memory: "2Gi"
+                  cpu: "2000m"
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          restartPolicy: OnFailure
+          volumes:
+            - name: tmp
+              emptyDir: {}

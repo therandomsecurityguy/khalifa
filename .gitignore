@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Lambda deployment packages
+*.zip
+
+# CDK
+cdk.out/
+*.js
+!jest.config.js
+!bin/**
+!lib/**
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test outputs
+coverage/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# CloudWatch
+awslogs/

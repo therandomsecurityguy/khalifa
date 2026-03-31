@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-service-ingress
+  namespace: security-graph
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/health-check-path: /health
+    alb.ingress.kubernetes.io/health-check-interval-seconds: "30"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-2016-08
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/example-arn
+    alb.ingress.kubernetes.io/auth-type: "on-aws-alb"
+    alb.ingress.kubernetes.io/auth-idp-oidc: "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/security-graph-api/example-id,cognito,https://us-east-1-example.auth.us-east-1.amazoncognito.com,example-user-pool-id,example-client-id"
+  labels:
+    app: api-service
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-service
+                port:
+                  number: 80

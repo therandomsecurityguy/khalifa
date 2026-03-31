@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-graph-config
+  namespace: security-graph
+data:
+  NEPTUNE_ENDPOINT: "neptune-cluster.us-east-1.amazonaws.com"
+  ISSUES_TABLE: "SecurityIssues"
+  LOG_LEVEL: "info"
+  API_PORT: "8080"
+  RULE_RUNNER_SCHEDULE: "0 */6 * * *"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: security-graph-secrets
+  namespace: security-graph
+type: Opaque
+stringData:
+  # These will be populated via AWS Secrets Manager or CDK
+  NEPTUNE_AUTH_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:123456789012:secret:neptune-auth"
