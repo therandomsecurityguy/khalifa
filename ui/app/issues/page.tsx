@@ -178,7 +178,11 @@ export default function IssuesPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium text-gray-900">{issue.ruleId}</div>
-                          <div className="text-sm text-gray-500">{issue.metadata?.ruleName}</div>
+                          <div className="text-sm text-gray-500">
+                            {typeof issue.metadata?.ruleName === 'string' && (
+                              <div className="text-sm text-gray-500">{issue.metadata.ruleName}</div>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-900">

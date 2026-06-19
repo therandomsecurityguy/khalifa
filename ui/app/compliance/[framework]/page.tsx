@@ -142,15 +142,21 @@ export default function FrameworkDetailPage() {
                   </div>
                   <div className="p-4 bg-green-50 rounded-lg">
                     <div className="text-sm font-medium text-gray-500">Passed</div>
-                    <div className="mt-1 text-3xl font-bold text-green-600">{summary.passed}</div>
+                    <div className="mt-1 text-3xl font-bold text-green-600">
+                      {summary.summary.passed}
+                    </div>
                   </div>
                   <div className="p-4 bg-red-50 rounded-lg">
                     <div className="text-sm font-medium text-gray-500">Failed</div>
-                    <div className="mt-1 text-3xl font-bold text-red-600">{summary.failed}</div>
+                    <div className="mt-1 text-3xl font-bold text-red-600">
+                      {summary.summary.failed}
+                    </div>
                   </div>
                   <div className="p-4 bg-yellow-50 rounded-lg">
                     <div className="text-sm font-medium text-gray-500">Manual</div>
-                    <div className="mt-1 text-3xl font-bold text-yellow-600">{summary.manual}</div>
+                    <div className="mt-1 text-3xl font-bold text-yellow-600">
+                      {summary.summary.manual}
+                    </div>
                   </div>
                   <div className="p-4 bg-blue-50 rounded-lg">
                     <div className="text-sm font-medium text-gray-500">Automated</div>

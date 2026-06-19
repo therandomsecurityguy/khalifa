@@ -1,3 +1,5 @@
+import type { Issue } from '@/types';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.security-graph.example.com';
 
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
@@ -25,7 +27,9 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
   return response;
 }
 
-export async function getIssues(filters: Record<string, unknown> = {}): Promise<unknown> {
+export async function getIssues(
+  filters: Record<string, unknown> = {}
+): Promise<{ items: Issue[]; nextToken?: string; totalCount: number }> {
   const params = new URLSearchParams();
 
   Object.entries(filters).forEach(([key, value]) => {

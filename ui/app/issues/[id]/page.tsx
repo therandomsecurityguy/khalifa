@@ -146,21 +146,21 @@ export default function IssueDetailPage() {
                 </ul>
               </div>
 
-              {issue.metadata && (
+              {issue.metadata && issue.metadata.scoringFactors != null && (
                 <div className="bg-white shadow rounded-lg p-6 mt-6">
                   <h2 className="text-lg font-medium text-gray-900 mb-4">Scoring Factors</h2>
-                  {issue.metadata.scoringFactors && (
-                    <dl className="space-y-2">
-                      {Object.entries(issue.metadata.scoringFactors).map(([key, value]) => (
+                  <dl className="space-y-2">
+                    {Object.entries(issue.metadata.scoringFactors as Record<string, unknown>).map(
+                      ([key, value]) => (
                         <div key={key} className="flex justify-between">
                           <dt className="text-sm text-gray-500">{key}</dt>
                           <dd className="text-sm font-medium text-gray-900">
                             {typeof value === 'number' ? value.toFixed(2) : String(value)}
                           </dd>
                         </div>
-                      ))}
-                    </dl>
-                  )}
+                      )
+                    )}
+                  </dl>
                 </div>
               )}
             </div>
@@ -203,7 +203,9 @@ function AttackPathVisualization({ nodes, edges }: { nodes: GraphVertex[]; edges
                   <span className="text-center truncate px-1">{node.label}</span>
                 </div>
                 <div className="mt-2 text-xs text-gray-500 text-center max-w-[100px] truncate">
-                  {node.properties?.name || node.properties?.arn?.slice(-20) || node.id.slice(0, 8)}
+                  {(node.properties?.name as string) ||
+                    (node.properties?.arn as string)?.slice(-20) ||
+                    node.id.slice(0, 8)}
                 </div>
               </div>
               {index < nodes.length - 1 && (
