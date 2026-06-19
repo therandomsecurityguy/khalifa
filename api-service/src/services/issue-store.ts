@@ -41,7 +41,7 @@ export class IssueStore {
   }
 
   async listIssues(query: IssueListQuery): Promise<IssueListResponse> {
-    const { severity, team, env: _env, status, ruleId, limit = DEFAULT_LIMIT, nextToken } = query;
+    const { severity, team, status, ruleId, limit = DEFAULT_LIMIT, nextToken } = query;
 
     let scanOrQuery: QueryCommandInput | ScanCommandInput;
 

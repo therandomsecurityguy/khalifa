@@ -2,9 +2,6 @@ import type { Request, Response } from 'express';
 
 type ComplianceFramework = 'CIS_AWS_FOUNDATIONS' | 'SOC2' | 'ISO27001';
 
-const _COMPLIANCE_TABLE = process.env.COMPLIANCE_EVIDENCE_TABLE || 'ComplianceEvidence';
-const _ISSUES_TABLE = process.env.ISSUES_TABLE || 'SecurityIssues';
-
 interface ComplianceReportItem {
   framework: ComplianceFramework;
   generatedAt: string;
