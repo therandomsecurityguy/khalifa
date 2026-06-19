@@ -25,7 +25,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
   return response;
 }
 
-export async function getIssues(filters: Record<string, any> = {}): Promise<any> {
+export async function getIssues(filters: Record<string, unknown> = {}): Promise<unknown> {
   const params = new URLSearchParams();
 
   Object.entries(filters).forEach(([key, value]) => {
@@ -127,12 +127,93 @@ export interface ComplianceControl {
   relatedRules?: string[];
 }
 
+export interface ComplianceControlDetail extends ComplianceControl {
+  framework: string;
+  lastEvaluated: string;
+  remediationHint?: string;
+  description?: string;
+  evidenceRequirements?: string[];
+  evidence: ComplianceEvidence[];
+  relatedIssues: ComplianceRelatedIssue[];
+}
+
+export interface ComplianceEvidence {
+  controlId: string;
+  resourceId: string;
+  resourceType: string;
+  status: string;
+  details: Record<string, unknown>;
+  collectedAt: string;
+  collectedBy: string;
+}
+
+export interface ComplianceRelatedIssue {
+  ruleId: string;
+  severity: string;
+  status: string;
+}
+
+export interface ComplianceDriftItem {
+  controlId: string;
+  controlTitle: string;
+  section: string;
+  severity: string;
+  detectedAt: string;
+  description: string;
+  relatedRules: string[];
+  remediation: string;
+}
+
+export interface ComplianceDriftReport {
+  framework: string;
+  generatedAt: string;
+  totalDriftItems: number;
+  criticalDrift: number;
+  highDrift: number;
+  mediumDrift: number;
+  lowDrift: number;
+  driftItems: ComplianceDriftItem[];
+}
+
+export interface ComplianceReportControlResult {
+  control: {
+    id: string;
+    title: string;
+    section: string;
+    severity: string;
+    automated: boolean;
+  };
+  status: string;
+  evidence: unknown[];
+  issues: string[];
+  lastEvaluated: string;
+}
+
+export interface ComplianceReport {
+  framework: string;
+  generatedAt: string;
+  summary: ComplianceFrameworkSummary['summary'];
+  controls: ComplianceReportControlResult[];
+}
+
+export interface FrameworkSummary {
+  framework: string;
+  version: string;
+  totalControls: number;
+  automatedControls: number;
+  manualControls: number;
+  coveragePercent: number;
+  lastAssessment: string;
+  sections: string[];
+  summary: ComplianceFrameworkSummary['summary'];
+}
+
 export async function getFrameworks(): Promise<{ frameworks: ComplianceFrameworkSummary[] }> {
   const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks`);
   return response.json();
 }
 
-export async function getFrameworkSummary(framework: string): Promise<any> {
+export async function getFrameworkSummary(framework: string): Promise<FrameworkSummary> {
   const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}`);
   return response.json();
 }
@@ -146,7 +227,10 @@ export async function getFrameworkControls(
   return response.json();
 }
 
-export async function getControlDetails(framework: string, controlId: string): Promise<any> {
+export async function getControlDetails(
+  framework: string,
+  controlId: string
+): Promise<ComplianceControlDetail> {
   const response = await fetchWithAuth(
     `${API_BASE_URL}/compliance/frameworks/${framework}/controls/${controlId}`
   );
@@ -156,7 +240,7 @@ export async function getControlDetails(framework: string, controlId: string): P
 export async function getComplianceReport(
   framework: string,
   format?: 'json' | 'csv'
-): Promise<any> {
+): Promise<ComplianceReport> {
   const params = format ? `?format=${format}` : '';
   const response = await fetchWithAuth(
     `${API_BASE_URL}/compliance/frameworks/${framework}/report${params}`
@@ -164,7 +248,7 @@ export async function getComplianceReport(
   return response.json();
 }
 
-export async function getDriftReport(framework: string): Promise<any> {
+export async function getDriftReport(framework: string): Promise<ComplianceDriftReport> {
   const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}/drift`);
   return response.json();
 }

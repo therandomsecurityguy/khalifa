@@ -3,7 +3,12 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { getControlDetails, ComplianceControl } from '@/lib/api';
+import { getControlDetails } from '@/lib/api';
+import type {
+  ComplianceControlDetail,
+  ComplianceEvidence,
+  ComplianceRelatedIssue,
+} from '@/lib/api';
 
 const frameworkLabels: Record<string, string> = {
   CIS_AWS_FOUNDATIONS: 'CIS AWS Foundations v3.0',
@@ -31,7 +36,7 @@ export default function ControlDetailPage() {
   const framework = params.framework as string;
   const controlId = params.controlId as string;
 
-  const [control, setControl] = useState<any>(null);
+  const [control, setControl] = useState<ComplianceControlDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -186,7 +191,7 @@ export default function ControlDetailPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {control.evidence.map((evidence: any) => (
+                        {control.evidence.map((evidence: ComplianceEvidence) => (
                           <tr key={evidence.resourceId} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate max-w-xs">
                               {evidence.resourceId}
@@ -221,7 +226,7 @@ export default function ControlDetailPage() {
                 <div className="bg-white shadow rounded-lg p-6">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Related Open Issues</h3>
                   <ul className="divide-y divide-gray-200">
-                    {control.relatedIssues.map((issue: any) => (
+                    {control.relatedIssues.map((issue: ComplianceRelatedIssue) => (
                       <li key={issue.ruleId} className="py-3">
                         <div className="flex items-center justify-between">
                           <div>

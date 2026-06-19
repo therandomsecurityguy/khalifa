@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getIssue } from '@/lib/api';
 import { IssueDetail, GraphVertex, GraphEdge } from '@/types';
@@ -15,7 +15,6 @@ const severityColors: Record<string, string> = {
 
 export default function IssueDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -13,7 +13,7 @@ export interface Issue {
   updatedAt: string;
   owningTeam: string;
   remediationHint: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface ResourceInvolved {
@@ -40,7 +40,7 @@ export interface IssueListResponse {
 export interface GraphVertex {
   id: string;
   label: string;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
 }
 
 export interface GraphEdge {
@@ -48,7 +48,7 @@ export interface GraphEdge {
   label: string;
   from: string;
   to: string;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
 }
 
 export interface IssueDetail extends Issue {

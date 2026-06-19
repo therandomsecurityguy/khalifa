@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getFrameworks, getFrameworkSummary, ComplianceFrameworkSummary } from '@/lib/api';
+import { getFrameworks } from '@/lib/api';
+import type { ComplianceFrameworkSummary } from '@/lib/api';
 
 const frameworkLabels: Record<string, string> = {
   CIS_AWS_FOUNDATIONS: 'CIS AWS Foundations v3.0',
@@ -15,14 +16,6 @@ const frameworkDescriptions: Record<string, string> = {
     'CIS Amazon Web Services Foundations Benchmark v3.0.0 - 78 controls across 5 sections',
   SOC2: 'SOC 2 Type II Trust Services Criteria - 22 controls across CC6, CC7, CC8',
   ISO27001: 'ISO/IEC 27001:2022 Annex A - 24 controls across A.5, A.6, A.8, A.9, A.10, A.12, A.13',
-};
-
-const statusColors: Record<string, string> = {
-  PASS: 'bg-green-100 text-green-800',
-  FAIL: 'bg-red-100 text-red-800',
-  MANUAL: 'bg-yellow-100 text-yellow-800',
-  NOT_EVALUATED: 'bg-gray-100 text-gray-800',
-  NOT_APPLICABLE: 'bg-blue-100 text-blue-800',
 };
 
 export default function CompliancePage() {
@@ -45,10 +38,6 @@ export default function CompliancePage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function getStatusColor(status: string): string {
-    return statusColors[status] || 'bg-gray-100 text-gray-800';
   }
 
   return (

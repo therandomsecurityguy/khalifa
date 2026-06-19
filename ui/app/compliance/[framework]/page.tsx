@@ -6,10 +6,8 @@ import { useParams } from 'next/navigation';
 import {
   getFrameworkSummary,
   getFrameworkControls,
-  getControlDetails,
-  getDriftReport,
-  getComplianceReport,
   ComplianceControl,
+  FrameworkSummary,
 } from '@/lib/api';
 
 const frameworkLabels: Record<string, string> = {
@@ -37,7 +35,7 @@ export default function FrameworkDetailPage() {
   const params = useParams();
   const framework = params.framework as string;
 
-  const [summary, setSummary] = useState<any>(null);
+  const [summary, setSummary] = useState<FrameworkSummary | null>(null);
   const [controls, setControls] = useState<ComplianceControl[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getDriftReport } from '@/lib/api';
+import type { ComplianceDriftReport, ComplianceDriftItem } from '@/lib/api';
 
 const frameworkLabels: Record<string, string> = {
   CIS_AWS_FOUNDATIONS: 'CIS AWS Foundations v3.0',
@@ -22,7 +23,7 @@ export default function DriftReportPage() {
   const params = useParams();
   const framework = params.framework as string;
 
-  const [drift, setDrift] = useState<any>(null);
+  const [drift, setDrift] = useState<ComplianceDriftReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -175,7 +176,7 @@ export default function DriftReportPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {drift.driftItems.map((item: any) => (
+                    {drift.driftItems.map((item: ComplianceDriftItem) => (
                       <tr key={item.controlId} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {item.controlId}

@@ -52,7 +52,7 @@ export default function IssuesPage() {
     }
   }
 
-  function handleFilterChange(key: string, value: any) {
+  function handleFilterChange(key: string, value: string | string[]): void {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 

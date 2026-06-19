@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { getComplianceReport, ComplianceControl } from '@/lib/api';
+import { getComplianceReport } from '@/lib/api';
+import type { ComplianceReport, ComplianceReportControlResult } from '@/lib/api';
 
 const frameworkLabels: Record<string, string> = {
   CIS_AWS_FOUNDATIONS: 'CIS AWS Foundations v3.0',
@@ -30,7 +31,7 @@ export default function ComplianceReportPage() {
   const params = useParams();
   const framework = params.framework as string;
 
-  const [report, setReport] = useState<any>(null);
+  const [report, setReport] = useState<ComplianceReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [format, setFormat] = useState<'json' | 'csv'>('json');
@@ -228,7 +229,7 @@ export default function ComplianceReportPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {report.controls.map((control: any) => (
+                  {report.controls.map((control: ComplianceReportControlResult) => (
                     <tr key={control.control.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {control.control.id}
