@@ -1,7 +1,7 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { NeptuneClient } from '../services/neptune-client';
 import { IssueStore } from '../services/issue-store';
-import { GraphVertex, GraphEdge, Issue } from '../types';
+import type { GraphVertex, GraphEdge, Issue } from '../types';
 
 const neptuneEndpoint = process.env.NEPTUNE_ENDPOINT || '';
 const neptuneClient = new NeptuneClient({ endpoint: neptuneEndpoint });
@@ -33,7 +33,7 @@ export async function getResource(req: Request, res: Response): Promise<void> {
 
     if (includeNeigh) {
       const neighborResult = await neptuneClient.getNeighbors(arn);
-      neighbors = neighborResult.nodes.filter(n => n.id !== arn);
+      neighbors = neighborResult.nodes.filter((n) => n.id !== arn);
       neighborEdges = neighborResult.edges;
     }
 
@@ -154,7 +154,7 @@ async function getResourceWithNeighbors(
 
     for (const neighbor of neighbors) {
       if (!visited.has(neighbor.id)) {
-        edges.push(...neighborEdges.filter(e => e.from === currentArn && e.to === neighbor.id));
+        edges.push(...neighborEdges.filter((e) => e.from === currentArn && e.to === neighbor.id));
         await traverse(neighbor.id, currentDepth + 1);
       }
     }

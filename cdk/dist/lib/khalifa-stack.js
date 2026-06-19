@@ -204,12 +204,54 @@ class SecurityGraphIngestionStack extends cdk.Stack {
             targets: [new targets.SfnStateMachine(stateMachine)],
         });
         const eventRules = [
-            { name: 'SecurityGroupChange', source: 'aws.ec2', events: ['AuthorizeSecurityGroupIngress', 'AuthorizeSecurityGroupEgress', 'RevokeSecurityGroupIngress', 'RevokeSecurityGroupEgress', 'CreateSecurityGroup', 'DeleteSecurityGroup'] },
-            { name: 'S3BucketChange', source: 'aws.s3', events: ['PutBucketPolicy', 'PutBucketAcl', 'DeleteBucketPolicy'] },
-            { name: 'IamChange', source: 'aws.iam', events: ['CreateUser', 'DeleteUser', 'CreateRole', 'DeleteRole', 'CreatePolicy', 'DeletePolicy', 'AttachUserPolicy', 'DetachUserPolicy', 'AttachRolePolicy', 'DetachRolePolicy'] },
-            { name: 'KmsKeyChange', source: 'aws.kms', events: ['CreateKey', 'DisableKey', 'ScheduleKeyDeletion'] },
-            { name: 'RdsInstanceChange', source: 'aws.rds', events: ['CreateDBInstance', 'DeleteDBInstance', 'ModifyDBInstance'] },
-            { name: 'EksClusterChange', source: 'aws.eks', events: ['CreateCluster', 'DeleteCluster', 'UpdateCluster'] },
+            {
+                name: 'SecurityGroupChange',
+                source: 'aws.ec2',
+                events: [
+                    'AuthorizeSecurityGroupIngress',
+                    'AuthorizeSecurityGroupEgress',
+                    'RevokeSecurityGroupIngress',
+                    'RevokeSecurityGroupEgress',
+                    'CreateSecurityGroup',
+                    'DeleteSecurityGroup',
+                ],
+            },
+            {
+                name: 'S3BucketChange',
+                source: 'aws.s3',
+                events: ['PutBucketPolicy', 'PutBucketAcl', 'DeleteBucketPolicy'],
+            },
+            {
+                name: 'IamChange',
+                source: 'aws.iam',
+                events: [
+                    'CreateUser',
+                    'DeleteUser',
+                    'CreateRole',
+                    'DeleteRole',
+                    'CreatePolicy',
+                    'DeletePolicy',
+                    'AttachUserPolicy',
+                    'DetachUserPolicy',
+                    'AttachRolePolicy',
+                    'DetachRolePolicy',
+                ],
+            },
+            {
+                name: 'KmsKeyChange',
+                source: 'aws.kms',
+                events: ['CreateKey', 'DisableKey', 'ScheduleKeyDeletion'],
+            },
+            {
+                name: 'RdsInstanceChange',
+                source: 'aws.rds',
+                events: ['CreateDBInstance', 'DeleteDBInstance', 'ModifyDBInstance'],
+            },
+            {
+                name: 'EksClusterChange',
+                source: 'aws.eks',
+                events: ['CreateCluster', 'DeleteCluster', 'UpdateCluster'],
+            },
         ];
         eventRules.forEach(({ name, source, events: eventNames }) => {
             new events.Rule(this, name, {

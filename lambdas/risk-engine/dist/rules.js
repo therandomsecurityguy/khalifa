@@ -281,9 +281,9 @@ exports.riskRules = [
     },
 ];
 function getEnabledRules() {
-    return exports.riskRules.filter(rule => rule.enabled);
+    return exports.riskRules.filter((rule) => rule.enabled);
 }
 function getRuleById(id) {
-    return exports.riskRules.find(rule => rule.id === id);
+    return exports.riskRules.find((rule) => rule.id === id);
 }
 //# sourceMappingURL=rules.js.map

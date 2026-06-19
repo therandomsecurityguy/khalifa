@@ -1,14 +1,14 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { IssueStore } from '../services/issue-store';
 import { NeptuneClient } from '../services/neptune-client';
-import {
+import type {
   IssueListQuery,
   IssueDetailResponse,
-  IssueListResponse,
   Severity,
   IssueStatus,
   Environment,
 } from '../types';
+import { IssueListResponse } from '../types';
 
 const issueStore = new IssueStore();
 
@@ -17,21 +17,21 @@ const neptuneClient = new NeptuneClient({ endpoint: neptuneEndpoint });
 
 export async function listIssues(req: Request, res: Response): Promise<void> {
   try {
-    const {
-      severity,
-      team,
-      env,
-      status,
-      ruleId,
-      limit,
-      nextToken,
-    } = req.query;
+    const { severity, team, env, status, ruleId, limit, nextToken } = req.query;
 
     const query: IssueListQuery = {
-      severity: severity ? (Array.isArray(severity) ? severity as Severity[] : [severity as Severity]) : undefined,
-      team: team ? (Array.isArray(team) ? team as string[] : [team as string]) : undefined,
-      env: env ? (Array.isArray(env) ? env as Environment[] : [env as Environment]) : undefined,
-      status: status ? (Array.isArray(status) ? status as IssueStatus[] : [status as IssueStatus]) : undefined,
+      severity: severity
+        ? Array.isArray(severity)
+          ? (severity as Severity[])
+          : [severity as Severity]
+        : undefined,
+      team: team ? (Array.isArray(team) ? (team as string[]) : [team as string]) : undefined,
+      env: env ? (Array.isArray(env) ? (env as Environment[]) : [env as Environment]) : undefined,
+      status: status
+        ? Array.isArray(status)
+          ? (status as IssueStatus[])
+          : [status as IssueStatus]
+        : undefined,
       ruleId: ruleId as string | undefined,
       limit: limit ? Math.min(parseInt(limit as string, 10), 1000) : 50,
       nextToken: nextToken as string | undefined,
@@ -81,7 +81,7 @@ export async function getIssue(req: Request, res: Response): Promise<void> {
         }
 
         attackPathNodes = pathNodes;
-        attackPathEdges = issue.pathSummary.map(segment => ({
+        attackPathEdges = issue.pathSummary.map((segment) => ({
           id: `${segment.from}-${segment.to}`,
           label: segment.edgeType,
           from: segment.from,
@@ -134,10 +134,10 @@ export async function getIssueStats(req: Request, res: Response): Promise<void> 
 
     const stats = {
       total: openIssues.totalCount,
-      critical: openIssues.items.filter(i => i.severity === 'critical').length,
-      high: openIssues.items.filter(i => i.severity === 'high').length,
-      medium: openIssues.items.filter(i => i.severity === 'medium').length,
-      low: openIssues.items.filter(i => i.severity === 'low').length,
+      critical: openIssues.items.filter((i) => i.severity === 'critical').length,
+      high: openIssues.items.filter((i) => i.severity === 'high').length,
+      medium: openIssues.items.filter((i) => i.severity === 'medium').length,
+      low: openIssues.items.filter((i) => i.severity === 'low').length,
       byTeam: {} as Record<string, number>,
       byRule: {} as Record<string, number>,
     };

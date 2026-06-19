@@ -1,10 +1,16 @@
 import { RiskRuleRunner, resolveStaleIssues } from './runner';
 import { getRuleById, riskRules } from './rules';
 import { computeRiskScore } from './scoring';
-import { Issue, RiskScoreInput } from './types';
-import { ComplianceEngine, runScheduledComplianceAssessment, GraphClient } from './compliance-engine';
+import type { RiskScoreInput } from './types';
+import { Issue } from './types';
+import {
+  ComplianceEngine,
+  runScheduledComplianceAssessment,
+  GraphClient,
+} from './compliance-engine';
 
-const NEPTUNE_ENDPOINT = process.env.NEPTUNE_ENDPOINT || 'wss://neptune-cluster.us-east-1.amazonaws.com:8182/gremlin';
+const NEPTUNE_ENDPOINT =
+  process.env.NEPTUNE_ENDPOINT || 'wss://neptune-cluster.us-east-1.amazonaws.com:8182/gremlin';
 const ISSUES_TABLE = process.env.ISSUES_TABLE || 'SecurityIssues';
 
 async function runSingleRuleExample() {
@@ -36,7 +42,6 @@ async function runSingleRuleExample() {
     if (result.errors && result.errors.length > 0) {
       console.log(`  Errors: ${result.errors.join(', ')}`);
     }
-
   } catch (error) {
     console.error('Error executing rule:', error);
   } finally {
@@ -49,7 +54,12 @@ async function computeRiskScoreExample() {
 
   const testInputs: RiskScoreInput[] = [
     {
-      cvss: { baseScore: 9.8, exploitabilitySubScore: 3.9, impactSubScore: 5.9, vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' },
+      cvss: {
+        baseScore: 9.8,
+        exploitabilitySubScore: 3.9,
+        impactSubScore: 5.9,
+        vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
+      },
       exploitabilityFlags: { hasExploit: true, hasPublicExploit: true, malwareAvailable: false },
       exposureLevel: 'internet',
       identityBlastRadius: { type: 'admin', scope: 1 },
@@ -65,7 +75,12 @@ async function computeRiskScoreExample() {
       isCrownJewel: false,
     },
     {
-      cvss: { baseScore: 7.5, exploitabilitySubScore: 2.5, impactSubScore: 5.9, vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H' },
+      cvss: {
+        baseScore: 7.5,
+        exploitabilitySubScore: 2.5,
+        impactSubScore: 5.9,
+        vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H',
+      },
       exposureLevel: 'cross-account',
       dataClassification: 'secret',
       environment: 'prod',
@@ -113,11 +128,12 @@ async function demonstratePeriodicRunner() {
         totalIssuesCreated += result.issuesCreated;
         totalIssuesResolved += result.issuesResolved;
 
-        console.log(`Rule ${result.ruleId}: ${result.issuesCreated} created, ${result.issuesResolved} resolved`);
+        console.log(
+          `Rule ${result.ruleId}: ${result.issuesCreated} created, ${result.issuesResolved} resolved`
+        );
       }
 
       console.log(`\nTotal: ${totalIssuesCreated} issues created, ${totalIssuesResolved} resolved`);
-
     } catch (error) {
       console.error('Error in scheduled job:', error);
     } finally {
@@ -146,13 +162,14 @@ async function runComplianceAssessment() {
     async executeQuery(query: string) {
       const result = await client.submit(query);
       const items: any[] = [];
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         const item = await result.next();
         if (!item) break;
         items.push(item);
       }
       return items;
-    }
+    },
   };
 
   const { DynamoDBEvidenceStore } = await import('./compliance-engine');
@@ -162,16 +179,21 @@ async function runComplianceAssessment() {
   try {
     console.log('Running CIS AWS Foundations assessment...');
     const cisReport = await engine.runAssessment('CIS_AWS_FOUNDATIONS');
-    console.log(`CIS: ${cisReport.summary.passed}/${cisReport.summary.totalControls} passed, ${cisReport.summary.coveragePercent}% coverage`);
+    console.log(
+      `CIS: ${cisReport.summary.passed}/${cisReport.summary.totalControls} passed, ${cisReport.summary.coveragePercent}% coverage`
+    );
 
     console.log('Running SOC2 assessment...');
     const soc2Report = await engine.runAssessment('SOC2');
-    console.log(`SOC2: ${soc2Report.summary.passed}/${soc2Report.summary.totalControls} passed, ${soc2Report.summary.coveragePercent}% coverage`);
+    console.log(
+      `SOC2: ${soc2Report.summary.passed}/${soc2Report.summary.totalControls} passed, ${soc2Report.summary.coveragePercent}% coverage`
+    );
 
     console.log('Running ISO27001 assessment...');
     const isoReport = await engine.runAssessment('ISO27001');
-    console.log(`ISO27001: ${isoReport.summary.passed}/${isoReport.summary.totalControls} passed, ${isoReport.summary.coveragePercent}% coverage`);
-
+    console.log(
+      `ISO27001: ${isoReport.summary.passed}/${isoReport.summary.totalControls} passed, ${isoReport.summary.coveragePercent}% coverage`
+    );
   } catch (error) {
     console.error('Error in compliance assessment:', error);
   } finally {
@@ -201,4 +223,9 @@ if (require.main === module) {
   main().catch(console.error);
 }
 
-export { runSingleRuleExample, computeRiskScoreExample, resolveStaleIssuesExample, demonstratePeriodicRunner };
+export {
+  runSingleRuleExample,
+  computeRiskScoreExample,
+  resolveStaleIssuesExample,
+  demonstratePeriodicRunner,
+};

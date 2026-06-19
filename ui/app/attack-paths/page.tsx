@@ -15,7 +15,7 @@ export default function AttackPathsPage() {
   async function handleSearch() {
     setLoading(true);
     setError(null);
-    
+
     try {
       const data = await getAttackPaths(fromSelector, toSelector, maxPathLength);
       setResults(data);
@@ -39,7 +39,9 @@ export default function AttackPathsPage() {
           <div className="bg-white shadow rounded-lg p-6 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Selector</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  From Selector
+                </label>
                 <input
                   type="text"
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
@@ -48,7 +50,7 @@ export default function AttackPathsPage() {
                   placeholder="e.g., Internet, EC2Instance"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">To Selector</label>
                 <input
@@ -59,9 +61,11 @@ export default function AttackPathsPage() {
                   placeholder="e.g., S3Bucket, CrownJewel"
                 />
               </div>
-              
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Max Path Length</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Path Length
+                </label>
                 <input
                   type="number"
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
@@ -71,7 +75,7 @@ export default function AttackPathsPage() {
                   max={10}
                 />
               </div>
-              
+
               <div className="flex items-end">
                 <button
                   onClick={handleSearch}
@@ -95,7 +99,7 @@ export default function AttackPathsPage() {
               <h2 className="text-lg font-medium text-gray-900 mb-4">
                 Found {results.nodes.length} nodes and {results.edges.length} edges
               </h2>
-              
+
               {results.nodes.length > 0 ? (
                 <div className="space-y-4">
                   <div>
@@ -109,7 +113,7 @@ export default function AttackPathsPage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   <div>
                     <h3 className="text-sm font-medium text-gray-500 mb-2">Edges</h3>
                     <ul className="divide-y divide-gray-200">

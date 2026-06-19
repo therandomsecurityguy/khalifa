@@ -1,0 +1,370 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-format:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            api-service/package-lock.json
+            lambdas/risk-engine/package-lock.json
+            lambdas/collector/package-lock.json
+            lambdas/incremental-collector/package-lock.json
+            lambdas/list-accounts/package-lock.json
+            lambdas/graph-writer/package-lock.json
+            ui/package-lock.json
+            cdk/package-lock.json
+
+      - name: Install API service deps
+        working-directory: api-service
+        run: npm ci
+
+      - name: Install risk-engine deps
+        working-directory: lambdas/risk-engine
+        run: npm ci
+
+      - name: Install collector deps
+        working-directory: lambdas/collector
+        run: npm ci
+
+      - name: Install incremental-collector deps
+        working-directory: lambdas/incremental-collector
+        run: npm ci
+
+      - name: Install list-accounts deps
+        working-directory: lambdas/list-accounts
+        run: npm ci
+
+      - name: Install graph-writer deps
+        working-directory: lambdas/graph-writer
+        run: npm ci
+
+      - name: Install UI deps
+        working-directory: ui
+        run: npm ci
+
+      - name: Install CDK deps
+        working-directory: cdk
+        run: npm ci
+
+      - name: Check formatting (API service)
+        working-directory: api-service
+        run: npx prettier --check "src/**/*.ts"
+
+      - name: Check formatting (UI)
+        working-directory: ui
+        run: npx prettier --check "app/**/*.tsx" "lib/**/*.ts" "types/**/*.ts"
+
+      - name: Check formatting (CDK)
+        working-directory: cdk
+        run: npx prettier --check "lib/**/*.ts" "bin/**/*.ts"
+
+      - name: Check formatting (Lambdas)
+        run: |
+          for dir in lambdas/risk-engine lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer; do
+            if [ -f "$dir/package.json" ]; then
+              echo "Checking $dir..."
+              npx prettier --check "$dir/**/*.ts" || exit 1
+            fi
+          done
+
+      - name: Lint API service
+        working-directory: api-service
+        run: npx eslint src --ext .ts
+
+      - name: Lint UI
+        working-directory: ui
+        run: npx eslint app --ext .ts,.tsx
+
+      - name: Lint CDK
+        working-directory: cdk
+        run: npx eslint lib bin --ext .ts
+
+      - name: Lint Lambdas
+        run: |
+          for dir in lambdas/risk-engine lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer; do
+            if [ -f "$dir/package.json" ] && [ -f "$dir/.eslintrc.js" -o -f "$dir/.eslintrc.json" ]; then
+              echo "Linting $dir..."
+              (cd "$dir" && npx eslint . --ext .ts) || exit 1
+            fi
+          done
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            api-service/package-lock.json
+            lambdas/risk-engine/package-lock.json
+            lambdas/collector/package-lock.json
+            lambdas/incremental-collector/package-lock.json
+            lambdas/list-accounts/package-lock.json
+            lambdas/graph-writer/package-lock.json
+            ui/package-lock.json
+            cdk/package-lock.json
+
+      - name: Install API service deps
+        working-directory: api-service
+        run: npm ci
+
+      - name: Install risk-engine deps
+        working-directory: lambdas/risk-engine
+        run: npm ci
+
+      - name: Install collector deps
+        working-directory: lambdas/collector
+        run: npm ci
+
+      - name: Install incremental-collector deps
+        working-directory: lambdas/incremental-collector
+        run: npm ci
+
+      - name: Install list-accounts deps
+        working-directory: lambdas/list-accounts
+        run: npm ci
+
+      - name: Install graph-writer deps
+        working-directory: lambdas/graph-writer
+        run: npm ci
+
+      - name: Install UI deps
+        working-directory: ui
+        run: npm ci
+
+      - name: Install CDK deps
+        working-directory: cdk
+        run: npm ci
+
+      - name: Type check API service
+        working-directory: api-service
+        run: npx tsc --noEmit
+
+      - name: Type check Risk Engine
+        working-directory: lambdas/risk-engine
+        run: npx tsc --noEmit
+
+      - name: Type check Collector
+        working-directory: lambdas/collector
+        run: npx tsc --noEmit
+
+      - name: Type check Incremental Collector
+        working-directory: lambdas/incremental-collector
+        run: npx tsc --noEmit
+
+      - name: Type check List Accounts
+        working-directory: lambdas/list-accounts
+        run: npx tsc --noEmit
+
+      - name: Type check Graph Writer
+        working-directory: lambdas/graph-writer
+        run: npx tsc --noEmit
+
+      - name: Type check UI
+        working-directory: ui
+        run: npx tsc --noEmit
+
+      - name: Type check CDK
+        working-directory: cdk
+        run: npx tsc --noEmit
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [lint-and-format, typecheck]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            api-service/package-lock.json
+            lambdas/risk-engine/package-lock.json
+            lambdas/collector/package-lock.json
+            lambdas/incremental-collector/package-lock.json
+            lambdas/list-accounts/package-lock.json
+            lambdas/graph-writer/package-lock.json
+            ui/package-lock.json
+            cdk/package-lock.json
+
+      - name: Install API service deps
+        working-directory: api-service
+        run: npm ci
+
+      - name: Install risk-engine deps
+        working-directory: lambdas/risk-engine
+        run: npm ci
+
+      - name: Install collector deps
+        working-directory: lambdas/collector
+        run: npm ci
+
+      - name: Install incremental-collector deps
+        working-directory: lambdas/incremental-collector
+        run: npm ci
+
+      - name: Install list-accounts deps
+        working-directory: lambdas/list-accounts
+        run: npm ci
+
+      - name: Install graph-writer deps
+        working-directory: lambdas/graph-writer
+        run: npm ci
+
+      - name: Install UI deps
+        working-directory: ui
+        run: npm ci
+
+      - name: Install CDK deps
+        working-directory: cdk
+        run: npm ci
+
+      - name: Build API service
+        working-directory: api-service
+        run: npm run build
+
+      - name: Build Risk Engine
+        working-directory: lambdas/risk-engine
+        run: npm run build
+
+      - name: Build Collector
+        working-directory: lambdas/collector
+        run: npm run build
+
+      - name: Build Incremental Collector
+        working-directory: lambdas/incremental-collector
+        run: npm run build
+
+      - name: Build List Accounts
+        working-directory: lambdas/list-accounts
+        run: npm run build
+
+      - name: Build Graph Writer
+        working-directory: lambdas/graph-writer
+        run: npm run build
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+      - name: Build CDK
+        working-directory: cdk
+        run: npm run build
+
+      - name: Synthesize CDK (dry-run)
+        working-directory: cdk
+        run: npx cdk synth --no-lookups --app "npx ts-node --prefer-ts-exts bin/khalifa.ts"
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [lint-and-format, typecheck]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            api-service/package-lock.json
+            lambdas/risk-engine/package-lock.json
+            lambdas/collector/package-lock.json
+            lambdas/incremental-collector/package-lock.json
+            lambdas/list-accounts/package-lock.json
+            lambdas/graph-writer/package-lock.json
+            ui/package-lock.json
+            cdk/package-lock.json
+
+      - name: Install API service deps
+        working-directory: api-service
+        run: npm ci
+
+      - name: Install risk-engine deps
+        working-directory: lambdas/risk-engine
+        run: npm ci
+
+      - name: Install collector deps
+        working-directory: lambdas/collector
+        run: npm ci
+
+      - name: Install incremental-collector deps
+        working-directory: lambdas/incremental-collector
+        run: npm ci
+
+      - name: Install list-accounts deps
+        working-directory: lambdas/list-accounts
+        run: npm ci
+
+      - name: Install graph-writer deps
+        working-directory: lambdas/graph-writer
+        run: npm ci
+
+      - name: Install UI deps
+        working-directory: ui
+        run: npm ci
+
+      - name: Install CDK deps
+        working-directory: cdk
+        run: npm ci
+
+      - name: Run API service tests
+        working-directory: api-service
+        run: npm test --if-present
+
+      - name: Run Risk Engine tests
+        working-directory: lambdas/risk-engine
+        run: npm test --if-present
+
+      - name: Run Collector tests
+        working-directory: lambdas/collector
+        run: npm test --if-present
+
+      - name: Run UI tests
+        working-directory: ui
+        run: npm test --if-present
+
+      - name: Run CDK tests
+        working-directory: cdk
+        run: npm test --if-present

@@ -1,4 +1,4 @@
-import { RiskRule, RiskFactor } from './types';
+import type { RiskRule, RiskFactor } from './types';
 
 const baseRiskFactors: RiskFactor[] = [
   { name: 'cvss', weight: 0.25, value: 0 },
@@ -12,7 +12,8 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-001',
     name: 'Internet-Exposed EC2 with High-Privilege IAM Role to Restricted S3',
-    description: 'Detects EC2 instances exposed to the internet that have IAM roles allowing access to S3 buckets tagged data_classification=restricted',
+    description:
+      'Detects EC2 instances exposed to the internet that have IAM roles allowing access to S3 buckets tagged data_classification=restricted',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -39,7 +40,8 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-002',
     name: 'Security Groups with 0.0.0.0/0 on SSH/RDP',
-    description: 'Detects security groups that allow unrestricted SSH (port 22) or RDP (port 3389) access',
+    description:
+      'Detects security groups that allow unrestricted SSH (port 22) or RDP (port 3389) access',
     severityHint: 'high',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -66,7 +68,8 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-003',
     name: 'Container Images with Critical CVEs on Internet-Exposed Workloads',
-    description: 'Detects container images with critical severity CVEs running on pods or instances exposed to the internet',
+    description:
+      'Detects container images with critical severity CVEs running on pods or instances exposed to the internet',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -94,7 +97,8 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-004',
     name: 'Over-Privileged IAM Roles with Internet-Reachable Workloads',
-    description: 'Detects IAM roles with excessive permissions (many ALLOWS_ACCESS_TO edges) attached to internet-reachable EC2 or Lambda',
+    description:
+      'Detects IAM roles with excessive permissions (many ALLOWS_ACCESS_TO edges) attached to internet-reachable EC2 or Lambda',
     severityHint: 'high',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -120,7 +124,8 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-005',
     name: 'Crown Jewel Attack Path from Internet',
-    description: 'Detects attack paths of length <= N from special Internet node to nodes tagged crown_jewel=true',
+    description:
+      'Detects attack paths of length <= N from special Internet node to nodes tagged crown_jewel=true',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -148,7 +153,8 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-006',
     name: 'Cross-Account IAM Trust with Admin Privileges',
-    description: 'Detects IAM roles with cross-account trust relationships that grant administrative privileges',
+    description:
+      'Detects IAM roles with cross-account trust relationships that grant administrative privileges',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -178,7 +184,8 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-007',
     name: 'Public S3 Buckets with Sensitive Data',
-    description: 'Detects S3 buckets with public access that contain data_classification=restricted or secret',
+    description:
+      'Detects S3 buckets with public access that contain data_classification=restricted or secret',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -202,7 +209,8 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-008',
     name: 'RDS with Public Access and Sensitive Data',
-    description: 'Detects RDS instances exposed to the internet containing databases tagged with sensitive data',
+    description:
+      'Detects RDS instances exposed to the internet containing databases tagged with sensitive data',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -227,7 +235,8 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-009',
     name: 'Lambda with VPC and Internet Gateway to Sensitive Resources',
-    description: 'Detects Lambda functions in VPCs with internet access that can reach sensitive S3 or DynamoDB',
+    description:
+      'Detects Lambda functions in VPCs with internet access that can reach sensitive S3 or DynamoDB',
     severityHint: 'medium',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -280,9 +289,9 @@ export const riskRules: RiskRule[] = [
 ];
 
 export function getEnabledRules(): RiskRule[] {
-  return riskRules.filter(rule => rule.enabled);
+  return riskRules.filter((rule) => rule.enabled);
 }
 
 export function getRuleById(id: string): RiskRule | undefined {
-  return riskRules.find(rule => rule.id === id);
+  return riskRules.find((rule) => rule.id === id);
 }

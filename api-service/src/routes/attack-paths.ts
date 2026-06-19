@@ -1,7 +1,7 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { NeptuneClient } from '../services/neptune-client';
 import { IssueStore } from '../services/issue-store';
-import { GraphVertex, GraphEdge } from '../types';
+import type { GraphVertex, GraphEdge } from '../types';
 
 const neptuneEndpoint = process.env.NEPTUNE_ENDPOINT || '';
 const neptuneClient = new NeptuneClient({ endpoint: neptuneEndpoint });

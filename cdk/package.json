@@ -4,7 +4,11 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "lint": "eslint lib bin --ext .ts",
+    "format": "prettier --write \"lib/**/*.ts\" \"bin/**/*.ts\"",
+    "format:check": "prettier --check \"lib/**/*.ts\" \"bin/**/*.ts\"",
+    "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.100.0",
@@ -14,6 +18,12 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "aws-cdk": "^2.100.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.5",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3"
   }
 }

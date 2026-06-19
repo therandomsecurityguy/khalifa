@@ -29,7 +29,7 @@ export default function IssueDetailPage() {
   async function loadIssue(id: string) {
     setLoading(true);
     setError(null);
-    
+
     try {
       const data = await getIssue(id);
       setIssue(data);
@@ -65,12 +65,17 @@ export default function IssueDetailPage() {
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div>
-            <Link href="/issues" className="text-indigo-600 hover:text-indigo-900 text-sm mb-2 inline-block">
+            <Link
+              href="/issues"
+              className="text-indigo-600 hover:text-indigo-900 text-sm mb-2 inline-block"
+            >
               ← Back to Issues
             </Link>
             <h1 className="text-2xl font-bold text-gray-900">{issue.ruleId}</h1>
           </div>
-          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium text-white ${severityColors[issue.severity]}`}>
+          <span
+            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium text-white ${severityColors[issue.severity]}`}
+          >
             {issue.severity.toUpperCase()}
           </span>
         </div>
@@ -102,7 +107,7 @@ export default function IssueDetailPage() {
                     </dd>
                   </div>
                 </dl>
-                
+
                 <div className="mt-6">
                   <dt className="text-sm font-medium text-gray-500">Remediation Hint</dt>
                   <dd className="mt-2 text-sm text-gray-900 bg-gray-50 p-4 rounded-md">
@@ -193,7 +198,9 @@ function AttackPathVisualization({ nodes, edges }: { nodes: GraphVertex[]; edges
           {nodes.map((node, index) => (
             <div key={node.id} className="flex items-center">
               <div className="flex flex-col items-center">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-xs font-medium ${nodeColors[node.label] || 'bg-gray-500'}`}>
+                <div
+                  className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-xs font-medium ${nodeColors[node.label] || 'bg-gray-500'}`}
+                >
                   <span className="text-center truncate px-1">{node.label}</span>
                 </div>
                 <div className="mt-2 text-xs text-gray-500 text-center max-w-[100px] truncate">
@@ -203,7 +210,11 @@ function AttackPathVisualization({ nodes, edges }: { nodes: GraphVertex[]; edges
               {index < nodes.length - 1 && (
                 <div className="mx-2">
                   <svg className="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                    <path
+                      fillRule="evenodd"
+                      d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 </div>
               )}
@@ -213,7 +224,9 @@ function AttackPathVisualization({ nodes, edges }: { nodes: GraphVertex[]; edges
       </div>
 
       <div className="mt-4 text-sm text-gray-500">
-        <p>Path length: {nodes.length} nodes, {edges.length} edges</p>
+        <p>
+          Path length: {nodes.length} nodes, {edges.length} edges
+        </p>
       </div>
     </div>
   );

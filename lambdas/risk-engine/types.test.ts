@@ -1,4 +1,4 @@
-import {
+import type {
   Severity,
   IssueStatus,
   ExposureLevel,
@@ -195,7 +195,12 @@ describe('Types', () => {
   describe('RiskScoreInput interface', () => {
     test('should create valid RiskScoreInput object', () => {
       const input: RiskScoreInput = {
-        cvss: { baseScore: 9.0, exploitabilitySubScore: 3.0, impactSubScore: 5.0, vectorString: 'test' },
+        cvss: {
+          baseScore: 9.0,
+          exploitabilitySubScore: 3.0,
+          impactSubScore: 5.0,
+          vectorString: 'test',
+        },
         exploitabilityFlags: { hasExploit: true, hasPublicExploit: false, malwareAvailable: false },
         exposureLevel: 'internet',
         identityBlastRadius: { type: 'admin', scope: 1 },

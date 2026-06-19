@@ -6,7 +6,7 @@ exports.calculatePathSummary = calculatePathSummary;
 exports.getRemediationHint = getRemediationHint;
 const EXPOSURE_WEIGHTS = {
     internet: 1.0,
-    "cross-account": 0.7,
+    'cross-account': 0.7,
     internal: 0.3,
 };
 const DATA_CLASSIFICATION_WEIGHTS = {
@@ -58,8 +58,7 @@ function computeRiskScore(input) {
     }
     dataClassificationContribution =
         DATA_CLASSIFICATION_WEIGHTS[input.dataClassification] * 100 * 0.2;
-    environmentContribution =
-        ENVIRONMENT_WEIGHTS[input.environment] * 100 * 0.15;
+    environmentContribution = ENVIRONMENT_WEIGHTS[input.environment] * 100 * 0.15;
     if (input.isCrownJewel) {
         crownJewelContribution = 50;
     }
@@ -137,6 +136,7 @@ function getRemediationHint(ruleId, context) {
         'RULE-009': 'Review Lambda execution role permissions, implement VPC endpoints without internet access, and use private subnets.',
         'RULE-010': 'Restrict IAM policy statements to specific secrets, implement resource-based policies, and enable secret rotation.',
     };
-    return hints[ruleId] || 'Review and remediate the identified security issue according to best practices.';
+    return (hints[ruleId] ||
+        'Review and remediate the identified security issue according to best practices.');
 }
 //# sourceMappingURL=scoring.js.map

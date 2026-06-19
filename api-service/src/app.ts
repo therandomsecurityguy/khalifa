@@ -1,4 +1,5 @@
-import express, { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import { listIssues, getIssue, getIssueCounts, getIssueStats } from './routes/issues';
 import { findAttackPath, findAllAttackPaths } from './routes/attack-paths';
 import { getResource, searchResources, getResourceGraph } from './routes/resources';
@@ -8,7 +9,7 @@ import {
   getFrameworkControls,
   getControlDetails,
   getComplianceReport,
-  getDriftReport
+  getDriftReport,
 } from './routes/compliance';
 
 const app = express();

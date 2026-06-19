@@ -1,5 +1,10 @@
-import { computeRiskScore, getRemediationHint, extractResourcesFromPath, calculatePathSummary } from './scoring';
-import { RiskScoreInput } from './types';
+import {
+  computeRiskScore,
+  getRemediationHint,
+  extractResourcesFromPath,
+  calculatePathSummary,
+} from './scoring';
+import type { RiskScoreInput } from './types';
 
 describe('computeRiskScore', () => {
   const baseInput: RiskScoreInput = {
@@ -17,7 +22,12 @@ describe('computeRiskScore', () => {
 
   test('should return critical severity for high risk input', () => {
     const input: RiskScoreInput = {
-      cvss: { baseScore: 9.8, exploitabilitySubScore: 3.9, impactSubScore: 5.9, vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' },
+      cvss: {
+        baseScore: 9.8,
+        exploitabilitySubScore: 3.9,
+        impactSubScore: 5.9,
+        vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
+      },
       exploitabilityFlags: { hasExploit: true, hasPublicExploit: true, malwareAvailable: false },
       exposureLevel: 'internet',
       identityBlastRadius: { type: 'admin', scope: 1 },
@@ -33,7 +43,12 @@ describe('computeRiskScore', () => {
 
   test('should return high severity for medium-high risk input', () => {
     const input: RiskScoreInput = {
-      cvss: { baseScore: 7.5, exploitabilitySubScore: 2.5, impactSubScore: 5.9, vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H' },
+      cvss: {
+        baseScore: 7.5,
+        exploitabilitySubScore: 2.5,
+        impactSubScore: 5.9,
+        vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H',
+      },
       exposureLevel: 'cross-account',
       dataClassification: 'secret',
       environment: 'prod',
@@ -70,14 +85,22 @@ describe('computeRiskScore', () => {
   });
 
   test('should apply identity blast radius correctly', () => {
-    const adminInput = computeRiskScore({ ...baseInput, identityBlastRadius: { type: 'admin', scope: 1 } });
+    const adminInput = computeRiskScore({
+      ...baseInput,
+      identityBlastRadius: { type: 'admin', scope: 1 },
+    });
     const noIdentityInput = computeRiskScore({ ...baseInput });
     expect(adminInput.score).toBeGreaterThan(noIdentityInput.score);
   });
 
   test('should return all factor contributions', () => {
     const input: RiskScoreInput = {
-      cvss: { baseScore: 9.0, exploitabilitySubScore: 3.0, impactSubScore: 5.0, vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' },
+      cvss: {
+        baseScore: 9.0,
+        exploitabilitySubScore: 3.0,
+        impactSubScore: 5.0,
+        vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
+      },
       exposureLevel: 'internet',
       dataClassification: 'secret',
       environment: 'prod',
@@ -91,7 +114,12 @@ describe('computeRiskScore', () => {
   });
 
   test('should handle missing optional fields', () => {
-    const result = computeRiskScore({ exposureLevel: 'internal', dataClassification: 'public', environment: 'dev', isCrownJewel: false });
+    const result = computeRiskScore({
+      exposureLevel: 'internal',
+      dataClassification: 'public',
+      environment: 'dev',
+      isCrownJewel: false,
+    });
     expect(result.score).toBeDefined();
     expect(result.severity).toBeDefined();
   });

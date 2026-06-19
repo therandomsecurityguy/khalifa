@@ -1,4 +1,4 @@
-import { RiskRule } from './types';
+import type { RiskRule } from './types';
 export declare const riskRules: RiskRule[];
 export declare function getEnabledRules(): RiskRule[];
 export declare function getRuleById(id: string): RiskRule | undefined;

@@ -1,5 +1,18 @@
-import { ComplianceFramework, ComplianceControl, ComplianceControlStatus, ComplianceEvidence, ComplianceReport, ComplianceControlResult, ComplianceFrameworkSummary } from './compliance-types';
-import { CIS_AWS_FOUNDATIONS_V3_CONTROLS, SOC2_CONTROLS, ISO27001_CONTROLS, getControlsByFramework, getAllControls } from './compliance-types';
+import type {
+  ComplianceFramework,
+  ComplianceEvidence,
+  ComplianceReport,
+  ComplianceControlResult,
+  ComplianceFrameworkSummary,
+} from './compliance-types';
+import { ComplianceControl, ComplianceControlStatus } from './compliance-types';
+import {
+  CIS_AWS_FOUNDATIONS_V3_CONTROLS,
+  SOC2_CONTROLS,
+  ISO27001_CONTROLS,
+  getControlsByFramework,
+  getAllControls,
+} from './compliance-types';
 import { complianceRuleEvaluators } from './compliance-rules';
 
 export interface GraphClient {
@@ -32,26 +45,26 @@ export class ComplianceEngine {
           status: 'NOT_EVALUATED',
           evidence: [],
           issues: ['Manual assessment required'],
-          lastEvaluated: new Date().toISOString()
+          lastEvaluated: new Date().toISOString(),
         });
         continue;
       }
 
-      const evaluator = complianceRuleEvaluators.find(e => e.controlId === control.id);
+      const evaluator = complianceRuleEvaluators.find((e) => e.controlId === control.id);
       if (!evaluator) {
         results.push({
           control,
           status: 'NOT_EVALUATED',
           evidence: [],
           issues: [`No automated evaluator for control ${control.id}`],
-          lastEvaluated: new Date().toISOString()
+          lastEvaluated: new Date().toISOString(),
         });
         continue;
       }
 
       try {
         const { status, evidence, issues } = await evaluator.evaluate(this.graphClient);
-        
+
         await this.evidenceStore.saveEvidence(evidence);
 
         results.push({
@@ -59,7 +72,7 @@ export class ComplianceEngine {
           status,
           evidence,
           issues,
-          lastEvaluated: new Date().toISOString()
+          lastEvaluated: new Date().toISOString(),
         });
       } catch (error) {
         results.push({
@@ -67,19 +80,22 @@ export class ComplianceEngine {
           status: 'NOT_EVALUATED',
           evidence: [],
           issues: [`Evaluation error: ${error instanceof Error ? error.message : String(error)}`],
-          lastEvaluated: new Date().toISOString()
+          lastEvaluated: new Date().toISOString(),
         });
       }
     }
 
-    const passed = results.filter(r => r.status === 'PASS').length;
-    const failed = results.filter(r => r.status === 'FAIL').length;
-    const manual = results.filter(r => r.status === 'MANUAL').length;
-    const notApplicable = results.filter(r => r.status === 'NOT_APPLICABLE').length;
-    const notEvaluated = results.filter(r => r.status === 'NOT_EVALUATED').length;
-    const totalAutomated = controls.filter(c => c.automated).length;
-    const evaluatedAutomated = results.filter(r => r.control.automated && r.status !== 'NOT_EVALUATED').length;
-    const coveragePercent = totalAutomated > 0 ? Math.round((evaluatedAutomated / totalAutomated) * 100) : 0;
+    const passed = results.filter((r) => r.status === 'PASS').length;
+    const failed = results.filter((r) => r.status === 'FAIL').length;
+    const manual = results.filter((r) => r.status === 'MANUAL').length;
+    const notApplicable = results.filter((r) => r.status === 'NOT_APPLICABLE').length;
+    const notEvaluated = results.filter((r) => r.status === 'NOT_EVALUATED').length;
+    const totalAutomated = controls.filter((c) => c.automated).length;
+    const evaluatedAutomated = results.filter(
+      (r) => r.control.automated && r.status !== 'NOT_EVALUATED'
+    ).length;
+    const coveragePercent =
+      totalAutomated > 0 ? Math.round((evaluatedAutomated / totalAutomated) * 100) : 0;
 
     return {
       framework,
@@ -91,9 +107,9 @@ export class ComplianceEngine {
         manual,
         notApplicable,
         notEvaluated,
-        coveragePercent
+        coveragePercent,
       },
-      controls: results
+      controls: results,
     };
   }
 
@@ -111,8 +127,8 @@ export class ComplianceEngine {
 
   async getFrameworkSummary(framework: ComplianceFramework): Promise<ComplianceFrameworkSummary> {
     const controls = getControlsByFramework(framework);
-    const automatedControls = controls.filter(c => c.automated).length;
-    const manualControls = controls.filter(c => !c.automated).length;
+    const automatedControls = controls.filter((c) => c.automated).length;
+    const manualControls = controls.filter((c) => !c.automated).length;
 
     const latestReport = await this.getLatestReport(framework);
     const coveragePercent = latestReport?.summary.coveragePercent ?? 0;
@@ -125,18 +141,24 @@ export class ComplianceEngine {
       automatedControls,
       manualControls,
       coveragePercent,
-      lastAssessment
+      lastAssessment,
     };
   }
 
-  async getControlEvidence(controlId: string, framework: ComplianceFramework): Promise<ComplianceEvidence[]> {
+  async getControlEvidence(
+    controlId: string,
+    framework: ComplianceFramework
+  ): Promise<ComplianceEvidence[]> {
     return this.evidenceStore.getEvidence(controlId);
   }
 
-  async getControlResult(controlId: string, framework: ComplianceFramework): Promise<ComplianceControlResult | null> {
+  async getControlResult(
+    controlId: string,
+    framework: ComplianceFramework
+  ): Promise<ComplianceControlResult | null> {
     const report = await this.getLatestReport(framework);
     if (!report) return null;
-    return report.controls.find(c => c.control.id === controlId) || null;
+    return report.controls.find((c) => c.control.id === controlId) || null;
   }
 
   private async getLatestReport(framework: ComplianceFramework): Promise<ComplianceReport | null> {
@@ -167,7 +189,10 @@ export class DynamoDBEvidenceStore implements EvidenceStore {
   }
 }
 
-export function createComplianceEngine(graphClient: GraphClient, evidenceStore: EvidenceStore): ComplianceEngine {
+export function createComplianceEngine(
+  graphClient: GraphClient,
+  evidenceStore: EvidenceStore
+): ComplianceEngine {
   return new ComplianceEngine(graphClient, evidenceStore);
 }
 

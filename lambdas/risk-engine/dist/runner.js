@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RiskRuleRunner = void 0;
 exports.resolveStaleIssues = resolveStaleIssues;
@@ -14,8 +47,8 @@ class GremlinNeptuneClient {
         this.endpoint = endpoint;
     }
     async connect() {
-        const Gremlin = require('gremlin');
-        this.client = Gremlin.driver.anonymousConnection(this.endpoint);
+        const Gremlin = await Promise.resolve().then(() => __importStar(require('gremlin')));
+        this.client = new Gremlin.driver.DriverRemoteConnection(`wss://${this.endpoint}/gremlin`, { traversalSource: 'g' });
     }
     async close() {
         if (this.client) {
@@ -28,6 +61,7 @@ class GremlinNeptuneClient {
         while (hasMore) {
             const cursor = await this.client.submit(query, bindings);
             const batch = [];
+            // eslint-disable-next-line no-constant-condition
             while (true) {
                 const item = await cursor.next();
                 if (!item)
@@ -98,7 +132,7 @@ class DynamoDBIssueStore {
         }));
         if (!result.Items)
             return [];
-        return result.Items.map(item => (0, util_dynamodb_1.unmarshall)(item));
+        return result.Items.map((item) => (0, util_dynamodb_1.unmarshall)(item));
     }
 }
 class RiskRuleRunner {
@@ -125,7 +159,7 @@ class RiskRuleRunner {
                 const resources = this.extractResourcesFromPath(path);
                 if (resources.length === 0)
                     continue;
-                const existingIssue = await this.issueStore.getIssueByRuleAndResources(rule.id, resources.map(r => r.resourceId));
+                const existingIssue = await this.issueStore.getIssueByRuleAndResources(rule.id, resources.map((r) => r.resourceId));
                 if (existingIssue) {
                     activeIssueIds.add(existingIssue.id);
                 }
@@ -196,8 +230,8 @@ class RiskRuleRunner {
     }
     extractResourcesFromPath(path) {
         return path
-            .filter(v => v.label && !['Internet', 'IAMRole', 'IAMPolicy'].includes(v.label))
-            .map(v => ({
+            .filter((v) => v.label && !['Internet', 'IAMRole', 'IAMPolicy'].includes(v.label))
+            .map((v) => ({
             resourceId: v.id,
             resourceType: v.label,
             resourceName: v.properties?.name || v.properties?.Name,
@@ -213,9 +247,9 @@ class RiskRuleRunner {
             edgeType: path[i + 1].label,
         }));
         return {
-            id: this.issueStore.generateIssueId(rule.id, resources.map(r => r.resourceId)),
+            id: this.issueStore.generateIssueId(rule.id, resources.map((r) => r.resourceId)),
             ruleId: rule.id,
-            resourcesInvolved: resources.map(r => ({
+            resourcesInvolved: resources.map((r) => ({
                 resourceId: r.resourceId,
                 resourceType: r.resourceType,
                 resourceName: r.resourceName,
@@ -239,12 +273,13 @@ class RiskRuleRunner {
         let dataClassification = 'public';
         let environment = 'dev';
         let isCrownJewel = false;
-        let attackPathLength = path.length;
+        const attackPathLength = path.length;
         for (const v of path) {
             if (v.properties?.isInternetExposed === true) {
                 exposureLevel = 'internet';
             }
-            if (v.properties?.data_classification === 'restricted' || v.properties?.data_classification === 'secret') {
+            if (v.properties?.data_classification === 'restricted' ||
+                v.properties?.data_classification === 'secret') {
                 dataClassification = v.properties.data_classification;
             }
             if (v.properties?.crown_jewel === true) {

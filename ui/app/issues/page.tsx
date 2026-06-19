@@ -24,7 +24,7 @@ export default function IssuesPage() {
   const [counts, setCounts] = useState<SeverityCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [filters, setFilters] = useState({
     severity: [] as string[],
     team: '',
@@ -39,13 +39,10 @@ export default function IssuesPage() {
   async function loadData() {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const [issuesRes, countsRes] = await Promise.all([
-        getIssues(filters),
-        getIssueCounts(),
-      ]);
-      
+      const [issuesRes, countsRes] = await Promise.all([getIssues(filters), getIssueCounts()]);
+
       setIssues(issuesRes.items);
       setCounts(countsRes);
     } catch (err) {
@@ -56,7 +53,7 @@ export default function IssuesPage() {
   }
 
   function handleFilterChange(key: string, value: any) {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
   return (
@@ -76,17 +73,18 @@ export default function IssuesPage() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            {counts && Object.entries(counts).map(([severity, count]) => (
-              <div
-                key={severity}
-                className={`bg-white rounded-lg shadow p-6 border-l-4 ${severityColors[severity]}`}
-              >
-                <div className="text-sm font-medium text-gray-500 uppercase">
-                  {severityLabels[severity]}
+            {counts &&
+              Object.entries(counts).map(([severity, count]) => (
+                <div
+                  key={severity}
+                  className={`bg-white rounded-lg shadow p-6 border-l-4 ${severityColors[severity]}`}
+                >
+                  <div className="text-sm font-medium text-gray-500 uppercase">
+                    {severityLabels[severity]}
+                  </div>
+                  <div className="mt-2 text-3xl font-semibold text-gray-900">{count}</div>
                 </div>
-                <div className="mt-2 text-3xl font-semibold text-gray-900">{count}</div>
-              </div>
-            ))}
+              ))}
           </div>
 
           <div className="bg-white shadow rounded-lg overflow-hidden">
@@ -96,7 +94,9 @@ export default function IssuesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
                   <select
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    onChange={(e) => handleFilterChange('severity', e.target.value ? [e.target.value] : [])}
+                    onChange={(e) =>
+                      handleFilterChange('severity', e.target.value ? [e.target.value] : [])
+                    }
                     value={filters.severity[0] || ''}
                   >
                     <option value="">All</option>
@@ -106,7 +106,7 @@ export default function IssuesPage() {
                     <option value="low">Low</option>
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
                   <input
@@ -117,7 +117,7 @@ export default function IssuesPage() {
                     onChange={(e) => handleFilterChange('team', e.target.value)}
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select
@@ -143,20 +143,36 @@ export default function IssuesPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issue</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resources</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Risk Score</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Severity
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Issue
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Resources
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Team
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Risk Score
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {issues.map((issue) => (
                       <tr key={issue.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityColors[issue.severity]} text-white`}>
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityColors[issue.severity]} text-white`}
+                          >
                             {issue.severity}
                           </span>
                         </td>

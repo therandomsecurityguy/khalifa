@@ -9,7 +9,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import { Construct } from 'constructs';
+import type { Construct } from 'constructs';
 
 export interface SecurityGraphIngestionStackProps extends cdk.StackProps {
   neptuneEndpoint: string;
@@ -55,20 +55,24 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         iam.ManagedPolicy.fromAwsManagedPolicyName('servicerole/AWSLambdaBasicExecutionRole'),
       ],
     });
-    lambdaExecutionRole.addToPolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: ['secretsmanager:GetSecretValue'],
-      resources: [neptuneSecret.secretArn],
-    }));
+    lambdaExecutionRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [neptuneSecret.secretArn],
+      })
+    );
 
     const collectorAssumeRole = new iam.Role(this, 'CollectorAssumeRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
     });
-    collectorAssumeRole.addToPolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: ['sts:AssumeRole'],
-      resources: [`arn:aws:iam::*:role/SecurityGraphCollectorRole`],
-    }));
+    collectorAssumeRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sts:AssumeRole'],
+        resources: [`arn:aws:iam::*:role/SecurityGraphCollectorRole`],
+      })
+    );
 
     const listAccountsFn = new lambda.Function(this, 'ListAccountsFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -81,11 +85,13 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         MOCK_MODE: process.env.MOCK_MODE || 'false',
       },
     });
-    listAccountsFn.addToRolePolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: ['organizations:ListAccounts', 'organizations:ListOrganizationalUnitsForParent'],
-      resources: ['*'],
-    }));
+    listAccountsFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['organizations:ListAccounts', 'organizations:ListOrganizationalUnitsForParent'],
+        resources: ['*'],
+      })
+    );
 
     const collectorFn = new lambda.Function(this, 'CollectorFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -199,12 +205,54 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     });
 
     const eventRules = [
-      { name: 'SecurityGroupChange', source: 'aws.ec2', events: ['AuthorizeSecurityGroupIngress', 'AuthorizeSecurityGroupEgress', 'RevokeSecurityGroupIngress', 'RevokeSecurityGroupEgress', 'CreateSecurityGroup', 'DeleteSecurityGroup'] },
-      { name: 'S3BucketChange', source: 'aws.s3', events: ['PutBucketPolicy', 'PutBucketAcl', 'DeleteBucketPolicy'] },
-      { name: 'IamChange', source: 'aws.iam', events: ['CreateUser', 'DeleteUser', 'CreateRole', 'DeleteRole', 'CreatePolicy', 'DeletePolicy', 'AttachUserPolicy', 'DetachUserPolicy', 'AttachRolePolicy', 'DetachRolePolicy'] },
-      { name: 'KmsKeyChange', source: 'aws.kms', events: ['CreateKey', 'DisableKey', 'ScheduleKeyDeletion'] },
-      { name: 'RdsInstanceChange', source: 'aws.rds', events: ['CreateDBInstance', 'DeleteDBInstance', 'ModifyDBInstance'] },
-      { name: 'EksClusterChange', source: 'aws.eks', events: ['CreateCluster', 'DeleteCluster', 'UpdateCluster'] },
+      {
+        name: 'SecurityGroupChange',
+        source: 'aws.ec2',
+        events: [
+          'AuthorizeSecurityGroupIngress',
+          'AuthorizeSecurityGroupEgress',
+          'RevokeSecurityGroupIngress',
+          'RevokeSecurityGroupEgress',
+          'CreateSecurityGroup',
+          'DeleteSecurityGroup',
+        ],
+      },
+      {
+        name: 'S3BucketChange',
+        source: 'aws.s3',
+        events: ['PutBucketPolicy', 'PutBucketAcl', 'DeleteBucketPolicy'],
+      },
+      {
+        name: 'IamChange',
+        source: 'aws.iam',
+        events: [
+          'CreateUser',
+          'DeleteUser',
+          'CreateRole',
+          'DeleteRole',
+          'CreatePolicy',
+          'DeletePolicy',
+          'AttachUserPolicy',
+          'DetachUserPolicy',
+          'AttachRolePolicy',
+          'DetachRolePolicy',
+        ],
+      },
+      {
+        name: 'KmsKeyChange',
+        source: 'aws.kms',
+        events: ['CreateKey', 'DisableKey', 'ScheduleKeyDeletion'],
+      },
+      {
+        name: 'RdsInstanceChange',
+        source: 'aws.rds',
+        events: ['CreateDBInstance', 'DeleteDBInstance', 'ModifyDBInstance'],
+      },
+      {
+        name: 'EksClusterChange',
+        source: 'aws.eks',
+        events: ['CreateCluster', 'DeleteCluster', 'UpdateCluster'],
+      },
     ];
 
     eventRules.forEach(({ name, source, events: eventNames }) => {
@@ -259,11 +307,13 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         NEPTUNE_AUTH_SECRET_ARN: neptuneSecret.secretArn,
       },
     });
-    riskEngineFn.addToRolePolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
-      resources: [issuesTable.tableArn, issuesTable.tableArn + '/index/*'],
-    }));
+    riskEngineFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
+        resources: [issuesTable.tableArn, issuesTable.tableArn + '/index/*'],
+      })
+    );
 
     logGroup(riskEngineFn, 'RiskEngine');
 

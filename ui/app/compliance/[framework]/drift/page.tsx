@@ -61,7 +61,10 @@ export default function DriftReportPage() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900">Drift Report Not Available</h1>
           <p className="mt-2 text-gray-600">{error || 'No drift data available'}</p>
-          <Link href={`/compliance/${framework}`} className="mt-4 text-indigo-600 hover:text-indigo-900">
+          <Link
+            href={`/compliance/${framework}`}
+            className="mt-4 text-indigo-600 hover:text-indigo-900"
+          >
             Back to Framework
           </Link>
         </div>
@@ -75,11 +78,16 @@ export default function DriftReportPage() {
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div>
-              <Link href={`/compliance/${framework}`} className="text-indigo-600 hover:text-indigo-900 text-sm font-medium mb-2 inline-block">
+              <Link
+                href={`/compliance/${framework}`}
+                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium mb-2 inline-block"
+              >
                 ← {frameworkLabels[framework] || framework}
               </Link>
               <h1 className="text-3xl font-bold text-gray-900">Configuration Drift Report</h1>
-              <p className="mt-1 text-gray-600">Detected compliance violations since last assessment</p>
+              <p className="mt-1 text-gray-600">
+                Detected compliance violations since last assessment
+              </p>
             </div>
             <div className="flex items-center space-x-4">
               <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
@@ -120,10 +128,22 @@ export default function DriftReportPage() {
           <div className="bg-white shadow rounded-lg overflow-hidden">
             {drift.driftItems.length === 0 ? (
               <div className="p-12 text-center">
-                <svg className="mx-auto h-12 w-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  className="mx-auto h-12 w-12 text-green-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
-                <h3 className="mt-2 text-lg font-medium text-gray-900">No Configuration Drift Detected</h3>
+                <h3 className="mt-2 text-lg font-medium text-gray-900">
+                  No Configuration Drift Detected
+                </h3>
                 <p className="mt-1 text-gray-500">All automated controls are currently passing.</p>
               </div>
             ) : (
@@ -131,29 +151,53 @@ export default function DriftReportPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Section</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detected</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Related Rules</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remediation</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Control ID
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Title
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Section
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Severity
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Detected
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Related Rules
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Remediation
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {drift.driftItems.map((item: any) => (
                       <tr key={item.controlId} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.controlId}</td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-gray-900">{item.controlTitle}</div>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {item.controlId}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.section}</td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {item.controlTitle}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {item.section}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(item.severity)}`}>
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(item.severity)}`}
+                          >
                             {item.severity}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(item.detectedAt).toLocaleString()}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(item.detectedAt).toLocaleString()}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {item.relatedRules?.join(', ') || '—'}
                         </td>

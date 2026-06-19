@@ -1,20 +1,15 @@
+import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBClient,
   GetItemCommand,
   QueryCommand,
   ScanCommand,
-  AttributeValue,
 } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommandInput, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
+import type { QueryCommandInput, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import {
-  Issue,
-  IssueListQuery,
-  IssueListResponse,
-  Severity,
-  IssueStatus,
-  Environment,
-} from '../types';
+import type { Issue, IssueListQuery, IssueListResponse, Severity } from '../types';
+import { IssueStatus, Environment } from '../types';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 1000;
@@ -138,7 +133,7 @@ export class IssueStore {
       return [];
     }
 
-    return result.Items.map(item => unmarshall(item) as Issue);
+    return result.Items.map((item) => unmarshall(item) as Issue);
   }
 
   async getOpenIssuesByResourceArn(arn: string): Promise<Issue[]> {
@@ -160,7 +155,7 @@ export class IssueStore {
       return [];
     }
 
-    return result.Items.map(item => unmarshall(item) as Issue);
+    return result.Items.map((item) => unmarshall(item) as Issue);
   }
 
   async getTotalCounts(): Promise<Record<Severity, number>> {

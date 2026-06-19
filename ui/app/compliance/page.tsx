@@ -11,7 +11,8 @@ const frameworkLabels: Record<string, string> = {
 };
 
 const frameworkDescriptions: Record<string, string> = {
-  CIS_AWS_FOUNDATIONS: 'CIS Amazon Web Services Foundations Benchmark v3.0.0 - 78 controls across 5 sections',
+  CIS_AWS_FOUNDATIONS:
+    'CIS Amazon Web Services Foundations Benchmark v3.0.0 - 78 controls across 5 sections',
   SOC2: 'SOC 2 Type II Trust Services Criteria - 22 controls across CC6, CC7, CC8',
   ISO27001: 'ISO/IEC 27001:2022 Annex A - 24 controls across A.5, A.6, A.8, A.9, A.10, A.12, A.13',
 };
@@ -55,7 +56,9 @@ export default function CompliancePage() {
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-bold text-gray-900">Compliance Posture</h1>
-          <p className="mt-2 text-gray-600">Monitor compliance across CIS, SOC 2, and ISO 27001 frameworks</p>
+          <p className="mt-2 text-gray-600">
+            Monitor compliance across CIS, SOC 2, and ISO 27001 frameworks
+          </p>
         </div>
       </header>
 
@@ -72,18 +75,28 @@ export default function CompliancePage() {
           ) : (
             <div className="space-y-6">
               {frameworks.map((framework) => (
-                <div key={framework.framework} className="bg-white shadow rounded-lg overflow-hidden">
+                <div
+                  key={framework.framework}
+                  className="bg-white shadow rounded-lg overflow-hidden"
+                >
                   <div className="p-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
                       <div>
-                        <Link href={`/compliance/${framework.framework}`} className="text-2xl font-bold text-gray-900 hover:text-indigo-600">
+                        <Link
+                          href={`/compliance/${framework.framework}`}
+                          className="text-2xl font-bold text-gray-900 hover:text-indigo-600"
+                        >
                           {frameworkLabels[framework.framework] || framework.framework}
                         </Link>
-                        <p className="mt-1 text-sm text-gray-500">{frameworkDescriptions[framework.framework]}</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {frameworkDescriptions[framework.framework]}
+                        </p>
                       </div>
                       <div className="mt-4 md:mt-0 flex items-center space-x-4">
                         <div className="text-right">
-                          <div className="text-3xl font-bold text-gray-900">{framework.coveragePercent}%</div>
+                          <div className="text-3xl font-bold text-gray-900">
+                            {framework.coveragePercent}%
+                          </div>
                           <div className="text-sm text-gray-500">Coverage</div>
                         </div>
                         <div className="w-24 h-24">
@@ -114,30 +127,42 @@ export default function CompliancePage() {
 
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                       <div className="p-4 bg-green-50 rounded-lg">
-                        <div className="text-2xl font-bold text-green-600">{framework.summary.passed}</div>
+                        <div className="text-2xl font-bold text-green-600">
+                          {framework.summary.passed}
+                        </div>
                         <div className="text-sm text-gray-600">Passed</div>
                       </div>
                       <div className="p-4 bg-red-50 rounded-lg">
-                        <div className="text-2xl font-bold text-red-600">{framework.summary.failed}</div>
+                        <div className="text-2xl font-bold text-red-600">
+                          {framework.summary.failed}
+                        </div>
                         <div className="text-sm text-gray-600">Failed</div>
                       </div>
                       <div className="p-4 bg-yellow-50 rounded-lg">
-                        <div className="text-2xl font-bold text-yellow-600">{framework.summary.manual}</div>
+                        <div className="text-2xl font-bold text-yellow-600">
+                          {framework.summary.manual}
+                        </div>
                         <div className="text-sm text-gray-600">Manual</div>
                       </div>
                       <div className="p-4 bg-gray-50 rounded-lg">
-                        <div className="text-2xl font-bold text-gray-600">{framework.summary.notEvaluated}</div>
+                        <div className="text-2xl font-bold text-gray-600">
+                          {framework.summary.notEvaluated}
+                        </div>
                         <div className="text-sm text-gray-600">Not Evaluated</div>
                       </div>
                       <div className="p-4 bg-blue-50 rounded-lg">
-                        <div className="text-2xl font-bold text-blue-600">{framework.summary.notApplicable}</div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {framework.summary.notApplicable}
+                        </div>
                         <div className="text-sm text-gray-600">N/A</div>
                       </div>
                     </div>
 
                     <div className="mt-4 flex items-center text-sm text-gray-500">
                       <span>Last assessed: </span>
-                      <span className="font-medium ml-1">{new Date(framework.lastAssessment).toLocaleString()}</span>
+                      <span className="font-medium ml-1">
+                        {new Date(framework.lastAssessment).toLocaleString()}
+                      </span>
                       <span className="mx-2">|</span>
                       <span>Version: {framework.version}</span>
                     </div>
@@ -149,8 +174,18 @@ export default function CompliancePage() {
                       className="text-indigo-600 hover:text-indigo-900 font-medium text-sm flex items-center"
                     >
                       View Details
-                      <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      <svg
+                        className="ml-1 w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
                       </svg>
                     </Link>
                   </div>

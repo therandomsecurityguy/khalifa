@@ -1,4 +1,4 @@
-import {
+import type {
   RiskScoreInput,
   RiskScoreOutput,
   Severity,
@@ -9,7 +9,7 @@ import {
 
 const EXPOSURE_WEIGHTS: Record<ExposureLevel, number> = {
   internet: 1.0,
-  "cross-account": 0.7,
+  'cross-account': 0.7,
   internal: 0.3,
 };
 
@@ -69,8 +69,7 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
   dataClassificationContribution =
     DATA_CLASSIFICATION_WEIGHTS[input.dataClassification] * 100 * 0.2;
 
-  environmentContribution =
-    ENVIRONMENT_WEIGHTS[input.environment] * 100 * 0.15;
+  environmentContribution = ENVIRONMENT_WEIGHTS[input.environment] * 100 * 0.15;
 
   if (input.isCrownJewel) {
     crownJewelContribution = 50;
@@ -81,13 +80,14 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
     crownJewelContribution += pathPenalty;
   }
 
-  const totalScore = Math.min(100,
+  const totalScore = Math.min(
+    100,
     cvssContribution +
-    exposureContribution +
-    identityContribution +
-    dataClassificationContribution +
-    environmentContribution +
-    crownJewelContribution
+      exposureContribution +
+      identityContribution +
+      dataClassificationContribution +
+      environmentContribution +
+      crownJewelContribution
   );
 
   const severity = mapScoreToSeverity(totalScore);
@@ -113,7 +113,10 @@ function mapScoreToSeverity(score: number): Severity {
   return 'low';
 }
 
-export function extractResourcesFromPath(path: any[]): { resourceIds: string[]; resourceTypes: string[] } {
+export function extractResourcesFromPath(path: any[]): {
+  resourceIds: string[];
+  resourceTypes: string[];
+} {
   const resourceIds: string[] = [];
   const resourceTypes: string[] = [];
 
@@ -127,7 +130,9 @@ export function extractResourcesFromPath(path: any[]): { resourceIds: string[]; 
   return { resourceIds: [...new Set(resourceIds)], resourceTypes: [...new Set(resourceTypes)] };
 }
 
-export function calculatePathSummary(path: any[]): { segments: { from: string; to: string; edgeType: string }[] } {
+export function calculatePathSummary(path: any[]): {
+  segments: { from: string; to: string; edgeType: string }[];
+} {
   const segments: { from: string; to: string; edgeType: string }[] = [];
 
   for (let i = 0; i < path.length - 1; i++) {
@@ -148,17 +153,30 @@ export function calculatePathSummary(path: any[]): { segments: { from: string; t
 
 export function getRemediationHint(ruleId: string, context: Record<string, any>): string {
   const hints: Record<string, string> = {
-    'RULE-001': 'Restrict IAM role permissions to specific S3 buckets, enable VPC endpoints for S3 access, or move sensitive data to private buckets.',
-    'RULE-002': 'Restrict SSH/RDP access to specific IP ranges or VPN endpoints. Implement bastion hosts for administrative access.',
-    'RULE-003': 'Update container images to latest patches, scan for CVEs in CI/CD pipeline, or remove internet exposure from workloads.',
-    'RULE-004': 'Review IAM role permissions using AWS IAM Access Analyzer, implement least-privilege permissions, and remove unnecessary access.',
-    'RULE-005': 'Implement additional network segmentation, add monitoring/alerts on crown jewel resources, and review trust relationships.',
-    'RULE-006': 'Remove cross-account trust relationships unless strictly required, implement AWS Organizations service control policies.',
-    'RULE-007': 'Enable S3 block public access, review bucket policies, and move sensitive data to restricted buckets.',
-    'RULE-008': 'Disable public access on RDS instances, implement VPC endpoints, and review security group rules.',
-    'RULE-009': 'Review Lambda execution role permissions, implement VPC endpoints without internet access, and use private subnets.',
-    'RULE-010': 'Restrict IAM policy statements to specific secrets, implement resource-based policies, and enable secret rotation.',
+    'RULE-001':
+      'Restrict IAM role permissions to specific S3 buckets, enable VPC endpoints for S3 access, or move sensitive data to private buckets.',
+    'RULE-002':
+      'Restrict SSH/RDP access to specific IP ranges or VPN endpoints. Implement bastion hosts for administrative access.',
+    'RULE-003':
+      'Update container images to latest patches, scan for CVEs in CI/CD pipeline, or remove internet exposure from workloads.',
+    'RULE-004':
+      'Review IAM role permissions using AWS IAM Access Analyzer, implement least-privilege permissions, and remove unnecessary access.',
+    'RULE-005':
+      'Implement additional network segmentation, add monitoring/alerts on crown jewel resources, and review trust relationships.',
+    'RULE-006':
+      'Remove cross-account trust relationships unless strictly required, implement AWS Organizations service control policies.',
+    'RULE-007':
+      'Enable S3 block public access, review bucket policies, and move sensitive data to restricted buckets.',
+    'RULE-008':
+      'Disable public access on RDS instances, implement VPC endpoints, and review security group rules.',
+    'RULE-009':
+      'Review Lambda execution role permissions, implement VPC endpoints without internet access, and use private subnets.',
+    'RULE-010':
+      'Restrict IAM policy statements to specific secrets, implement resource-based policies, and enable secret rotation.',
   };
 
-  return hints[ruleId] || 'Review and remediate the identified security issue according to best practices.';
+  return (
+    hints[ruleId] ||
+    'Review and remediate the identified security issue according to best practices.'
+  );
 }

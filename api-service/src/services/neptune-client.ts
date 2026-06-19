@@ -1,5 +1,5 @@
 import Gremlin from 'gremlin';
-import { GraphVertex, GraphEdge } from '../types';
+import type { GraphVertex, GraphEdge } from '../types';
 
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_RETRY_ATTEMPTS = 3;
@@ -33,16 +33,13 @@ export class NeptuneClient {
 
     const { endpoint, port, timeout } = this.config;
 
-    this.client = new Gremlin.driver.Client(
-      `wss://${endpoint}:${port}/gremlin`,
-      {
-        traversalSource: 'g',
-        connectTimeout: timeout,
-        messageMaxChunkSize: 65536,
-        poolSize: this.config.maxConcurrentQueries,
-        rejectionDecade: 100,
-      }
-    );
+    this.client = new Gremlin.driver.Client(`wss://${endpoint}:${port}/gremlin`, {
+      traversalSource: 'g',
+      connectTimeout: timeout,
+      messageMaxChunkSize: 65536,
+      poolSize: this.config.maxConcurrentQueries,
+      rejectionDecade: 100,
+    });
 
     await this.client.open();
     this.connected = true;
@@ -154,11 +151,11 @@ export class NeptuneClient {
       '503',
     ];
 
-    return retriablePatterns.some(pattern => message.includes(pattern));
+    return retriablePatterns.some((pattern) => message.includes(pattern));
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async findAttackPath(

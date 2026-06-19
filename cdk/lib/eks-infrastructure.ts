@@ -3,7 +3,7 @@ import * as eks from 'eks-cluster';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import { Construct } from 'constructs';
+import type { Construct } from 'constructs';
 
 export interface SecurityGraphEksStackProps extends cdk.StackProps {
   vpcId: string;
@@ -49,9 +49,7 @@ export class SecurityGraphEksStack extends cdk.Stack {
             Action: ['sts:AssumeRoleWithWebIdentity'],
             Condition: {
               StringLike: {
-                'eks.amazonaws.com:sub': [
-                  'system:serviceaccount:security-graph:api-service',
-                ],
+                'eks.amazonaws.com:sub': ['system:serviceaccount:security-graph:api-service'],
               },
             },
           },
@@ -85,11 +83,7 @@ export class SecurityGraphEksStack extends cdk.Stack {
 
     apiServiceRole.addToPolicy(
       new iam.PolicyStatement({
-        actions: [
-          'logs:CreateLogGroup',
-          'logs:CreateLogStream',
-          'logs:PutLogEvents',
-        ],
+        actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
         resources: [
           `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/eks/${clusterName}/workload/*`,
         ],
@@ -104,9 +98,7 @@ export class SecurityGraphEksStack extends cdk.Stack {
             Action: ['sts:AssumeRoleWithWebIdentity'],
             Condition: {
               StringLike: {
-                'eks.amazonaws.com:sub': [
-                  'system:serviceaccount:security-graph:rule-runner',
-                ],
+                'eks.amazonaws.com:sub': ['system:serviceaccount:security-graph:rule-runner'],
               },
             },
           },
@@ -140,11 +132,7 @@ export class SecurityGraphEksStack extends cdk.Stack {
 
     ruleRunnerRole.addToPolicy(
       new iam.PolicyStatement({
-        actions: [
-          'logs:CreateLogGroup',
-          'logs:CreateLogStream',
-          'logs:PutLogEvents',
-        ],
+        actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
         resources: [
           `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/eks/${clusterName}/workload/*`,
         ],

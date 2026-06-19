@@ -74,7 +74,10 @@ export default function ControlDetailPage() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900">Control Not Found</h1>
           <p className="mt-2 text-gray-600">{error || `Control ${controlId} not found`}</p>
-          <Link href={`/compliance/${framework}`} className="mt-4 text-indigo-600 hover:text-indigo-900">
+          <Link
+            href={`/compliance/${framework}`}
+            className="mt-4 text-indigo-600 hover:text-indigo-900"
+          >
             Back to Framework
           </Link>
         </div>
@@ -87,7 +90,10 @@ export default function ControlDetailPage() {
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center space-x-4">
-            <Link href={`/compliance/${framework}`} className="text-indigo-600 hover:text-indigo-900 text-sm font-medium">
+            <Link
+              href={`/compliance/${framework}`}
+              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+            >
               ← {frameworkLabels[framework] || framework}
             </Link>
             <div>
@@ -104,27 +110,38 @@ export default function ControlDetailPage() {
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white shadow rounded-lg p-6">
                 <div className="flex flex-wrap items-center gap-4 mb-4">
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(control.status)}`}>
+                  <span
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(control.status)}`}
+                  >
                     {control.status}
                   </span>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getSeverityColor(control.severity)}`}>
+                  <span
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getSeverityColor(control.severity)}`}
+                  >
                     {control.severity}
                   </span>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${control.automated ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                  <span
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${control.automated ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}
+                  >
                     {control.automated ? 'Automated' : 'Manual'}
                   </span>
                 </div>
 
                 <div className="prose max-w-none">
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Description</h3>
-                  <p className="text-gray-600">{control.description || 'No description available.'}</p>
+                  <p className="text-gray-600">
+                    {control.description || 'No description available.'}
+                  </p>
                 </div>
               </div>
 
               <div className="bg-white shadow rounded-lg p-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Remediation Guidance</h3>
                 <div className="prose max-w-none text-gray-600">
-                  <p>{control.remediationHint || 'Review and remediate the identified security issue according to best practices.'}</p>
+                  <p>
+                    {control.remediationHint ||
+                      'Review and remediate the identified security issue according to best practices.'}
+                  </p>
                 </div>
               </div>
 
@@ -133,7 +150,10 @@ export default function ControlDetailPage() {
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Related Security Rules</h3>
                   <div className="flex flex-wrap gap-2">
                     {control.relatedRules.map((ruleId: string) => (
-                      <span key={ruleId} className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm font-medium">
+                      <span
+                        key={ruleId}
+                        className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm font-medium"
+                      >
                         {ruleId}
                       </span>
                     ))}
@@ -148,26 +168,46 @@ export default function ControlDetailPage() {
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resource</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collected</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Resource
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Type
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Collected
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Details
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {control.evidence.map((evidence: any) => (
                           <tr key={evidence.resourceId} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate max-w-xs">{evidence.resourceId}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{evidence.resourceType}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate max-w-xs">
+                              {evidence.resourceId}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {evidence.resourceType}
+                            </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(evidence.status)}`}>
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(evidence.status)}`}
+                              >
                                 {evidence.status}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(evidence.collectedAt).toLocaleString()}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {new Date(evidence.collectedAt).toLocaleString()}
+                            </td>
                             <td className="px-6 py-4 text-sm text-gray-500 max-w-md">
-                              <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(evidence.details, null, 2)}</pre>
+                              <pre className="whitespace-pre-wrap text-xs">
+                                {JSON.stringify(evidence.details, null, 2)}
+                              </pre>
                             </td>
                           </tr>
                         ))}
@@ -186,9 +226,13 @@ export default function ControlDetailPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="font-medium text-gray-900">{issue.ruleId}</span>
-                            <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">{issue.status}</span>
+                            <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
+                              {issue.status}
+                            </span>
                           </div>
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${getSeverityColor(issue.severity)}`}>
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded-full ${getSeverityColor(issue.severity)}`}
+                          >
                             {issue.severity}
                           </span>
                         </div>
@@ -205,7 +249,9 @@ export default function ControlDetailPage() {
                 <dl className="divide-y divide-gray-200">
                   <div className="py-3 flex justify-between">
                     <dt className="text-sm font-medium text-gray-500">Framework</dt>
-                    <dd className="text-sm text-gray-900">{frameworkLabels[framework] || framework}</dd>
+                    <dd className="text-sm text-gray-900">
+                      {frameworkLabels[framework] || framework}
+                    </dd>
                   </div>
                   <div className="py-3 flex justify-between">
                     <dt className="text-sm font-medium text-gray-500">Section</dt>
@@ -213,15 +259,27 @@ export default function ControlDetailPage() {
                   </div>
                   <div className="py-3 flex justify-between">
                     <dt className="text-sm font-medium text-gray-500">Severity</dt>
-                    <dd className="text-sm text-gray-900"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(control.severity)}`}>{control.severity}</span></dd>
+                    <dd className="text-sm text-gray-900">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(control.severity)}`}
+                      >
+                        {control.severity}
+                      </span>
+                    </dd>
                   </div>
                   <div className="py-3 flex justify-between">
                     <dt className="text-sm font-medium text-gray-500">Type</dt>
-                    <dd className="text-sm text-gray-900">{control.automated ? 'Automated' : 'Manual'}</dd>
+                    <dd className="text-sm text-gray-900">
+                      {control.automated ? 'Automated' : 'Manual'}
+                    </dd>
                   </div>
                   <div className="py-3 flex justify-between">
                     <dt className="text-sm font-medium text-gray-500">Last Evaluated</dt>
-                    <dd className="text-sm text-gray-900">{control.lastEvaluated ? new Date(control.lastEvaluated).toLocaleString() : 'Never'}</dd>
+                    <dd className="text-sm text-gray-900">
+                      {control.lastEvaluated
+                        ? new Date(control.lastEvaluated).toLocaleString()
+                        : 'Never'}
+                    </dd>
                   </div>
                 </dl>
               </div>

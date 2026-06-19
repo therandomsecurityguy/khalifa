@@ -6,8 +6,9 @@ import { IAMClient, GetUserCommand, GetRoleCommand, GetPolicyCommand } from '@aw
 import { KMSClient, DescribeKeyCommand } from '@aws-sdk/client-kms';
 import { RDSClient, DescribeDBInstancesCommand } from '@aws-sdk/client-rds';
 import { EKSClient, DescribeClusterCommand } from '@aws-sdk/client-eks';
-import { GraphNode, GraphEdge, Logger } from '../../shared/types';
-import { getSecret } from '../../shared/secrets-client';
+import type { GraphNode, GraphEdge } from '../shared/types';
+import { Logger } from '../shared/types';
+import { getSecret } from '../shared/secrets-client';
 
 const logger = new Logger('incremental-processor');
 const sqsClient = new SQSClient({ region: 'us-east-1' });
@@ -17,11 +18,13 @@ export const handler = async (): Promise<{ processed: number }> => {
   const queueUrl = process.env.SQS_QUEUE_URL || '';
   const masterAccountId = process.env.MASTER_ACCOUNT_ID || '';
 
-  const response = await sqsClient.send(new ReceiveMessageCommand({
-    QueueUrl: queueUrl,
-    MaxNumberOfMessages: 10,
-    WaitTimeSeconds: 10,
-  }));
+  const response = await sqsClient.send(
+    new ReceiveMessageCommand({
+      QueueUrl: queueUrl,
+      MaxNumberOfMessages: 10,
+      WaitTimeSeconds: 10,
+    })
+  );
 
   const messages = response.Messages || [];
   logger.info(`Received ${messages.length} messages from queue`);
@@ -38,10 +41,12 @@ export const handler = async (): Promise<{ processed: number }> => {
       }
 
       if (msg.ReceiptHandle) {
-        await sqsClient.send(new DeleteMessageCommand({
-          QueueUrl: queueUrl,
-          ReceiptHandle: msg.ReceiptHandle,
-        }));
+        await sqsClient.send(
+          new DeleteMessageCommand({
+            QueueUrl: queueUrl,
+            ReceiptHandle: msg.ReceiptHandle,
+          })
+        );
       }
 
       processed++;
@@ -53,7 +58,10 @@ export const handler = async (): Promise<{ processed: number }> => {
   return { processed };
 };
 
-async function processEvent(event: any, masterAccountId: string): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
+async function processEvent(
+  event: any,
+  masterAccountId: string
+): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
   const detail = event.detail || event;
   const eventName = detail.eventName || '';
   const eventSource = detail.eventSource || '';
@@ -73,23 +81,35 @@ async function processEvent(event: any, masterAccountId: string): Promise<{ node
 
   let credentials: any;
   if (!isMaster) {
-    credentials = await stsClient.send(new AssumeRoleCommand({
-      RoleArn: `arn:aws:iam::${accountId}:role/SecurityGraphCollectorRole`,
-      RoleSessionName: `SecurityGraphInc-${Date.now()}`,
-      DurationSeconds: 900,
-    })).then(res => res.Credentials);
+    credentials = await stsClient
+      .send(
+        new AssumeRoleCommand({
+          RoleArn: `arn:aws:iam::${accountId}:role/SecurityGraphCollectorRole`,
+          RoleSessionName: `SecurityGraphInc-${Date.now()}`,
+          DurationSeconds: 900,
+        })
+      )
+      .then((res) => res.Credentials);
   }
 
   try {
     if (eventSource.includes('ec2') && requestParameters.groupId) {
       const client = new EC2Client({ region, credentials: isMaster ? undefined : credentials });
-      const sg = await client.send(new DescribeSecurityGroupsCommand({ GroupIds: [requestParameters.groupId] }));
+      const sg = await client.send(
+        new DescribeSecurityGroupsCommand({ GroupIds: [requestParameters.groupId] })
+      );
       if (sg.SecurityGroups?.[0]) {
         const s = sg.SecurityGroups[0];
         nodes.push({
           id: `arn:aws:ec2:${region}:${accountId}:security-group/${s.GroupId}`,
           label: 'SecurityGroup',
-          properties: { id: s.GroupId, arn: `arn:aws:ec2:${region}:${accountId}:security-group/${s.GroupId}`, account_id: accountId, name: s.GroupName, vpc_id: s.VpcId },
+          properties: {
+            id: s.GroupId,
+            arn: `arn:aws:ec2:${region}:${accountId}:security-group/${s.GroupId}`,
+            account_id: accountId,
+            name: s.GroupName,
+            vpc_id: s.VpcId,
+          },
         });
       }
     } else if (eventSource.includes('s3') && requestParameters.bucketName) {
@@ -97,7 +117,12 @@ async function processEvent(event: any, masterAccountId: string): Promise<{ node
       nodes.push({
         id: `arn:aws:s3:::${bucketName}`,
         label: 'S3Bucket',
-        properties: { id: bucketName, arn: `arn:aws:s3:::${bucketName}`, account_id: accountId, name: bucketName },
+        properties: {
+          id: bucketName,
+          arn: `arn:aws:s3:::${bucketName}`,
+          account_id: accountId,
+          name: bucketName,
+        },
       });
     } else if (eventSource.includes('iam') && requestParameters.userName) {
       const client = new IAMClient({ region, credentials: isMaster ? undefined : credentials });
@@ -106,7 +131,11 @@ async function processEvent(event: any, masterAccountId: string): Promise<{ node
         nodes.push({
           id: `arn:aws:iam::${accountId}:user/${requestParameters.userName}`,
           label: 'IamUser',
-          properties: { id: requestParameters.userName, arn: `arn:aws:iam::${accountId}:user/${requestParameters.userName}`, account_id: accountId },
+          properties: {
+            id: requestParameters.userName,
+            arn: `arn:aws:iam::${accountId}:user/${requestParameters.userName}`,
+            account_id: accountId,
+          },
         });
       }
     }

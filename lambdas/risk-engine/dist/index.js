@@ -77,7 +77,12 @@ async function computeRiskScoreExample() {
     console.log('\n=== Risk Scoring Example ===\n');
     const testInputs = [
         {
-            cvss: { baseScore: 9.8, exploitabilitySubScore: 3.9, impactSubScore: 5.9, vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' },
+            cvss: {
+                baseScore: 9.8,
+                exploitabilitySubScore: 3.9,
+                impactSubScore: 5.9,
+                vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
+            },
             exploitabilityFlags: { hasExploit: true, hasPublicExploit: true, malwareAvailable: false },
             exposureLevel: 'internet',
             identityBlastRadius: { type: 'admin', scope: 1 },
@@ -93,7 +98,12 @@ async function computeRiskScoreExample() {
             isCrownJewel: false,
         },
         {
-            cvss: { baseScore: 7.5, exploitabilitySubScore: 2.5, impactSubScore: 5.9, vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H' },
+            cvss: {
+                baseScore: 7.5,
+                exploitabilitySubScore: 2.5,
+                impactSubScore: 5.9,
+                vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H',
+            },
             exposureLevel: 'cross-account',
             dataClassification: 'secret',
             environment: 'prod',
@@ -159,6 +169,7 @@ async function runComplianceAssessment() {
         async executeQuery(query) {
             const result = await client.submit(query);
             const items = [];
+            // eslint-disable-next-line no-constant-condition
             while (true) {
                 const item = await result.next();
                 if (!item)
@@ -166,7 +177,7 @@ async function runComplianceAssessment() {
                 items.push(item);
             }
             return items;
-        }
+        },
     };
     const { DynamoDBEvidenceStore } = await Promise.resolve().then(() => __importStar(require('./compliance-engine')));
     const evidenceStore = new DynamoDBEvidenceStore();

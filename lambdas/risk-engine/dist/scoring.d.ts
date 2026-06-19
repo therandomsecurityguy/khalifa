@@ -1,4 +1,4 @@
-import { RiskScoreInput, RiskScoreOutput } from './types';
+import type { RiskScoreInput, RiskScoreOutput } from './types';
 export declare function computeRiskScore(input: RiskScoreInput): RiskScoreOutput;
 export declare function extractResourcesFromPath(path: any[]): {
     resourceIds: string[];

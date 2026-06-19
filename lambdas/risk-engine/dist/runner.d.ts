@@ -1,4 +1,4 @@
-import { RiskRule, RuleExecutionResult } from './types';
+import type { RiskRule, RuleExecutionResult } from './types';
 export declare class RiskRuleRunner {
     private neptuneClient;
     private issueStore;

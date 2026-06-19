@@ -1,9 +1,16 @@
-import { DynamoDBClient, GetItemCommand, PutItemCommand, UpdateItemCommand, QueryCommand, AttributeValue } from '@aws-sdk/client-dynamodb';
+import type { AttributeValue } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+  UpdateItemCommand,
+  QueryCommand,
+} from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { riskRules, getEnabledRules } from './rules';
 import { computeRiskScore, getRemediationHint } from './scoring';
-import {
+import type {
   RiskRule,
   Issue,
   IssueStatus,
@@ -30,8 +37,10 @@ class GremlinNeptuneClient implements NeptuneClient {
   }
 
   async connect(): Promise<void> {
-    const Gremlin = require('gremlin');
-    this.client = Gremlin.driver.anonymousConnection(this.endpoint);
+    const Gremlin = await import('gremlin');
+    this.client = new Gremlin.driver.DriverRemoteConnection(`wss://${this.endpoint}/gremlin`, {
+      traversalSource: 'g',
+    });
   }
 
   async close(): Promise<void> {
@@ -48,6 +57,7 @@ class GremlinNeptuneClient implements NeptuneClient {
       const cursor = await this.client.submit(query, bindings);
       const batch: any[] = [];
 
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         const item = await cursor.next();
         if (!item) break;
@@ -80,10 +90,12 @@ class DynamoDBIssueStore {
   }
 
   async getIssue(issueId: string): Promise<Issue | null> {
-    const result = await this.docClient.send(new GetItemCommand({
-      TableName: ISSUES_TABLE,
-      Key: { id: { S: issueId } } as Record<string, AttributeValue>,
-    }));
+    const result = await this.docClient.send(
+      new GetItemCommand({
+        TableName: ISSUES_TABLE,
+        Key: { id: { S: issueId } } as Record<string, AttributeValue>,
+      })
+    );
 
     if (!result.Item) return null;
     return unmarshall(result.Item) as Issue;
@@ -95,41 +107,47 @@ class DynamoDBIssueStore {
   }
 
   async upsertIssue(issue: Issue): Promise<void> {
-    await this.docClient.send(new PutItemCommand({
-      TableName: ISSUES_TABLE,
-      Item: marshall(issue) as Record<string, AttributeValue>,
-      ConditionExpression: 'attribute_not_exists(id)',
-    }));
+    await this.docClient.send(
+      new PutItemCommand({
+        TableName: ISSUES_TABLE,
+        Item: marshall(issue) as Record<string, AttributeValue>,
+        ConditionExpression: 'attribute_not_exists(id)',
+      })
+    );
   }
 
   async updateIssueStatus(issueId: string, status: IssueStatus): Promise<void> {
-    await this.docClient.send(new UpdateItemCommand({
-      TableName: ISSUES_TABLE,
-      Key: { id: { S: issueId } } as Record<string, AttributeValue>,
-      UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-      ExpressionAttributeNames: { '#status': 'status' },
-      ExpressionAttributeValues: {
-        ':status': { S: status },
-        ':updatedAt': { S: new Date().toISOString() },
-      },
-    }));
+    await this.docClient.send(
+      new UpdateItemCommand({
+        TableName: ISSUES_TABLE,
+        Key: { id: { S: issueId } } as Record<string, AttributeValue>,
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':status': { S: status },
+          ':updatedAt': { S: new Date().toISOString() },
+        },
+      })
+    );
   }
 
   async getOpenIssuesByRule(ruleId: string): Promise<Issue[]> {
-    const result = await this.docClient.send(new QueryCommand({
-      TableName: ISSUES_TABLE,
-      IndexName: 'RuleIdIndex',
-      KeyConditionExpression: 'ruleId = :ruleId',
-      FilterExpression: '#status = :status',
-      ExpressionAttributeNames: { '#status': 'status' },
-      ExpressionAttributeValues: {
-        ':ruleId': { S: ruleId },
-        ':status': { S: 'open' },
-      },
-    }));
+    const result = await this.docClient.send(
+      new QueryCommand({
+        TableName: ISSUES_TABLE,
+        IndexName: 'RuleIdIndex',
+        KeyConditionExpression: 'ruleId = :ruleId',
+        FilterExpression: '#status = :status',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':ruleId': { S: ruleId },
+          ':status': { S: 'open' },
+        },
+      })
+    );
 
     if (!result.Items) return [];
-    return result.Items.map(item => unmarshall(item) as Issue);
+    return result.Items.map((item) => unmarshall(item) as Issue);
   }
 }
 
@@ -167,7 +185,10 @@ export class RiskRuleRunner {
 
         if (resources.length === 0) continue;
 
-        const existingIssue = await this.issueStore.getIssueByRuleAndResources(rule.id, resources.map(r => r.resourceId));
+        const existingIssue = await this.issueStore.getIssueByRuleAndResources(
+          rule.id,
+          resources.map((r) => r.resourceId)
+        );
 
         if (existingIssue) {
           activeIssueIds.add(existingIssue.id);
@@ -186,7 +207,6 @@ export class RiskRuleRunner {
           issuesResolved++;
         }
       }
-
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }
@@ -246,17 +266,23 @@ export class RiskRuleRunner {
     return properties;
   }
 
-  private extractResourcesFromPath(path: GraphVertex[]): { resourceId: string; resourceType: string; resourceName?: string }[] {
+  private extractResourcesFromPath(
+    path: GraphVertex[]
+  ): { resourceId: string; resourceType: string; resourceName?: string }[] {
     return path
-      .filter(v => v.label && !['Internet', 'IAMRole', 'IAMPolicy'].includes(v.label))
-      .map(v => ({
+      .filter((v) => v.label && !['Internet', 'IAMRole', 'IAMPolicy'].includes(v.label))
+      .map((v) => ({
         resourceId: v.id,
         resourceType: v.label,
         resourceName: v.properties?.name || v.properties?.Name,
       }));
   }
 
-  private async createIssueFromMatch(rule: RiskRule, path: GraphVertex[], resources: { resourceId: string; resourceType: string; resourceName?: string }[]): Promise<Issue> {
+  private async createIssueFromMatch(
+    rule: RiskRule,
+    path: GraphVertex[],
+    resources: { resourceId: string; resourceType: string; resourceName?: string }[]
+  ): Promise<Issue> {
     const now = new Date().toISOString();
 
     const riskInput = this.buildRiskInput(rule, path, resources);
@@ -269,9 +295,12 @@ export class RiskRuleRunner {
     }));
 
     return {
-      id: this.issueStore.generateIssueId(rule.id, resources.map(r => r.resourceId)),
+      id: this.issueStore.generateIssueId(
+        rule.id,
+        resources.map((r) => r.resourceId)
+      ),
       ruleId: rule.id,
-      resourcesInvolved: resources.map(r => ({
+      resourcesInvolved: resources.map((r) => ({
         resourceId: r.resourceId,
         resourceType: r.resourceType,
         resourceName: r.resourceName,
@@ -291,18 +320,25 @@ export class RiskRuleRunner {
     };
   }
 
-  private buildRiskInput(rule: RiskRule, path: GraphVertex[], resources: { resourceId: string; resourceType: string }[]): RiskScoreInput {
+  private buildRiskInput(
+    rule: RiskRule,
+    path: GraphVertex[],
+    resources: { resourceId: string; resourceType: string }[]
+  ): RiskScoreInput {
     let exposureLevel: 'internet' | 'cross-account' | 'internal' = 'internal';
     let dataClassification: 'public' | 'internal' | 'restricted' | 'secret' = 'public';
     let environment: 'prod' | 'staging' | 'dev' = 'dev';
     let isCrownJewel = false;
-    let attackPathLength = path.length;
+    const attackPathLength = path.length;
 
     for (const v of path) {
       if (v.properties?.isInternetExposed === true) {
         exposureLevel = 'internet';
       }
-      if (v.properties?.data_classification === 'restricted' || v.properties?.data_classification === 'secret') {
+      if (
+        v.properties?.data_classification === 'restricted' ||
+        v.properties?.data_classification === 'secret'
+      ) {
         dataClassification = v.properties.data_classification;
       }
       if (v.properties?.crown_jewel === true) {

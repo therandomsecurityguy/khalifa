@@ -27,11 +27,11 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
 
 export async function getIssues(filters: Record<string, any> = {}): Promise<any> {
   const params = new URLSearchParams();
-  
+
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       if (Array.isArray(value)) {
-        value.forEach(v => params.append(key, v));
+        value.forEach((v) => params.append(key, v));
       } else {
         params.append(key, String(value));
       }
@@ -58,29 +58,42 @@ export async function getIssueStats(): Promise<any> {
   return response.json();
 }
 
-export async function getAttackPaths(fromSelector: string, toSelector: string, maxPathLength?: number): Promise<any> {
+export async function getAttackPaths(
+  fromSelector: string,
+  toSelector: string,
+  maxPathLength?: number
+): Promise<any> {
   const params = new URLSearchParams({ fromSelector, toSelector });
   if (maxPathLength) params.append('maxPathLength', String(maxPathLength));
-  
+
   const response = await fetchWithAuth(`${API_BASE_URL}/attack-paths?${params.toString()}`);
   return response.json();
 }
 
-export async function getResource(arn: string, includeNeighbors = true, includeIssues = true): Promise<any> {
+export async function getResource(
+  arn: string,
+  includeNeighbors = true,
+  includeIssues = true
+): Promise<any> {
   const params = new URLSearchParams({
     includeNeighbors: String(includeNeighbors),
     includeIssues: String(includeIssues),
   });
-  
+
   const response = await fetchWithAuth(`${API_BASE_URL}/resources/${arn}?${params.toString()}`);
   return response.json();
 }
 
-export async function searchResources(label: string, property?: string, value?: string, limit = 100): Promise<any> {
+export async function searchResources(
+  label: string,
+  property?: string,
+  value?: string,
+  limit = 100
+): Promise<any> {
   const params = new URLSearchParams({ label, limit: String(limit) });
   if (property) params.append('property', property);
   if (value) params.append('value', value);
-  
+
   const response = await fetchWithAuth(`${API_BASE_URL}/resources/search?${params.toString()}`);
   return response.json();
 }
@@ -124,19 +137,30 @@ export async function getFrameworkSummary(framework: string): Promise<any> {
   return response.json();
 }
 
-export async function getFrameworkControls(framework: string): Promise<{ controls: ComplianceControl[] }> {
-  const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}/controls`);
+export async function getFrameworkControls(
+  framework: string
+): Promise<{ controls: ComplianceControl[] }> {
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/compliance/frameworks/${framework}/controls`
+  );
   return response.json();
 }
 
 export async function getControlDetails(framework: string, controlId: string): Promise<any> {
-  const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}/controls/${controlId}`);
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/compliance/frameworks/${framework}/controls/${controlId}`
+  );
   return response.json();
 }
 
-export async function getComplianceReport(framework: string, format?: 'json' | 'csv'): Promise<any> {
+export async function getComplianceReport(
+  framework: string,
+  format?: 'json' | 'csv'
+): Promise<any> {
   const params = format ? `?format=${format}` : '';
-  const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}/report${params}`);
+  const response = await fetchWithAuth(
+    `${API_BASE_URL}/compliance/frameworks/${framework}/report${params}`
+  );
   return response.json();
 }
 

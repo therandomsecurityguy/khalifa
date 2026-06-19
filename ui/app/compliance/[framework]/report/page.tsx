@@ -56,7 +56,7 @@ export default function ComplianceReportPage() {
     try {
       const response = await fetch(`/api/compliance/${framework}/report?format=csv`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('id_token')}`,
+          Authorization: `Bearer ${localStorage.getItem('id_token')}`,
         },
       });
       if (response.ok) {
@@ -97,7 +97,10 @@ export default function ComplianceReportPage() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900">Report Not Available</h1>
           <p className="mt-2 text-gray-600">{error || 'No report data available'}</p>
-          <Link href={`/compliance/${framework}`} className="mt-4 text-indigo-600 hover:text-indigo-900">
+          <Link
+            href={`/compliance/${framework}`}
+            className="mt-4 text-indigo-600 hover:text-indigo-900"
+          >
             Back to Framework
           </Link>
         </div>
@@ -111,7 +114,10 @@ export default function ComplianceReportPage() {
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div>
-              <Link href={`/compliance/${framework}`} className="text-indigo-600 hover:text-indigo-900 text-sm font-medium mb-2 inline-block">
+              <Link
+                href={`/compliance/${framework}`}
+                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium mb-2 inline-block"
+              >
                 ← {frameworkLabels[framework] || framework}
               </Link>
               <h1 className="text-3xl font-bold text-gray-900">Compliance Report</h1>
@@ -149,11 +155,15 @@ export default function ComplianceReportPage() {
             <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
               <div className="p-4 bg-white rounded-lg shadow">
                 <div className="text-sm font-medium text-gray-500">Total Controls</div>
-                <div className="mt-1 text-3xl font-bold text-gray-900">{report.summary.totalControls}</div>
+                <div className="mt-1 text-3xl font-bold text-gray-900">
+                  {report.summary.totalControls}
+                </div>
               </div>
               <div className="p-4 bg-green-50 rounded-lg">
                 <div className="text-sm font-medium text-gray-500">Passed</div>
-                <div className="mt-1 text-3xl font-bold text-green-600">{report.summary.passed}</div>
+                <div className="mt-1 text-3xl font-bold text-green-600">
+                  {report.summary.passed}
+                </div>
               </div>
               <div className="p-4 bg-red-50 rounded-lg">
                 <div className="text-sm font-medium text-gray-500">Failed</div>
@@ -161,15 +171,21 @@ export default function ComplianceReportPage() {
               </div>
               <div className="p-4 bg-yellow-50 rounded-lg">
                 <div className="text-sm font-medium text-gray-500">Manual</div>
-                <div className="mt-1 text-3xl font-bold text-yellow-600">{report.summary.manual}</div>
+                <div className="mt-1 text-3xl font-bold text-yellow-600">
+                  {report.summary.manual}
+                </div>
               </div>
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-sm font-medium text-gray-500">Not Evaluated</div>
-                <div className="mt-1 text-3xl font-bold text-gray-600">{report.summary.notEvaluated}</div>
+                <div className="mt-1 text-3xl font-bold text-gray-600">
+                  {report.summary.notEvaluated}
+                </div>
               </div>
               <div className="p-4 bg-indigo-50 rounded-lg">
                 <div className="text-sm font-medium text-gray-500">Coverage</div>
-                <div className="mt-1 text-3xl font-bold text-indigo-600">{report.summary.coveragePercent}%</div>
+                <div className="mt-1 text-3xl font-bold text-indigo-600">
+                  {report.summary.coveragePercent}%
+                </div>
               </div>
             </div>
 
@@ -177,7 +193,8 @@ export default function ComplianceReportPage() {
               <p className="text-gray-700">
                 <strong>Assessment Date:</strong> {new Date(report.generatedAt).toLocaleString()} |
                 <strong> Framework:</strong> {frameworkLabels[framework] || framework} |
-                <strong> Coverage:</strong> {report.summary.coveragePercent}% of automated controls evaluated
+                <strong> Coverage:</strong> {report.summary.coveragePercent}% of automated controls
+                evaluated
               </p>
             </div>
           </div>
@@ -187,25 +204,50 @@ export default function ComplianceReportPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Section</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issues</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Control ID
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Title
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Section
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Severity
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Issues
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {report.controls.map((control: any) => (
                     <tr key={control.control.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{control.control.id}</td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900 max-w-md truncate" title={control.control.title}>{control.control.title}</div>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {control.control.id}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{control.control.section}</td>
+                      <td className="px-6 py-4">
+                        <div
+                          className="text-sm text-gray-900 max-w-md truncate"
+                          title={control.control.title}
+                        >
+                          {control.control.title}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {control.control.section}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(control.control.severity)}`}>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(control.control.severity)}`}
+                        >
                           {control.control.severity}
                         </span>
                       </td>
@@ -213,7 +255,9 @@ export default function ComplianceReportPage() {
                         {control.control.automated ? 'Automated' : 'Manual'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(control.status)}`}>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(control.status)}`}
+                        >
                           {control.status}
                         </span>
                       </td>

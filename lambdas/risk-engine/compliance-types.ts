@@ -1,6 +1,11 @@
 export type ComplianceFramework = 'CIS_AWS_FOUNDATIONS' | 'SOC2' | 'ISO27001';
 
-export type ComplianceControlStatus = 'PASS' | 'FAIL' | 'MANUAL' | 'NOT_APPLICABLE' | 'NOT_EVALUATED';
+export type ComplianceControlStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'MANUAL'
+  | 'NOT_APPLICABLE'
+  | 'NOT_EVALUATED';
 
 export interface ComplianceControl {
   id: string;
@@ -64,12 +69,14 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     framework: 'CIS_AWS_FOUNDATIONS',
     section: '1. Identity and Access Management',
     title: 'Maintain current contact details for the AWS account',
-    description: 'Ensure the contact information for the AWS account is current and maps to more than one individual.',
+    description:
+      'Ensure the contact information for the AWS account is current and maps to more than one individual.',
     severity: 'low',
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['Account contact information'],
-    remediationGuidance: 'Update account contact information in AWS Account Settings to include multiple individuals.'
+    remediationGuidance:
+      'Update account contact information in AWS Account Settings to include multiple individuals.',
   },
   {
     id: '1.2',
@@ -81,7 +88,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['Security contact information'],
-    remediationGuidance: 'Register security contact information in AWS Account Settings.'
+    remediationGuidance: 'Register security contact information in AWS Account Settings.',
   },
   {
     id: '1.3',
@@ -93,7 +100,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['Security questions registered'],
-    remediationGuidance: 'Register security questions in AWS Account Settings.'
+    remediationGuidance: 'Register security questions in AWS Account Settings.',
   },
   {
     id: '1.4',
@@ -105,7 +112,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['IAM credential report showing no root access keys'],
-    remediationGuidance: 'Delete any root access keys. Use IAM users/roles instead.'
+    remediationGuidance: 'Delete any root access keys. Use IAM users/roles instead.',
   },
   {
     id: '1.5',
@@ -117,7 +124,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['IAM credential report showing root MFA enabled'],
-    remediationGuidance: 'Enable MFA for the root account in IAM console.'
+    remediationGuidance: 'Enable MFA for the root account in IAM console.',
   },
   {
     id: '1.6',
@@ -129,7 +136,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['IAM credential report showing hardware MFA for root'],
-    remediationGuidance: 'Enable hardware MFA (e.g., YubiKey) for root account.'
+    remediationGuidance: 'Enable hardware MFA (e.g., YubiKey) for root account.',
   },
   {
     id: '1.7',
@@ -141,7 +148,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['IAM credential report showing MFA for all console users'],
-    remediationGuidance: 'Enforce MFA for all IAM users with console access.'
+    remediationGuidance: 'Enforce MFA for all IAM users with console access.',
   },
   {
     id: '1.8',
@@ -153,7 +160,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['IAM credential report showing hardware MFA for console users'],
-    remediationGuidance: 'Enforce hardware MFA for all IAM users with console access.'
+    remediationGuidance: 'Enforce hardware MFA for all IAM users with console access.',
   },
   {
     id: '1.9',
@@ -165,7 +172,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['Root account MFA type is hardware'],
-    remediationGuidance: 'Replace virtual MFA with hardware MFA for root account.'
+    remediationGuidance: 'Replace virtual MFA with hardware MFA for root account.',
   },
   {
     id: '1.10',
@@ -177,7 +184,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['IAM credential report showing key age <= 90 days'],
-    remediationGuidance: 'Rotate access keys older than 90 days. Implement automated rotation.'
+    remediationGuidance: 'Rotate access keys older than 90 days. Implement automated rotation.',
   },
   {
     id: '1.11',
@@ -189,7 +196,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['IAM credential report showing no unused keys > 90 days'],
-    remediationGuidance: 'Delete unused access keys. Monitor key usage regularly.'
+    remediationGuidance: 'Delete unused access keys. Monitor key usage regularly.',
   },
   {
     id: '1.12',
@@ -201,7 +208,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004', 'RULE-006'],
     evidenceRequirements: ['IAM users with no inline policies'],
-    remediationGuidance: 'Move inline policies to managed policies. Use managed policies for all users.'
+    remediationGuidance:
+      'Move inline policies to managed policies. Use managed policies for all users.',
   },
   {
     id: '1.13',
@@ -213,7 +221,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['IAM password policy MinPasswordLength >= 14'],
-    remediationGuidance: 'Update IAM password policy to require minimum 14 characters.'
+    remediationGuidance: 'Update IAM password policy to require minimum 14 characters.',
   },
   {
     id: '1.14',
@@ -225,7 +233,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['IAM password policy PasswordReusePrevention >= 24'],
-    remediationGuidance: 'Update IAM password policy to prevent reuse of last 24 passwords.'
+    remediationGuidance: 'Update IAM password policy to prevent reuse of last 24 passwords.',
   },
   {
     id: '1.15',
@@ -237,7 +245,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['IAM password policy MaxPasswordAge <= 90'],
-    remediationGuidance: 'Set password expiration to 90 days or less.'
+    remediationGuidance: 'Set password expiration to 90 days or less.',
   },
   {
     id: '1.16',
@@ -249,7 +257,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['No root access keys in credential report'],
-    remediationGuidance: 'Delete any root access keys immediately.'
+    remediationGuidance: 'Delete any root access keys immediately.',
   },
   {
     id: '1.17',
@@ -261,7 +269,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['Root MFA enabled in credential report'],
-    remediationGuidance: 'Enable MFA for root account.'
+    remediationGuidance: 'Enable MFA for root account.',
   },
   {
     id: '1.18',
@@ -273,7 +281,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['Root MFA type is hardware'],
-    remediationGuidance: 'Use hardware MFA device for root account.'
+    remediationGuidance: 'Use hardware MFA device for root account.',
   },
   {
     id: '1.19',
@@ -285,7 +293,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['All IAM users have at least one group membership'],
-    remediationGuidance: 'Assign all IAM users to appropriate groups.'
+    remediationGuidance: 'Assign all IAM users to appropriate groups.',
   },
   {
     id: '1.20',
@@ -297,7 +305,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004', 'RULE-006'],
     evidenceRequirements: ['No policies attached directly to users'],
-    remediationGuidance: 'Move user-attached policies to groups or roles.'
+    remediationGuidance: 'Move user-attached policies to groups or roles.',
   },
   {
     id: '1.21',
@@ -309,7 +317,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Support role with appropriate permissions exists'],
-    remediationGuidance: 'Create a support role with least-privilege permissions for incident response.'
+    remediationGuidance:
+      'Create a support role with least-privilege permissions for incident response.',
   },
   {
     id: '1.22',
@@ -321,7 +330,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-001', 'RULE-004'],
     evidenceRequirements: ['No EC2 instances with access keys in user data or metadata'],
-    remediationGuidance: 'Attach IAM roles to EC2 instances. Remove hardcoded credentials.'
+    remediationGuidance: 'Attach IAM roles to EC2 instances. Remove hardcoded credentials.',
   },
   {
     id: '2.1',
@@ -333,19 +342,21 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-007'],
     evidenceRequirements: ['S3 bucket public access block enabled, no public bucket policies'],
-    remediationGuidance: 'Enable S3 Block Public Access. Review and remove public bucket policies/ACLs.'
+    remediationGuidance:
+      'Enable S3 Block Public Access. Review and remove public bucket policies/ACLs.',
   },
   {
     id: '2.2',
     framework: 'CIS_AWS_FOUNDATIONS',
     section: '2. Storage',
     title: 'Ensure S3 buckets have versioning enabled',
-    description: 'Ensure S3 buckets have versioning enabled to protect against accidental deletion.',
+    description:
+      'Ensure S3 buckets have versioning enabled to protect against accidental deletion.',
     severity: 'high',
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['S3 bucket versioning status = Enabled'],
-    remediationGuidance: 'Enable versioning on all S3 buckets.'
+    remediationGuidance: 'Enable versioning on all S3 buckets.',
   },
   {
     id: '2.3',
@@ -357,7 +368,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-007'],
     evidenceRequirements: ['S3 bucket default encryption configured'],
-    remediationGuidance: 'Enable default encryption on all S3 buckets. Use SSE-KMS for sensitive data.'
+    remediationGuidance:
+      'Enable default encryption on all S3 buckets. Use SSE-KMS for sensitive data.',
   },
   {
     id: '2.4',
@@ -369,7 +381,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['S3 bucket logging configuration present'],
-    remediationGuidance: 'Configure access logging for all S3 buckets to a centralized log bucket.'
+    remediationGuidance: 'Configure access logging for all S3 buckets to a centralized log bucket.',
   },
   {
     id: '2.5',
@@ -381,7 +393,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Cross-region replication configured for critical buckets'],
-    remediationGuidance: 'Enable CRR for buckets containing critical data.'
+    remediationGuidance: 'Enable CRR for buckets containing critical data.',
   },
   {
     id: '2.6',
@@ -393,7 +405,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['All EBS volumes have Encrypted=true'],
-    remediationGuidance: 'Enable encryption by default for EBS. Encrypt existing unencrypted volumes.'
+    remediationGuidance:
+      'Enable encryption by default for EBS. Encrypt existing unencrypted volumes.',
   },
   {
     id: '2.7',
@@ -405,7 +418,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-008'],
     evidenceRequirements: ['RDS instances have StorageEncrypted=true'],
-    remediationGuidance: 'Enable encryption for RDS instances. Recreate unencrypted instances from encrypted snapshots.'
+    remediationGuidance:
+      'Enable encryption for RDS instances. Recreate unencrypted instances from encrypted snapshots.',
   },
   {
     id: '2.8',
@@ -417,7 +431,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['RDS BackupRetentionPeriod >= 7'],
-    remediationGuidance: 'Set automated backup retention to 7 days or more.'
+    remediationGuidance: 'Set automated backup retention to 7 days or more.',
   },
   {
     id: '2.9',
@@ -429,7 +443,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-008'],
     evidenceRequirements: ['RDS PubliclyAccessible=false'],
-    remediationGuidance: 'Disable public accessibility on RDS instances. Use VPC and security groups.'
+    remediationGuidance:
+      'Disable public accessibility on RDS instances. Use VPC and security groups.',
   },
   {
     id: '2.10',
@@ -441,7 +456,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['RDS DeletionProtection=true'],
-    remediationGuidance: 'Enable deletion protection on all RDS instances.'
+    remediationGuidance: 'Enable deletion protection on all RDS instances.',
   },
   {
     id: '2.11',
@@ -453,7 +468,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Redshift clusters have Encrypted=true'],
-    remediationGuidance: 'Enable encryption for Redshift clusters. Recreate from encrypted snapshots if needed.'
+    remediationGuidance:
+      'Enable encryption for Redshift clusters. Recreate from encrypted snapshots if needed.',
   },
   {
     id: '2.12',
@@ -465,7 +481,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Redshift PubliclyAccessible=false'],
-    remediationGuidance: 'Disable public accessibility on Redshift clusters.'
+    remediationGuidance: 'Disable public accessibility on Redshift clusters.',
   },
   {
     id: '2.13',
@@ -476,8 +492,10 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     severity: 'high',
     automated: true,
     relatedRules: [],
-    evidenceRequirements: ['ElastiCache TransitEncryptionEnabled=true, AtRestEncryptionEnabled=true'],
-    remediationGuidance: 'Enable encryption in transit and at rest for ElastiCache clusters.'
+    evidenceRequirements: [
+      'ElastiCache TransitEncryptionEnabled=true, AtRestEncryptionEnabled=true',
+    ],
+    remediationGuidance: 'Enable encryption in transit and at rest for ElastiCache clusters.',
   },
   {
     id: '2.14',
@@ -489,7 +507,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['OpenSearch EncryptionAtRestOptions.Enabled=true'],
-    remediationGuidance: 'Enable encryption at rest for OpenSearch domains.'
+    remediationGuidance: 'Enable encryption at rest for OpenSearch domains.',
   },
   {
     id: '2.15',
@@ -501,7 +519,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['OpenSearch DomainEndpointOptions.EnforceHTTPS=true'],
-    remediationGuidance: 'Enforce HTTPS on OpenSearch domain endpoints.'
+    remediationGuidance: 'Enforce HTTPS on OpenSearch domain endpoints.',
   },
   {
     id: '2.16',
@@ -513,7 +531,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['OpenSearch NodeToNodeEncryptionOptions.Enabled=true'],
-    remediationGuidance: 'Enable node-to-node encryption for OpenSearch domains.'
+    remediationGuidance: 'Enable node-to-node encryption for OpenSearch domains.',
   },
   {
     id: '3.1',
@@ -525,7 +543,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudTrail trails exist in all regions, IsMultiRegionTrail=true'],
-    remediationGuidance: 'Create multi-region CloudTrail trail. Enable in all regions.'
+    remediationGuidance: 'Create multi-region CloudTrail trail. Enable in all regions.',
   },
   {
     id: '3.2',
@@ -537,7 +555,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudTrail LogFileValidationEnabled=true'],
-    remediationGuidance: 'Enable log file validation on all CloudTrail trails.'
+    remediationGuidance: 'Enable log file validation on all CloudTrail trails.',
   },
   {
     id: '3.3',
@@ -549,7 +567,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudTrail KmsKeyId configured'],
-    remediationGuidance: 'Configure KMS encryption for CloudTrail logs.'
+    remediationGuidance: 'Configure KMS encryption for CloudTrail logs.',
   },
   {
     id: '3.4',
@@ -561,7 +579,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudTrail CloudWatchLogsLogGroupArn configured'],
-    remediationGuidance: 'Configure CloudTrail to send logs to CloudWatch Logs.'
+    remediationGuidance: 'Configure CloudTrail to send logs to CloudWatch Logs.',
   },
   {
     id: '3.5',
@@ -573,7 +591,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-007'],
     evidenceRequirements: ['CloudTrail S3 bucket has Block Public Access enabled'],
-    remediationGuidance: 'Enable Block Public Access on CloudTrail log bucket.'
+    remediationGuidance: 'Enable Block Public Access on CloudTrail log bucket.',
   },
   {
     id: '3.6',
@@ -584,8 +602,10 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     severity: 'high',
     automated: true,
     relatedRules: [],
-    evidenceRequirements: ['CloudTrail CloudWatchLogsLogGroupArn and CloudWatchLogsRoleArn configured'],
-    remediationGuidance: 'Integrate CloudTrail with CloudWatch Logs.'
+    evidenceRequirements: [
+      'CloudTrail CloudWatchLogsLogGroupArn and CloudWatchLogsRoleArn configured',
+    ],
+    remediationGuidance: 'Integrate CloudTrail with CloudWatch Logs.',
   },
   {
     id: '3.7',
@@ -597,7 +617,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['All VPCs have flow logs enabled'],
-    remediationGuidance: 'Enable VPC flow logs for all VPCs. Send to CloudWatch Logs or S3.'
+    remediationGuidance: 'Enable VPC flow logs for all VPCs. Send to CloudWatch Logs or S3.',
   },
   {
     id: '3.8',
@@ -609,7 +629,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudTrail S3 bucket has logging configured'],
-    remediationGuidance: 'Enable access logging on CloudTrail S3 bucket.'
+    remediationGuidance: 'Enable access logging on CloudTrail S3 bucket.',
   },
   {
     id: '3.9',
@@ -621,7 +641,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Config recorder exists in all regions, recording all resource types'],
-    remediationGuidance: 'Enable AWS Config in all regions. Record all resource types.'
+    remediationGuidance: 'Enable AWS Config in all regions. Record all resource types.',
   },
   {
     id: '3.10',
@@ -633,7 +653,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Config recorder recordingStrategy includes all resource types'],
-    remediationGuidance: 'Configure Config recorder to record all resource types.'
+    remediationGuidance: 'Configure Config recorder to record all resource types.',
   },
   {
     id: '3.11',
@@ -645,7 +665,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Config delivery channel S3 bucket has encryption enabled'],
-    remediationGuidance: 'Use encrypted S3 bucket for Config delivery.'
+    remediationGuidance: 'Use encrypted S3 bucket for Config delivery.',
   },
   {
     id: '4.1',
@@ -657,7 +677,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['GuardDuty detector exists and is enabled in all regions'],
-    remediationGuidance: 'Enable GuardDuty in all regions. Consider delegated administrator for multi-account.'
+    remediationGuidance:
+      'Enable GuardDuty in all regions. Consider delegated administrator for multi-account.',
   },
   {
     id: '4.2',
@@ -669,7 +690,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Security Hub enabled in all regions'],
-    remediationGuidance: 'Enable Security Hub in all regions. Subscribe to standards (CIS, PCI DSS).'
+    remediationGuidance:
+      'Enable Security Hub in all regions. Subscribe to standards (CIS, PCI DSS).',
   },
   {
     id: '4.3',
@@ -681,7 +703,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudWatch alarm for UnauthorizedOperation events'],
-    remediationGuidance: 'Create CloudWatch metric filter and alarm for unauthorized API calls.'
+    remediationGuidance: 'Create CloudWatch metric filter and alarm for unauthorized API calls.',
   },
   {
     id: '4.4',
@@ -693,7 +715,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudWatch alarm for DeleteVirtualMFADevice, DeactivateMFADevice'],
-    remediationGuidance: 'Create CloudWatch alarm for MFA deletion events.'
+    remediationGuidance: 'Create CloudWatch alarm for MFA deletion events.',
   },
   {
     id: '4.5',
@@ -705,7 +727,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudWatch alarm for root account ConsoleLogin'],
-    remediationGuidance: 'Create CloudWatch alarm for root account console login.'
+    remediationGuidance: 'Create CloudWatch alarm for root account console login.',
   },
   {
     id: '4.6',
@@ -717,7 +739,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudWatch alarm for IAM policy change events'],
-    remediationGuidance: 'Create CloudWatch alarm for IAM policy changes (CreatePolicy, AttachRolePolicy, etc.).'
+    remediationGuidance:
+      'Create CloudWatch alarm for IAM policy changes (CreatePolicy, AttachRolePolicy, etc.).',
   },
   {
     id: '4.7',
@@ -729,7 +752,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudWatch alarm for CloudTrail StopLogging, DeleteTrail, UpdateTrail'],
-    remediationGuidance: 'Create CloudWatch alarm for CloudTrail configuration changes.'
+    remediationGuidance: 'Create CloudWatch alarm for CloudTrail configuration changes.',
   },
   {
     id: '4.8',
@@ -741,7 +764,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudWatch alarm for VPC, subnet, SG, NACL, route table changes'],
-    remediationGuidance: 'Create CloudWatch alarm for VPC configuration changes.'
+    remediationGuidance: 'Create CloudWatch alarm for VPC configuration changes.',
   },
   {
     id: '4.9',
@@ -752,8 +775,10 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     severity: 'high',
     automated: true,
     relatedRules: ['RULE-007'],
-    evidenceRequirements: ['CloudWatch alarm for PutBucketPolicy, PutBucketAcl, DeleteBucketPolicy'],
-    remediationGuidance: 'Create CloudWatch alarm for S3 bucket policy/ACL changes.'
+    evidenceRequirements: [
+      'CloudWatch alarm for PutBucketPolicy, PutBucketAcl, DeleteBucketPolicy',
+    ],
+    remediationGuidance: 'Create CloudWatch alarm for S3 bucket policy/ACL changes.',
   },
   {
     id: '4.10',
@@ -764,8 +789,10 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     severity: 'medium',
     automated: true,
     relatedRules: [],
-    evidenceRequirements: ['CloudWatch alarm for Config StopConfigurationRecorder, DeleteDeliveryChannel'],
-    remediationGuidance: 'Create CloudWatch alarm for Config configuration changes.'
+    evidenceRequirements: [
+      'CloudWatch alarm for Config StopConfigurationRecorder, DeleteDeliveryChannel',
+    ],
+    remediationGuidance: 'Create CloudWatch alarm for Config configuration changes.',
   },
   {
     id: '4.11',
@@ -777,7 +804,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudWatch alarm for Security Hub finding events'],
-    remediationGuidance: 'Create CloudWatch alarm for new Security Hub findings.'
+    remediationGuidance: 'Create CloudWatch alarm for new Security Hub findings.',
   },
   {
     id: '4.12',
@@ -789,7 +816,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudWatch alarm for GuardDuty finding events'],
-    remediationGuidance: 'Create CloudWatch alarm for new GuardDuty findings.'
+    remediationGuidance: 'Create CloudWatch alarm for new GuardDuty findings.',
   },
   {
     id: '5.1',
@@ -801,7 +828,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-002'],
     evidenceRequirements: ['No security groups with ingress 0.0.0.0/0 on port 22'],
-    remediationGuidance: 'Restrict SSH access to specific CIDR ranges or bastion hosts.'
+    remediationGuidance: 'Restrict SSH access to specific CIDR ranges or bastion hosts.',
   },
   {
     id: '5.2',
@@ -813,7 +840,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-002'],
     evidenceRequirements: ['No security groups with ingress 0.0.0.0/0 on port 3389'],
-    remediationGuidance: 'Restrict RDP access to specific CIDR ranges or bastion hosts.'
+    remediationGuidance: 'Restrict RDP access to specific CIDR ranges or bastion hosts.',
   },
   {
     id: '5.3',
@@ -825,7 +852,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-002'],
     evidenceRequirements: ['Default security groups have no inbound/outbound rules'],
-    remediationGuidance: 'Remove all rules from default security groups. Create specific SGs for resources.'
+    remediationGuidance:
+      'Remove all rules from default security groups. Create specific SGs for resources.',
   },
   {
     id: '5.4',
@@ -837,7 +865,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['All VPCs have flow logs enabled'],
-    remediationGuidance: 'Enable VPC flow logs for all VPCs.'
+    remediationGuidance: 'Enable VPC flow logs for all VPCs.',
   },
   {
     id: '5.5',
@@ -849,7 +877,7 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['No NACLs with 0.0.0.0/0 allow on ports 22, 3389, 1433, 3306, 5432'],
-    remediationGuidance: 'Restrict NACL rules to specific CIDR ranges.'
+    remediationGuidance: 'Restrict NACL rules to specific CIDR ranges.',
   },
   {
     id: '5.6',
@@ -861,19 +889,21 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-002'],
     evidenceRequirements: ['Security groups restrict ports 1433, 3306, 5432, 6379, 9200, 27017'],
-    remediationGuidance: 'Restrict database and cache ports to application security groups only.'
+    remediationGuidance: 'Restrict database and cache ports to application security groups only.',
   },
   {
     id: '5.7',
     framework: 'CIS_AWS_FOUNDATIONS',
     section: '5. Networking',
     title: 'Ensure VPC endpoints are used for AWS service access',
-    description: 'Ensure VPC endpoints (Gateway/Interface) are used for private AWS service access.',
+    description:
+      'Ensure VPC endpoints (Gateway/Interface) are used for private AWS service access.',
     severity: 'medium',
     automated: true,
     relatedRules: ['RULE-009'],
     evidenceRequirements: ['VPC endpoints exist for S3, DynamoDB, and other services used'],
-    remediationGuidance: 'Create VPC endpoints for S3, DynamoDB, and other AWS services to avoid internet traversal.'
+    remediationGuidance:
+      'Create VPC endpoints for S3, DynamoDB, and other AWS services to avoid internet traversal.',
   },
   {
     id: '5.8',
@@ -885,8 +915,8 @@ export const CIS_AWS_FOUNDATIONS_V3_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['TGW route tables have specific routes, no 0.0.0.0/0 blackhole'],
-    remediationGuidance: 'Configure TGW route tables with least-privilege routes between VPCs.'
-  }
+    remediationGuidance: 'Configure TGW route tables with least-privilege routes between VPCs.',
+  },
 ];
 
 export const SOC2_CONTROLS: ComplianceControl[] = [
@@ -894,25 +924,30 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     id: 'CC6.1',
     framework: 'SOC2',
     section: 'CC6.1 - Logical Access Security',
-    title: 'The entity implements logical access security software, infrastructure, and architectures',
-    description: 'Logical access security measures protect information assets from unauthorized access.',
+    title:
+      'The entity implements logical access security software, infrastructure, and architectures',
+    description:
+      'Logical access security measures protect information assets from unauthorized access.',
     severity: 'critical',
     automated: true,
     relatedRules: ['RULE-001', 'RULE-002', 'RULE-004', 'RULE-006', 'RULE-010'],
     evidenceRequirements: ['IAM policies, security groups, NACLs, encryption configs'],
-    remediationGuidance: 'Implement least-privilege access. Enforce MFA. Encrypt data at rest and in transit.'
+    remediationGuidance:
+      'Implement least-privilege access. Enforce MFA. Encrypt data at rest and in transit.',
   },
   {
     id: 'CC6.2',
     framework: 'SOC2',
     section: 'CC6.2 - Access Credentials',
     title: 'Prior to issuing credentials, the entity registers and authorizes new users',
-    description: 'User registration and authorization processes ensure only approved individuals receive credentials.',
+    description:
+      'User registration and authorization processes ensure only approved individuals receive credentials.',
     severity: 'high',
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['User provisioning workflow, approval records'],
-    remediationGuidance: 'Implement formal user provisioning with manager approval. Document authorization process.'
+    remediationGuidance:
+      'Implement formal user provisioning with manager approval. Document authorization process.',
   },
   {
     id: 'CC6.3',
@@ -924,7 +959,8 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['IAM credential report showing no stale users, offboarding workflow'],
-    remediationGuidance: 'Automate access revocation on role change/termination. Review access quarterly.'
+    remediationGuidance:
+      'Automate access revocation on role change/termination. Review access quarterly.',
   },
   {
     id: 'CC6.4',
@@ -936,7 +972,8 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004'],
     evidenceRequirements: ['Access review records, unused permission reports'],
-    remediationGuidance: 'Conduct quarterly access reviews. Use IAM Access Analyzer for unused permissions.'
+    remediationGuidance:
+      'Conduct quarterly access reviews. Use IAM Access Analyzer for unused permissions.',
   },
   {
     id: 'CC6.5',
@@ -948,7 +985,8 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-002', 'RULE-005', 'RULE-009'],
     evidenceRequirements: ['VPC design, security groups, NACLs, TGW routes'],
-    remediationGuidance: 'Implement network segmentation with separate VPCs/subnets per environment. Restrict inter-segment traffic.'
+    remediationGuidance:
+      'Implement network segmentation with separate VPCs/subnets per environment. Restrict inter-segment traffic.',
   },
   {
     id: 'CC6.6',
@@ -959,8 +997,11 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     severity: 'critical',
     automated: true,
     relatedRules: ['RULE-007', 'RULE-008', 'RULE-010'],
-    evidenceRequirements: ['Encryption configs for S3, EBS, RDS, Redshift, ElastiCache, OpenSearch'],
-    remediationGuidance: 'Enable encryption at rest for all data stores. Enforce TLS 1.2+ for all connections.'
+    evidenceRequirements: [
+      'Encryption configs for S3, EBS, RDS, Redshift, ElastiCache, OpenSearch',
+    ],
+    remediationGuidance:
+      'Enable encryption at rest for all data stores. Enforce TLS 1.2+ for all connections.',
   },
   {
     id: 'CC6.7',
@@ -972,7 +1013,8 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-001', 'RULE-002'],
     evidenceRequirements: ['VPN/bastion configs, MFA enforcement, CloudTrail for remote logins'],
-    remediationGuidance: 'Require MFA for all remote access. Use bastion hosts or SSM Session Manager. Log all sessions.'
+    remediationGuidance:
+      'Require MFA for all remote access. Use bastion hosts or SSM Session Manager. Log all sessions.',
   },
   {
     id: 'CC6.8',
@@ -983,8 +1025,11 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     severity: 'high',
     automated: true,
     relatedRules: ['RULE-001', 'RULE-007', 'RULE-008'],
-    evidenceRequirements: ['Data classification tags, DLP configs, access controls per classification'],
-    remediationGuidance: 'Implement data classification tagging. Apply controls based on classification level.'
+    evidenceRequirements: [
+      'Data classification tags, DLP configs, access controls per classification',
+    ],
+    remediationGuidance:
+      'Implement data classification tagging. Apply controls based on classification level.',
   },
   {
     id: 'CC7.1',
@@ -996,7 +1041,8 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['GuardDuty, Security Hub, CloudWatch alarms, CloudTrail'],
-    remediationGuidance: 'Enable GuardDuty, Security Hub. Create CloudWatch alarms for critical events.'
+    remediationGuidance:
+      'Enable GuardDuty, Security Hub. Create CloudWatch alarms for critical events.',
   },
   {
     id: 'CC7.2',
@@ -1008,7 +1054,8 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['SIEM integration, CloudTrail log analysis, GuardDuty findings'],
-    remediationGuidance: 'Centralize logs in SIEM. Correlate CloudTrail, VPC flow logs, GuardDuty findings.'
+    remediationGuidance:
+      'Centralize logs in SIEM. Correlate CloudTrail, VPC flow logs, GuardDuty findings.',
   },
   {
     id: 'CC7.3',
@@ -1020,7 +1067,8 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     automated: false,
     relatedRules: ['RULE-003'],
     evidenceRequirements: ['Vulnerability scan reports, patch management records'],
-    remediationGuidance: 'Implement continuous vulnerability scanning. Define SLAs for remediation by severity.'
+    remediationGuidance:
+      'Implement continuous vulnerability scanning. Define SLAs for remediation by severity.',
   },
   {
     id: 'CC7.4',
@@ -1032,7 +1080,8 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['IR plan, runbooks, incident records, post-incident reviews'],
-    remediationGuidance: 'Develop and test incident response plan. Define roles, communication, escalation.'
+    remediationGuidance:
+      'Develop and test incident response plan. Define roles, communication, escalation.',
   },
   {
     id: 'CC7.5',
@@ -1044,7 +1093,8 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-004', 'RULE-006'],
     evidenceRequirements: ['CloudTrail for admin actions, session recording, access reviews'],
-    remediationGuidance: 'Monitor all privileged actions. Implement session recording for sensitive systems.'
+    remediationGuidance:
+      'Monitor all privileged actions. Implement session recording for sensitive systems.',
   },
   {
     id: 'CC8.1',
@@ -1055,9 +1105,12 @@ export const SOC2_CONTROLS: ComplianceControl[] = [
     severity: 'high',
     automated: true,
     relatedRules: [],
-    evidenceRequirements: ['Change management records, Config history, CloudTrail for infrastructure changes'],
-    remediationGuidance: 'Implement IaC with PR reviews. Use Config for drift detection. Require approval for production changes.'
-  }
+    evidenceRequirements: [
+      'Change management records, Config history, CloudTrail for infrastructure changes',
+    ],
+    remediationGuidance:
+      'Implement IaC with PR reviews. Use Config for drift detection. Require approval for production changes.',
+  },
 ];
 
 export const ISO27001_CONTROLS: ComplianceControl[] = [
@@ -1066,24 +1119,28 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     framework: 'ISO27001',
     section: 'A.5 - Information Security Policies',
     title: 'Policies for information security',
-    description: 'A set of policies for information security shall be defined, approved, published and communicated.',
+    description:
+      'A set of policies for information security shall be defined, approved, published and communicated.',
     severity: 'high',
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['Security policy documents, approval records, communication evidence'],
-    remediationGuidance: 'Develop comprehensive information security policies. Get management approval. Communicate to all personnel.'
+    remediationGuidance:
+      'Develop comprehensive information security policies. Get management approval. Communicate to all personnel.',
   },
   {
     id: 'A.6.1',
     framework: 'ISO27001',
     section: 'A.6 - Organization of Information Security',
     title: 'Internal organization',
-    description: 'Roles and responsibilities for information security shall be defined and allocated.',
+    description:
+      'Roles and responsibilities for information security shall be defined and allocated.',
     severity: 'high',
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['Org chart with security roles, RACI matrix'],
-    remediationGuidance: 'Define information security roles (CISO, security officers). Assign responsibilities.'
+    remediationGuidance:
+      'Define information security roles (CISO, security officers). Assign responsibilities.',
   },
   {
     id: 'A.8.1',
@@ -1095,7 +1152,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Asset inventory, ownership tags, CMDB'],
-    remediationGuidance: 'Maintain asset inventory with ownership. Tag all AWS resources with owner, environment, data classification.'
+    remediationGuidance:
+      'Maintain asset inventory with ownership. Tag all AWS resources with owner, environment, data classification.',
   },
   {
     id: 'A.8.2',
@@ -1107,7 +1165,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-001', 'RULE-007', 'RULE-008'],
     evidenceRequirements: ['Data classification scheme, classification tags on resources'],
-    remediationGuidance: 'Define classification levels (Public, Internal, Restricted, Secret). Tag all data stores.'
+    remediationGuidance:
+      'Define classification levels (Public, Internal, Restricted, Secret). Tag all data stores.',
   },
   {
     id: 'A.8.3',
@@ -1119,7 +1178,7 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['Media handling procedures, disposal records'],
-    remediationGuidance: 'Implement procedures for media handling, storage, and secure disposal.'
+    remediationGuidance: 'Implement procedures for media handling, storage, and secure disposal.',
   },
   {
     id: 'A.9.1',
@@ -1131,7 +1190,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: false,
     relatedRules: ['RULE-004', 'RULE-006'],
     evidenceRequirements: ['Access control policy document'],
-    remediationGuidance: 'Document access control policy covering least privilege, need-to-know, segregation of duties.'
+    remediationGuidance:
+      'Document access control policy covering least privilege, need-to-know, segregation of duties.',
   },
   {
     id: 'A.9.2',
@@ -1142,8 +1202,11 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     severity: 'critical',
     automated: true,
     relatedRules: ['RULE-004', 'RULE-006'],
-    evidenceRequirements: ['Provisioning/deprovisioning workflow, access reviews, IAM credential reports'],
-    remediationGuidance: 'Automate user lifecycle. Conduct regular access reviews. Revoke access promptly on termination.'
+    evidenceRequirements: [
+      'Provisioning/deprovisioning workflow, access reviews, IAM credential reports',
+    ],
+    remediationGuidance:
+      'Automate user lifecycle. Conduct regular access reviews. Revoke access promptly on termination.',
   },
   {
     id: 'A.9.3',
@@ -1155,7 +1218,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['Acceptable use policy, security awareness training records'],
-    remediationGuidance: 'Communicate user responsibilities. Enforce MFA. Provide security awareness training.'
+    remediationGuidance:
+      'Communicate user responsibilities. Enforce MFA. Provide security awareness training.',
   },
   {
     id: 'A.9.4',
@@ -1167,19 +1231,22 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-001', 'RULE-002', 'RULE-004', 'RULE-009', 'RULE-010'],
     evidenceRequirements: ['IAM policies, security groups, NACLs, application RBAC'],
-    remediationGuidance: 'Implement least-privilege access. Use IAM roles, security groups, application-level RBAC.'
+    remediationGuidance:
+      'Implement least-privilege access. Use IAM roles, security groups, application-level RBAC.',
   },
   {
     id: 'A.10.1',
     framework: 'ISO27001',
     section: 'A.10 - Cryptography',
     title: 'Cryptographic controls',
-    description: 'Cryptographic controls shall be implemented to protect confidentiality and integrity.',
+    description:
+      'Cryptographic controls shall be implemented to protect confidentiality and integrity.',
     severity: 'critical',
     automated: true,
     relatedRules: ['RULE-007', 'RULE-008', 'RULE-010'],
     evidenceRequirements: ['Encryption configs, key management procedures, certificate inventory'],
-    remediationGuidance: 'Encrypt all data at rest and in transit. Manage keys with KMS. Rotate keys periodically.'
+    remediationGuidance:
+      'Encrypt all data at rest and in transit. Manage keys with KMS. Rotate keys periodically.',
   },
   {
     id: 'A.12.1',
@@ -1191,7 +1258,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['Runbooks, SOPs, operational procedures documentation'],
-    remediationGuidance: 'Document operational procedures for all critical systems. Include incident response, backup, recovery.'
+    remediationGuidance:
+      'Document operational procedures for all critical systems. Include incident response, backup, recovery.',
   },
   {
     id: 'A.12.2',
@@ -1203,7 +1271,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['Change management records, Config history, IaC PR reviews'],
-    remediationGuidance: 'Implement change management for all infrastructure. Use IaC with PR reviews. Track all changes.'
+    remediationGuidance:
+      'Implement change management for all infrastructure. Use IaC with PR reviews. Track all changes.',
   },
   {
     id: 'A.12.3',
@@ -1214,8 +1283,11 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     severity: 'medium',
     automated: false,
     relatedRules: [],
-    evidenceRequirements: ['Capacity planning reports, CloudWatch dashboards, auto-scaling configs'],
-    remediationGuidance: 'Monitor resource utilization. Implement auto-scaling. Plan capacity based on trends.'
+    evidenceRequirements: [
+      'Capacity planning reports, CloudWatch dashboards, auto-scaling configs',
+    ],
+    remediationGuidance:
+      'Monitor resource utilization. Implement auto-scaling. Plan capacity based on trends.',
   },
   {
     id: 'A.12.4',
@@ -1227,7 +1299,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: [],
     evidenceRequirements: ['CloudTrail, VPC flow logs, CloudWatch logs, GuardDuty, Security Hub'],
-    remediationGuidance: 'Enable comprehensive logging. Protect log integrity. Implement centralized log analysis.'
+    remediationGuidance:
+      'Enable comprehensive logging. Protect log integrity. Implement centralized log analysis.',
   },
   {
     id: 'A.12.5',
@@ -1239,7 +1312,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: false,
     relatedRules: [],
     evidenceRequirements: ['Software inventory, approved software list, installation controls'],
-    remediationGuidance: 'Maintain approved software list. Control software installation. Scan for unauthorized software.'
+    remediationGuidance:
+      'Maintain approved software list. Control software installation. Scan for unauthorized software.',
   },
   {
     id: 'A.12.6',
@@ -1251,7 +1325,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-003'],
     evidenceRequirements: ['Vulnerability scan reports, patch management records, CVE tracking'],
-    remediationGuidance: 'Implement continuous vulnerability scanning. Define remediation SLAs. Track CVE exposure.'
+    remediationGuidance:
+      'Implement continuous vulnerability scanning. Define remediation SLAs. Track CVE exposure.',
   },
   {
     id: 'A.13.1',
@@ -1263,7 +1338,8 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-002', 'RULE-005', 'RULE-009'],
     evidenceRequirements: ['VPC design, security groups, NACLs, TGW, VPN, Direct Connect configs'],
-    remediationGuidance: 'Segment networks. Restrict traffic with security groups and NACLs. Monitor network traffic.'
+    remediationGuidance:
+      'Segment networks. Restrict traffic with security groups and NACLs. Monitor network traffic.',
   },
   {
     id: 'A.13.2',
@@ -1275,8 +1351,9 @@ export const ISO27001_CONTROLS: ComplianceControl[] = [
     automated: true,
     relatedRules: ['RULE-007', 'RULE-008', 'RULE-009', 'RULE-010'],
     evidenceRequirements: ['Encryption in transit, SFTP/HTTPS enforcement, API gateway TLS'],
-    remediationGuidance: 'Enforce TLS 1.2+ for all communications. Use VPC endpoints for AWS service access.'
-  }
+    remediationGuidance:
+      'Enforce TLS 1.2+ for all communications. Use VPC endpoints for AWS service access.',
+  },
 ];
 
 export function getAllControls(): ComplianceControl[] {
@@ -1294,6 +1371,9 @@ export function getControlsByFramework(framework: ComplianceFramework): Complian
   }
 }
 
-export function getControlById(id: string, framework: ComplianceFramework): ComplianceControl | undefined {
-  return getControlsByFramework(framework).find(c => c.id === id);
+export function getControlById(
+  id: string,
+  framework: ComplianceFramework
+): ComplianceControl | undefined {
+  return getControlsByFramework(framework).find((c) => c.id === id);
 }

@@ -1,0 +1,12 @@
+dist/
+node_modules/
+*.js
+*.d.ts
+*.map
+coverage/
+.next/
+.cdk.out/
+*.log
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
