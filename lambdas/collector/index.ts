@@ -1,18 +1,71 @@
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
-import { EC2Client, paginateDescribeInstances } from '@aws-sdk/client-ec2';
-import { S3Client, ListBucketsCommand } from '@aws-sdk/client-s3';
-import { IAMClient, ListUsersCommand, ListRolesCommand, ListPoliciesCommand } from '@aws-sdk/client-iam';
+import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
+import { EC2Client, paginateDescribeInstances, DescribeSecurityGroupsCommand, DescribeVpcsCommand, DescribeVpcEndpointsCommand, DescribeNetworkAclsCommand, DescribeRouteTablesCommand, DescribeTransitGatewaysCommand } from '@aws-sdk/client-ec2';
+import { S3Client, ListBucketsCommand, GetBucketVersioningCommand, GetBucketEncryptionCommand, GetBucketLoggingCommand, GetBucketPolicyCommand, GetPublicAccessBlockCommand } from '@aws-sdk/client-s3';
+import { IAMClient, ListUsersCommand, ListRolesCommand, ListPoliciesCommand, GetAccountPasswordPolicyCommand, GetCredentialReportCommand } from '@aws-sdk/client-iam';
 import { KMSClient, ListKeysCommand, DescribeKeyCommand } from '@aws-sdk/client-kms';
 import { RDSClient, DescribeDBInstancesCommand } from '@aws-sdk/client-rds';
 import { EKSClient, ListClustersCommand, DescribeClusterCommand } from '@aws-sdk/client-eks';
 import { SecurityHubClient, GetFindingsCommand } from '@aws-sdk/client-securityhub';
-import { GraphNode, GraphEdge, Logger } from '../../shared/types';
+import { CloudTrailClient, DescribeTrailsCommand, GetTrailStatusCommand } from '@aws-sdk/client-cloudtrail';
+import { ConfigServiceClient, DescribeConfigurationRecordersCommand, DescribeDeliveryChannelsCommand, DescribeConfigRulesCommand } from '@aws-sdk/client-config-service';
+import { GuardDutyClient, ListDetectorsCommand, GetDetectorCommand } from '@aws-sdk/client-guardduty';
+import { AccessAnalyzerClient, ListAnalyzersCommand, ListFindingsCommand } from '@aws-sdk/client-accessanalyzer';
+import { Route53Client, ListHostedZonesCommand } from '@aws-sdk/client-route-53';
+import { APIGatewayClient, GetRestApisCommand, GetStagesCommand } from '@aws-sdk/client-api-gateway';
+import { LambdaClient, ListFunctionsCommand, ListAliasesCommand, ListEventSourceMappingsCommand } from '@aws-sdk/client-lambda';
+import { SFNClient, ListStateMachinesCommand } from '@aws-sdk/client-sfn';
+import { EventBridgeClient, ListEventBusesCommand, ListRulesCommand } from '@aws-sdk/client-eventbridge';
+import { DynamoDBClient, ListTablesCommand, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
+import { ElastiCacheClient, DescribeCacheClustersCommand } from '@aws-sdk/client-elasticache';
+import { OpenSearchClient, ListDomainNamesCommand, DescribeDomainCommand } from '@aws-sdk/client-opensearch';
+import { RedshiftClient, DescribeClustersCommand } from '@aws-sdk/client-redshift';
+import { SecretsManagerClient, ListSecretsCommand, DescribeSecretCommand } from '@aws-sdk/client-secrets-manager';
+import { SSMClient, DescribeParametersCommand } from '@aws-sdk/client-ssm';
+import { BackupClient, ListBackupVaultsCommand, ListBackupPlansCommand } from '@aws-sdk/client-backup';
+import { GraphNode, GraphEdge, Logger } from '../shared/types';
 
 const logger = new Logger('collector');
 const stsClient = new STSClient({ region: 'us-east-1' });
 
 interface CollectorEvent {
   accountId: string;
+}
+
+function createClients(credentials?: any) {
+  const baseConfig = { region: 'us-east-1' };
+  const credConfig = credentials ? { credentials: {
+    accessKeyId: credentials.AccessKeyId!,
+    secretAccessKey: credentials.SecretAccessKey!,
+    sessionToken: credentials.SessionToken!,
+    expiration: credentials.Expiration,
+  }} : {};
+
+  return {
+    ec2Client: new EC2Client({ ...baseConfig, ...credConfig }),
+    s3Client: new S3Client({ ...baseConfig, ...credConfig }),
+    iamClient: new IAMClient({ ...baseConfig, ...credConfig }),
+    kmsClient: new KMSClient({ ...baseConfig, ...credConfig }),
+    rdsClient: new RDSClient({ ...baseConfig, ...credConfig }),
+    eksClient: new EKSClient({ ...baseConfig, ...credConfig }),
+    securityHubClient: new SecurityHubClient({ ...baseConfig, ...credConfig }),
+    cloudTrailClient: new CloudTrailClient({ ...baseConfig, ...credConfig }),
+    configClient: new ConfigServiceClient({ ...baseConfig, ...credConfig }),
+    guardDutyClient: new GuardDutyClient({ ...baseConfig, ...credConfig }),
+    accessAnalyzerClient: new AccessAnalyzerClient({ ...baseConfig, ...credConfig }),
+    route53Client: new Route53Client({ ...baseConfig, ...credConfig }),
+    apiGatewayClient: new APIGatewayClient({ ...baseConfig, ...credConfig }),
+    lambdaClient: new LambdaClient({ ...baseConfig, ...credConfig }),
+    sfnClient: new SFNClient({ ...baseConfig, ...credConfig }),
+    eventBridgeClient: new EventBridgeClient({ ...baseConfig, ...credConfig }),
+    dynamoDBClient: new DynamoDBClient({ ...baseConfig, ...credConfig }),
+    elasticacheClient: new ElastiCacheClient({ ...baseConfig, ...credConfig }),
+    opensearchClient: new OpenSearchClient({ ...baseConfig, ...credConfig }),
+    redshiftClient: new RedshiftClient({ ...baseConfig, ...credConfig }),
+    secretsManagerClient: new SecretsManagerClient({ ...baseConfig, ...credConfig }),
+    ssmClient: new SSMClient({ ...baseConfig, ...credConfig }),
+    backupClient: new BackupClient({ ...baseConfig, ...credConfig }),
+  };
 }
 
 export const handler = async (event: CollectorEvent): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> => {
@@ -22,34 +75,30 @@ export const handler = async (event: CollectorEvent): Promise<{ nodes: GraphNode
   const mockMode = process.env.MOCK_MODE === 'true';
   const masterAccountId = process.env.MASTER_ACCOUNT_ID;
 
-  let ec2Client: EC2Client, s3Client: S3Client, iamClient: IAMClient, kmsClient: KMSClient, rdsClient: RDSClient, eksClient: EKSClient, securityHubClient: SecurityHubClient;
+  let clients: ReturnType<typeof createClients>;
 
   if (mockMode || accountId === masterAccountId) {
-    ec2Client = new EC2Client({ region: 'us-east-1' });
-    s3Client = new S3Client({ region: 'us-east-1' });
-    iamClient = new IAMClient({ region: 'us-east-1' });
-    kmsClient = new KMSClient({ region: 'us-east-1' });
-    rdsClient = new RDSClient({ region: 'us-east-1' });
-    eksClient = new EKSClient({ region: 'us-east-1' });
-    securityHubClient = new SecurityHubClient({ region: 'us-east-1' });
+    clients = createClients();
   } else {
     const roleArn = `arn:aws:iam::${accountId}:role/SecurityGraphCollectorRole`;
-    const credentials = await stsClient.send(new AssumeRoleCommand({
+    const assumedRole = await stsClient.send(new AssumeRoleCommand({
       RoleArn: roleArn,
       RoleSessionName: `SecurityGraphIngestion-${Date.now()}`,
       DurationSeconds: 3600,
-    })).then(res => res.Credentials);
+    }));
 
-    if (!credentials) throw new Error('Failed to assume role');
+    if (!assumedRole.Credentials) throw new Error('Failed to assume role');
 
-    ec2Client = new EC2Client({ region: 'us-east-1', credentials });
-    s3Client = new S3Client({ region: 'us-east-1', credentials });
-    iamClient = new IAMClient({ region: 'us-east-1', credentials });
-    kmsClient = new KMSClient({ region: 'us-east-1', credentials });
-    rdsClient = new RDSClient({ region: 'us-east-1', credentials });
-    eksClient = new EKSClient({ region: 'us-east-1', credentials });
-    securityHubClient = new SecurityHubClient({ region: 'us-east-1', credentials });
+    clients = createClients(assumedRole.Credentials);
   }
+
+  const {
+    ec2Client, s3Client, iamClient, kmsClient, rdsClient, eksClient, securityHubClient,
+    cloudTrailClient, configClient, guardDutyClient, accessAnalyzerClient,
+    route53Client, apiGatewayClient, lambdaClient, sfnClient, eventBridgeClient,
+    dynamoDBClient, elasticacheClient, opensearchClient, redshiftClient,
+    secretsManagerClient, ssmClient, backupClient
+  } = clients;
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -81,6 +130,42 @@ export const handler = async (event: CollectorEvent): Promise<{ nodes: GraphNode
   const shData = await collectSecurityHub(securityHubClient, accountId);
   nodes.push(...shData.nodes);
   edges.push(...shData.edges);
+
+  const cloudTrailData = await collectCloudTrail(cloudTrailClient, accountId);
+  nodes.push(...cloudTrailData.nodes);
+  edges.push(...cloudTrailData.edges);
+
+  const configData = await collectConfig(configClient, accountId);
+  nodes.push(...configData.nodes);
+  edges.push(...configData.edges);
+
+  const guardDutyData = await collectGuardDuty(guardDutyClient, accountId);
+  nodes.push(...guardDutyData.nodes);
+  edges.push(...guardDutyData.edges);
+
+  const accessAnalyzerData = await collectAccessAnalyzer(accessAnalyzerClient, accountId);
+  nodes.push(...accessAnalyzerData.nodes);
+  edges.push(...accessAnalyzerData.edges);
+
+  const networkData = await collectNetwork(ec2Client, route53Client, accountId);
+  nodes.push(...networkData.nodes);
+  edges.push(...networkData.edges);
+
+  const serverlessData = await collectServerless(apiGatewayClient, lambdaClient, sfnClient, eventBridgeClient, accountId);
+  nodes.push(...serverlessData.nodes);
+  edges.push(...serverlessData.edges);
+
+  const datastoreData = await collectDataStores(dynamoDBClient, elasticacheClient, opensearchClient, redshiftClient, accountId);
+  nodes.push(...datastoreData.nodes);
+  edges.push(...datastoreData.edges);
+
+  const secretsData = await collectSecrets(secretsManagerClient, ssmClient, accountId);
+  nodes.push(...secretsData.nodes);
+  edges.push(...secretsData.edges);
+
+  const backupData = await collectBackup(backupClient, accountId);
+  nodes.push(...backupData.nodes);
+  edges.push(...backupData.edges);
 
   logger.info(`Collection complete: ${nodes.length} nodes, ${edges.length} edges`);
   return { nodes, edges };
@@ -167,6 +252,14 @@ async function collectS3(client: S3Client, accountId: string) {
     const buckets = await client.send(new ListBucketsCommand({}));
     for (const bucket of buckets.Buckets || []) {
       const bucketArn = `arn:aws:s3:::${bucket.Name}`;
+      const versioning = await client.send(new GetBucketVersioningCommand({ Bucket: bucket.Name })).catch(() => ({ Status: 'Suspended' }));
+      const encryption = await client.send(new GetBucketEncryptionCommand({ Bucket: bucket.Name })).catch(() => ({ ServerSideEncryptionConfiguration: null }));
+      const logging = await client.send(new GetBucketLoggingCommand({ Bucket: bucket.Name })).catch(() => ({ LoggingEnabled: null }));
+      const policy = await client.send(new GetBucketPolicyCommand({ Bucket: bucket.Name })).catch(() => ({ Policy: null }));
+      const publicAccess = await client.send(new GetPublicAccessBlockCommand({ Bucket: bucket.Name })).catch(() => ({ PublicAccessBlockConfiguration: { BlockPublicAcls: false, BlockPublicPolicy: false } }));
+
+      const isPublic = policy.Policy || !publicAccess.PublicAccessBlockConfiguration?.BlockPublicAcls || !publicAccess.PublicAccessBlockConfiguration?.BlockPublicPolicy;
+
       nodes.push({
         id: bucketArn,
         label: 'S3Bucket',
@@ -176,6 +269,11 @@ async function collectS3(client: S3Client, accountId: string) {
           account_id: accountId,
           name: bucket.Name,
           creation_date: bucket.CreationDate?.toISOString(),
+          versioning_enabled: versioning.Status === 'Enabled',
+          default_encryption: !!encryption.ServerSideEncryptionConfiguration,
+          logging_enabled: !!logging.LoggingEnabled,
+          is_publicly_accessible: isPublic,
+          data_classification: '',
         },
       });
       edges.push({ from: `arn:aws:iam::${accountId}:root`, to: bucketArn, label: 'OWNS' });
@@ -219,10 +317,34 @@ async function collectIam(client: IAMClient, accountId: string) {
     nodes.push({
       id: policyArn,
       label: 'IamPolicy',
-      properties: { id: policy.PolicyName, arn: policyArn, account_id: accountId, policy_name: policy.PolicyName, policy_type: policy.Type },
+      properties: { id: policy.PolicyName, arn: policyArn, account_id: accountId, policy_name: policy.PolicyName, policy_type: (policy as any).Type || 'Managed' },
     });
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: policyArn, label: 'OWNS' });
   }
+
+  try {
+    const passwordPolicy = await client.send(new GetAccountPasswordPolicyCommand({}));
+    if (passwordPolicy.PasswordPolicy) {
+      const pp = passwordPolicy.PasswordPolicy;
+      nodes.push({
+        id: `arn:aws:iam::${accountId}:password-policy`,
+        label: 'AccountPasswordPolicy',
+        properties: {
+          id: 'account-password-policy',
+          arn: `arn:aws:iam::${accountId}:password-policy`,
+          account_id: accountId,
+          min_password_length: pp.MinimumPasswordLength,
+          require_symbols: pp.RequireSymbols,
+          require_numbers: pp.RequireNumbers,
+          require_uppercase: pp.RequireUppercaseCharacters,
+          require_lowercase: pp.RequireLowercaseCharacters,
+          max_password_age: pp.MaxPasswordAge,
+          password_reuse_prevention: pp.PasswordReusePrevention,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: `arn:aws:iam::${accountId}:password-policy`, label: 'HAS_POLICY' });
+    }
+  } catch (e) {}
 
   return { nodes, edges };
 }
@@ -260,7 +382,7 @@ async function collectRds(client: RDSClient, accountId: string) {
     nodes.push({
       id: dbArn,
       label: 'RdsInstance',
-      properties: { id: db.DBInstanceIdentifier, arn: dbArn, account_id: accountId, engine: db.Engine, instance_class: db.DBInstanceClass, publicly_accessible: db.PubliclyAccessible },
+      properties: { id: db.DBInstanceIdentifier, arn: dbArn, account_id: accountId, engine: db.Engine, instance_class: db.DBInstanceClass, publicly_accessible: db.PubliclyAccessible, storage_encrypted: db.StorageEncrypted, backup_retention_period: db.BackupRetentionPeriod, deletion_protection: db.DeletionProtection },
     });
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: dbArn, label: 'OWNS' });
   }
@@ -309,6 +431,689 @@ async function collectSecurityHub(client: SecurityHubClient, accountId: string) 
     }
   } catch (e) {
     console.error('SecurityHub collection error:', e);
+  }
+
+  return { nodes, edges };
+}
+
+async function collectCloudTrail(client: CloudTrailClient, accountId: string) {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  try {
+    const trails = await client.send(new DescribeTrailsCommand({}));
+    for (const trail of trails.trailList || []) {
+      const trailArn = trail.TrailARN || `arn:aws:cloudtrail:us-east-1:${accountId}:trail/${trail.Name}`;
+      nodes.push({
+        id: trailArn,
+        label: 'CloudTrail',
+        properties: {
+          id: trail.Name,
+          arn: trailArn,
+          account_id: accountId,
+          name: trail.Name,
+          is_multi_region_trail: trail.IsMultiRegionTrail,
+          log_file_validation_enabled: trail.LogFileValidationEnabled,
+          kms_key_id: trail.KmsKeyId,
+          cloudwatch_logs_log_group_arn: trail.CloudWatchLogsLogGroupArn,
+          s3_bucket_name: trail.S3BucketName,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: trailArn, label: 'OWNS' });
+
+      try {
+        const status = await client.send(new GetTrailStatusCommand({ Name: trailArn }));
+        nodes.push({
+          id: `${trailArn}/status`,
+          label: 'CloudTrailStatus',
+          properties: {
+            id: `${trail.Name}-status`,
+            arn: `${trailArn}/status`,
+            account_id: accountId,
+            is_logging: status.IsLogging,
+            latest_delivery_time: status.LatestDeliveryTime?.toISOString(),
+            latest_delivery_attempt: (status as any).LatestDeliveryAttemptTime,
+          },
+        });
+        edges.push({ from: trailArn, to: `${trailArn}/status`, label: 'HAS_STATUS' });
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('CloudTrail collection error:', e);
+  }
+
+  return { nodes, edges };
+}
+
+async function collectConfig(client: ConfigServiceClient, accountId: string) {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  try {
+    const recorders = await client.send(new DescribeConfigurationRecordersCommand({}));
+    for (const recorder of recorders.ConfigurationRecorders || []) {
+      const recorderArn = `arn:aws:config:us-east-1:${accountId}:config-recorder/${recorder.name}`;
+      nodes.push({
+        id: recorderArn,
+        label: 'ConfigRecorder',
+        properties: {
+          id: recorder.name,
+          arn: recorderArn,
+          account_id: accountId,
+          name: recorder.name,
+          role_arn: recorder.roleARN,
+          recording_group: recorder.recordingGroup,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: recorderArn, label: 'OWNS' });
+    }
+
+    const rules = await client.send(new DescribeConfigRulesCommand({}));
+    for (const rule of rules.ConfigRules || []) {
+      const ruleArn = rule.ConfigRuleArn || `arn:aws:config:us-east-1:${accountId}:config-rule/${rule.ConfigRuleName}`;
+      nodes.push({
+        id: ruleArn,
+        label: 'ConfigRule',
+        properties: {
+          id: rule.ConfigRuleName,
+          arn: ruleArn,
+          account_id: accountId,
+          name: rule.ConfigRuleName,
+          description: rule.Description,
+          source: rule.Source,
+          scope: rule.Scope,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: ruleArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('Config collection error:', e);
+  }
+
+  return { nodes, edges };
+}
+
+async function collectGuardDuty(client: GuardDutyClient, accountId: string) {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  try {
+    const detectors = await client.send(new ListDetectorsCommand({}));
+    for (const detectorId of detectors.DetectorIds || []) {
+      const detector = await client.send(new GetDetectorCommand({ DetectorId: detectorId }));
+      const detectorArn = `arn:aws:guardduty:us-east-1:${accountId}:detector/${detectorId}`;
+      nodes.push({
+        id: detectorArn,
+        label: 'GuardDutyDetector',
+        properties: {
+          id: detectorId,
+          arn: detectorArn,
+          account_id: accountId,
+          status: detector.Status,
+          finding_publishing_frequency: detector.FindingPublishingFrequency,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: detectorArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('GuardDuty collection error:', e);
+  }
+
+  return { nodes, edges };
+}
+
+async function collectAccessAnalyzer(client: AccessAnalyzerClient, accountId: string) {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  try {
+    const analyzers = await client.send(new ListAnalyzersCommand({ type: 'ACCOUNT' }));
+    for (const analyzer of analyzers.analyzers || []) {
+      const analyzerArn = analyzer.arn || `arn:aws:access-analyzer:us-east-1:${accountId}:analyzer/${analyzer.name}`;
+      nodes.push({
+        id: analyzerArn,
+        label: 'AccessAnalyzer',
+        properties: {
+          id: analyzer.name,
+          arn: analyzerArn,
+          account_id: accountId,
+          name: analyzer.name,
+          status: analyzer.status,
+          type: analyzer.type,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: analyzerArn, label: 'OWNS' });
+
+      try {
+        const findings = await client.send(new ListFindingsCommand({ analyzerArn: analyzerArn, maxResults: 50 }));
+        for (const finding of findings.findings || []) {
+          const findingArn = finding.id ? `arn:aws:access-analyzer:us-east-1:${accountId}:finding/${finding.id}` : `${analyzerArn}/finding/${Date.now()}`;
+          nodes.push({
+            id: findingArn,
+            label: 'AccessAnalyzerFinding',
+            properties: {
+              id: finding.id,
+              arn: findingArn,
+              account_id: accountId,
+              resource: finding.resource,
+              resource_type: finding.resourceType,
+              status: finding.status,
+              finding_type: (finding as any).findingType || 'ExternalAccess',
+            },
+          });
+          edges.push({ from: analyzerArn, to: findingArn, label: 'HAS_FINDING' });
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('Access Analyzer collection error:', e);
+  }
+
+  return { nodes, edges };
+}
+
+async function collectNetwork(ec2Client: EC2Client, route53Client: Route53Client, accountId: string) {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  try {
+    const vpcs = await ec2Client.send(new DescribeVpcsCommand({}));
+    for (const vpc of vpcs.Vpcs || []) {
+      const vpcArn = `arn:aws:ec2:us-east-1:${accountId}:vpc/${vpc.VpcId}`;
+      nodes.push({
+        id: vpcArn,
+        label: 'Vpc',
+        properties: {
+          id: vpc.VpcId,
+          arn: vpcArn,
+          account_id: accountId,
+          cidr_block: vpc.CidrBlock,
+          state: vpc.State,
+          is_default: vpc.IsDefault,
+          flow_logs_enabled: false,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: vpcArn, label: 'OWNS' });
+
+      try {
+        const endpoints = await ec2Client.send(new DescribeVpcEndpointsCommand({
+          Filters: [{ Name: 'vpc-id', Values: [vpc.VpcId!] }]
+        }));
+        for (const ep of endpoints.VpcEndpoints || []) {
+          const epArn = `arn:aws:ec2:us-east-1:${accountId}:vpc-endpoint/${ep.VpcEndpointId}`;
+          nodes.push({
+            id: epArn,
+            label: 'VpcEndpoint',
+            properties: {
+              id: ep.VpcEndpointId,
+              arn: epArn,
+              account_id: accountId,
+              vpc_id: ep.VpcId,
+              service_name: ep.ServiceName,
+              state: ep.State,
+              type: ep.VpcEndpointType,
+            },
+          });
+          edges.push({ from: vpcArn, to: epArn, label: 'HAS_ENDPOINT' });
+        }
+      } catch (e) {}
+
+      try {
+        const acls = await ec2Client.send(new DescribeNetworkAclsCommand({
+          Filters: [{ Name: 'vpc-id', Values: [vpc.VpcId!] }]
+        }));
+        for (const acl of acls.NetworkAcls || []) {
+          const aclArn = `arn:aws:ec2:us-east-1:${accountId}:network-acl/${acl.NetworkAclId}`;
+          nodes.push({
+            id: aclArn,
+            label: 'NetworkAcl',
+            properties: {
+              id: acl.NetworkAclId,
+              arn: aclArn,
+              account_id: accountId,
+              vpc_id: acl.VpcId,
+              is_default: acl.IsDefault,
+              entries: acl.Entries,
+            },
+          });
+          edges.push({ from: vpcArn, to: aclArn, label: 'HAS_NACL' });
+        }
+      } catch (e) {}
+
+      try {
+        const rtbs = await ec2Client.send(new DescribeRouteTablesCommand({
+          Filters: [{ Name: 'vpc-id', Values: [vpc.VpcId!] }]
+        }));
+        for (const rtb of rtbs.RouteTables || []) {
+          const rtbArn = `arn:aws:ec2:us-east-1:${accountId}:route-table/${rtb.RouteTableId}`;
+          nodes.push({
+            id: rtbArn,
+            label: 'RouteTable',
+            properties: {
+              id: rtb.RouteTableId,
+              arn: rtbArn,
+              account_id: accountId,
+              vpc_id: rtb.VpcId,
+              routes: rtb.Routes,
+              associations: rtb.Associations,
+            },
+          });
+          edges.push({ from: vpcArn, to: rtbArn, label: 'HAS_ROUTE_TABLE' });
+        }
+      } catch (e) {}
+    }
+
+    const tgws = await ec2Client.send(new DescribeTransitGatewaysCommand({}));
+    for (const tgw of tgws.TransitGateways || []) {
+      const tgwArn = `arn:aws:ec2:us-east-1:${accountId}:transit-gateway/${tgw.TransitGatewayId}`;
+      nodes.push({
+        id: tgwArn,
+        label: 'TransitGateway',
+        properties: {
+          id: tgw.TransitGatewayId,
+          arn: tgwArn,
+          account_id: accountId,
+          state: tgw.State,
+          description: tgw.Description,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: tgwArn, label: 'OWNS' });
+    }
+
+    const zones = await route53Client.send(new ListHostedZonesCommand({}));
+    for (const zone of zones.HostedZones || []) {
+      const zoneArn = `arn:aws:route53:::hostedzone/${zone.Id?.split('/').pop()}`;
+      nodes.push({
+        id: zoneArn,
+        label: 'HostedZone',
+        properties: {
+          id: zone.Id,
+          arn: zoneArn,
+          account_id: accountId,
+          name: zone.Name,
+          private_zone: zone.Config?.PrivateZone,
+          resource_record_set_count: zone.ResourceRecordSetCount,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: zoneArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('Network collection error:', e);
+  }
+
+  return { nodes, edges };
+}
+
+async function collectServerless(apiGatewayClient: APIGatewayClient, lambdaClient: LambdaClient, sfnClient: SFNClient, eventBridgeClient: EventBridgeClient, accountId: string) {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  try {
+    const apis = await apiGatewayClient.send(new GetRestApisCommand({}));
+    for (const api of apis.items || []) {
+      const apiArn = `arn:aws:apigateway:us-east-1::/restapis/${api.id}`;
+      nodes.push({
+        id: apiArn,
+        label: 'ApiGateway',
+        properties: {
+          id: api.id,
+          arn: apiArn,
+          account_id: accountId,
+          name: api.name,
+          description: api.description,
+          endpoint_type: api.endpointConfiguration?.types?.[0],
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: apiArn, label: 'OWNS' });
+
+      try {
+        const stages = await apiGatewayClient.send(new GetStagesCommand({ restApiId: api.id! }));
+        for (const stage of stages.item || []) {
+          const stageArn = `${apiArn}/stages/${stage.stageName}`;
+          nodes.push({
+            id: stageArn,
+            label: 'ApiGatewayStage',
+            properties: {
+              id: stage.stageName,
+              arn: stageArn,
+              account_id: accountId,
+              name: stage.stageName,
+              deployment_id: stage.deploymentId,
+              description: stage.description,
+            },
+          });
+          edges.push({ from: apiArn, to: stageArn, label: 'HAS_STAGE' });
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('API Gateway collection error:', e);
+  }
+
+  try {
+    const functions = await lambdaClient.send(new ListFunctionsCommand({}));
+    for (const fn of functions.Functions || []) {
+      const fnArn = fn.FunctionArn || `arn:aws:lambda:us-east-1:${accountId}:function:${fn.FunctionName}`;
+      nodes.push({
+        id: fnArn,
+        label: 'LambdaFunction',
+        properties: {
+          id: fn.FunctionName,
+          arn: fnArn,
+          account_id: accountId,
+          name: fn.FunctionName,
+          runtime: fn.Runtime,
+          handler: fn.Handler,
+          role: fn.Role,
+          code_size: fn.CodeSize,
+          timeout: fn.Timeout,
+          memory_size: fn.MemorySize,
+          vpc_config: fn.VpcConfig,
+          last_modified: fn.LastModified,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: fnArn, label: 'OWNS' });
+
+      try {
+        const aliases = await lambdaClient.send(new ListAliasesCommand({ FunctionName: fn.FunctionName! }));
+        for (const alias of aliases.Aliases || []) {
+          const aliasArn = `${fnArn}:${alias.Name}`;
+          nodes.push({
+            id: aliasArn,
+            label: 'LambdaAlias',
+            properties: {
+              id: alias.Name,
+              arn: aliasArn,
+              account_id: accountId,
+              name: alias.Name,
+              function_version: alias.FunctionVersion,
+              description: alias.Description,
+            },
+          });
+          edges.push({ from: fnArn, to: aliasArn, label: 'HAS_ALIAS' });
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('Lambda collection error:', e);
+  }
+
+  try {
+    const stateMachines = await sfnClient.send(new ListStateMachinesCommand({}));
+    for (const sm of stateMachines.stateMachines || []) {
+      const smArn = sm.stateMachineArn || `arn:aws:states:us-east-1:${accountId}:stateMachine:${sm.name}`;
+      nodes.push({
+        id: smArn,
+        label: 'StateMachine',
+        properties: {
+          id: sm.name,
+          arn: smArn,
+          account_id: accountId,
+          name: sm.name,
+          type: sm.type,
+          creation_date: sm.creationDate?.toISOString(),
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: smArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('Step Functions collection error:', e);
+  }
+
+  try {
+    const buses = await eventBridgeClient.send(new ListEventBusesCommand({}));
+    for (const bus of buses.EventBuses || []) {
+      const busArn = bus.Arn || `arn:aws:events:us-east-1:${accountId}:event-bus/${bus.Name}`;
+      nodes.push({
+        id: busArn,
+        label: 'EventBus',
+        properties: {
+          id: bus.Name,
+          arn: busArn,
+          account_id: accountId,
+          name: bus.Name,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: busArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('EventBridge collection error:', e);
+  }
+
+  return { nodes, edges };
+}
+
+async function collectDataStores(dynamoDBClient: DynamoDBClient, elasticacheClient: ElastiCacheClient, opensearchClient: OpenSearchClient, redshiftClient: RedshiftClient, accountId: string) {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  try {
+    const tables = await dynamoDBClient.send(new ListTablesCommand({}));
+    for (const tableName of tables.TableNames || []) {
+      try {
+        const table = await dynamoDBClient.send(new DescribeTableCommand({ TableName: tableName }));
+        if (table.Table) {
+          const t = table.Table;
+          const tableArn = `arn:aws:dynamodb:us-east-1:${accountId}:table/${t.TableName}`;
+          nodes.push({
+            id: tableArn,
+            label: 'DynamoDBTable',
+            properties: {
+              id: t.TableName,
+              arn: tableArn,
+              account_id: accountId,
+              name: t.TableName,
+              status: t.TableStatus,
+              item_count: t.ItemCount,
+              size_bytes: t.TableSizeBytes,
+              billing_mode: t.BillingModeSummary?.BillingMode,
+              encryption: t.SSEDescription?.Status,
+              point_in_time_recovery: (t as any).PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus,
+              ttl: (t as any).TimeToLiveDescription?.TimeToLiveStatus,
+            },
+          });
+          edges.push({ from: `arn:aws:iam::${accountId}:root`, to: tableArn, label: 'OWNS' });
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('DynamoDB collection error:', e);
+  }
+
+  try {
+    const clusters = await elasticacheClient.send(new DescribeCacheClustersCommand({ ShowCacheNodeInfo: true }));
+    for (const cluster of clusters.CacheClusters || []) {
+      const clusterArn = `arn:aws:elasticache:us-east-1:${accountId}:cluster:${cluster.CacheClusterId}`;
+      nodes.push({
+        id: clusterArn,
+        label: 'ElastiCacheCluster',
+        properties: {
+          id: cluster.CacheClusterId,
+          arn: clusterArn,
+          account_id: accountId,
+          engine: cluster.Engine,
+          engine_version: cluster.EngineVersion,
+          node_type: cluster.CacheNodeType,
+          num_nodes: cluster.NumCacheNodes,
+          status: cluster.CacheClusterStatus,
+          transit_encryption: cluster.TransitEncryptionEnabled,
+          at_rest_encryption: cluster.AtRestEncryptionEnabled,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: clusterArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('ElastiCache collection error:', e);
+  }
+
+  try {
+    const domains = await opensearchClient.send(new ListDomainNamesCommand({}));
+    for (const domain of domains.DomainNames || []) {
+      try {
+        const desc = await opensearchClient.send(new DescribeDomainCommand({ DomainName: domain.DomainName! }));
+        if (desc.DomainStatus) {
+          const d = desc.DomainStatus;
+          const domainArn = d.ARN || `arn:aws:es:us-east-1:${accountId}:domain/${d.DomainName}`;
+          nodes.push({
+            id: domainArn,
+            label: 'OpenSearchDomain',
+            properties: {
+              id: d.DomainName,
+              arn: domainArn,
+              account_id: accountId,
+              name: d.DomainName,
+              version: d.EngineVersion,
+              status: d.Processing ? 'Processing' : 'Active',
+              endpoint: d.Endpoint,
+              vpc_options: d.VPCOptions,
+              encryption_at_rest: d.EncryptionAtRestOptions?.Enabled,
+              node_to_node_encryption: d.NodeToNodeEncryptionOptions?.Enabled,
+              enforce_https: d.DomainEndpointOptions?.EnforceHTTPS,
+            },
+          });
+          edges.push({ from: `arn:aws:iam::${accountId}:root`, to: domainArn, label: 'OWNS' });
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('OpenSearch collection error:', e);
+  }
+
+  try {
+    const clusters = await redshiftClient.send(new DescribeClustersCommand({}));
+    for (const cluster of clusters.Clusters || []) {
+      const clusterArn = cluster.ClusterIdentifier ? `arn:aws:redshift:us-east-1:${accountId}:cluster:${cluster.ClusterIdentifier}` : '';
+      nodes.push({
+        id: clusterArn,
+        label: 'RedshiftCluster',
+        properties: {
+          id: cluster.ClusterIdentifier,
+          arn: clusterArn,
+          account_id: accountId,
+          node_type: cluster.NodeType,
+          number_of_nodes: cluster.NumberOfNodes,
+          status: cluster.ClusterStatus,
+          encrypted: cluster.Encrypted,
+          publicly_accessible: cluster.PubliclyAccessible,
+          vpc_id: cluster.VpcId,
+          master_username: cluster.MasterUsername,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: clusterArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('Redshift collection error:', e);
+  }
+
+  return { nodes, edges };
+}
+
+async function collectSecrets(secretsManagerClient: SecretsManagerClient, ssmClient: SSMClient, accountId: string) {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  try {
+    const secrets = await secretsManagerClient.send(new ListSecretsCommand({}));
+    for (const secret of secrets.SecretList || []) {
+      try {
+        const desc = await secretsManagerClient.send(new DescribeSecretCommand({ SecretId: secret.ARN || secret.Name }));
+        const secretArn = desc.ARN || `arn:aws:secretsmanager:us-east-1:${accountId}:secret:${secret.Name}`;
+        nodes.push({
+          id: secretArn,
+          label: 'Secret',
+          properties: {
+            id: secret.Name,
+            arn: secretArn,
+            account_id: accountId,
+            name: secret.Name,
+            description: desc.Description,
+            rotation_enabled: desc.RotationEnabled,
+            rotation_rules: desc.RotationRules,
+            last_rotated: desc.LastRotatedDate?.toISOString(),
+            kms_key_id: desc.KmsKeyId,
+            secret_type: secret.Name?.includes('rds') ? 'database' : 'other',
+          },
+        });
+        edges.push({ from: `arn:aws:iam::${accountId}:root`, to: secretArn, label: 'OWNS' });
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('Secrets Manager collection error:', e);
+  }
+
+  try {
+    const params = await ssmClient.send(new DescribeParametersCommand({}));
+    for (const param of params.Parameters || []) {
+      const paramArn = `arn:aws:ssm:us-east-1:${accountId}:parameter${param.Name}`;
+      nodes.push({
+        id: paramArn,
+        label: 'Parameter',
+        properties: {
+          id: param.Name,
+          arn: paramArn,
+          account_id: accountId,
+          name: param.Name,
+          type: param.Type,
+          key_id: param.KeyId,
+          last_modified: param.LastModifiedDate?.toISOString(),
+          tier: param.Tier,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: paramArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('Parameter Store collection error:', e);
+  }
+
+  return { nodes, edges };
+}
+
+async function collectBackup(backupClient: BackupClient, accountId: string) {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  try {
+    const vaults = await backupClient.send(new ListBackupVaultsCommand({}));
+    for (const vault of vaults.BackupVaultList || []) {
+      const vaultArn = vault.BackupVaultArn || `arn:aws:backup:us-east-1:${accountId}:backup-vault:${vault.BackupVaultName}`;
+      nodes.push({
+        id: vaultArn,
+        label: 'BackupVault',
+        properties: {
+          id: vault.BackupVaultName,
+          arn: vaultArn,
+          account_id: accountId,
+          name: vault.BackupVaultName,
+          creation_date: vault.CreationDate?.toISOString(),
+          encryption_key_arn: vault.EncryptionKeyArn,
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: vaultArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('Backup vaults collection error:', e);
+  }
+
+  try {
+    const plans = await backupClient.send(new ListBackupPlansCommand({}));
+    for (const plan of plans.BackupPlansList || []) {
+      const planArn = plan.BackupPlanArn || `arn:aws:backup:us-east-1:${accountId}:backup-plan:${plan.BackupPlanId}`;
+      nodes.push({
+        id: planArn,
+        label: 'BackupPlan',
+        properties: {
+          id: plan.BackupPlanId,
+          arn: planArn,
+          account_id: accountId,
+          name: plan.BackupPlanName,
+          version_id: plan.VersionId,
+          creation_date: plan.CreationDate?.toISOString(),
+        },
+      });
+      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: planArn, label: 'OWNS' });
+    }
+  } catch (e) {
+    console.error('Backup plans collection error:', e);
   }
 
   return { nodes, edges };

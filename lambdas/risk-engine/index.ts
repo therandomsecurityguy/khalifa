@@ -2,6 +2,7 @@ import { RiskRuleRunner, resolveStaleIssues } from './runner';
 import { getRuleById, riskRules } from './rules';
 import { computeRiskScore } from './scoring';
 import { Issue, RiskScoreInput } from './types';
+import { ComplianceEngine, runScheduledComplianceAssessment, GraphClient } from './compliance-engine';
 
 const NEPTUNE_ENDPOINT = process.env.NEPTUNE_ENDPOINT || 'wss://neptune-cluster.us-east-1.amazonaws.com:8182/gremlin';
 const ISSUES_TABLE = process.env.ISSUES_TABLE || 'SecurityIssues';
@@ -129,6 +130,53 @@ async function demonstratePeriodicRunner() {
 
   console.log('\nTo run periodically, use:');
   console.log('  setInterval(runScheduledJob, 5 * 60 * 1000); // every 5 minutes');
+}
+
+async function runComplianceAssessment() {
+  console.log('\n=== Compliance Assessment ===\n');
+
+  const gremlin = await import('gremlin');
+  const Gremlin = gremlin.default || gremlin;
+  const client = new Gremlin.driver.Client(NEPTUNE_ENDPOINT, {
+    traversalSource: 'g',
+    connectTimeout: 30000,
+  });
+
+  const neptuneClient = {
+    async executeQuery(query: string) {
+      const result = await client.submit(query);
+      const items: any[] = [];
+      while (true) {
+        const item = await result.next();
+        if (!item) break;
+        items.push(item);
+      }
+      return items;
+    }
+  };
+
+  const { DynamoDBEvidenceStore } = await import('./compliance-engine');
+  const evidenceStore = new DynamoDBEvidenceStore();
+  const engine = new ComplianceEngine(neptuneClient, evidenceStore);
+
+  try {
+    console.log('Running CIS AWS Foundations assessment...');
+    const cisReport = await engine.runAssessment('CIS_AWS_FOUNDATIONS');
+    console.log(`CIS: ${cisReport.summary.passed}/${cisReport.summary.totalControls} passed, ${cisReport.summary.coveragePercent}% coverage`);
+
+    console.log('Running SOC2 assessment...');
+    const soc2Report = await engine.runAssessment('SOC2');
+    console.log(`SOC2: ${soc2Report.summary.passed}/${soc2Report.summary.totalControls} passed, ${soc2Report.summary.coveragePercent}% coverage`);
+
+    console.log('Running ISO27001 assessment...');
+    const isoReport = await engine.runAssessment('ISO27001');
+    console.log(`ISO27001: ${isoReport.summary.passed}/${isoReport.summary.totalControls} passed, ${isoReport.summary.coveragePercent}% coverage`);
+
+  } catch (error) {
+    console.error('Error in compliance assessment:', error);
+  } finally {
+    await client.close();
+  }
 }
 
 async function main() {

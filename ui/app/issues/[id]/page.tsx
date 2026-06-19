@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getIssue } from '../../lib/api';
-import { IssueDetail, GraphVertex, GraphEdge } from '../../types';
+import { getIssue } from '@/lib/api';
+import { IssueDetail, GraphVertex, GraphEdge } from '@/types';
 
 const severityColors: Record<string, string> = {
   critical: 'bg-red-600',

@@ -84,3 +84,63 @@ export async function searchResources(label: string, property?: string, value?: 
   const response = await fetchWithAuth(`${API_BASE_URL}/resources/search?${params.toString()}`);
   return response.json();
 }
+
+export interface ComplianceFrameworkSummary {
+  framework: string;
+  version: string;
+  totalControls: number;
+  automatedControls: number;
+  manualControls: number;
+  coveragePercent: number;
+  lastAssessment: string;
+  summary: {
+    totalControls: number;
+    passed: number;
+    failed: number;
+    manual: number;
+    notApplicable: number;
+    notEvaluated: number;
+    coveragePercent: number;
+  };
+}
+
+export interface ComplianceControl {
+  id: string;
+  title: string;
+  section: string;
+  severity: string;
+  automated: boolean;
+  status: string;
+  relatedRules?: string[];
+}
+
+export async function getFrameworks(): Promise<{ frameworks: ComplianceFrameworkSummary[] }> {
+  const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks`);
+  return response.json();
+}
+
+export async function getFrameworkSummary(framework: string): Promise<any> {
+  const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}`);
+  return response.json();
+}
+
+export async function getFrameworkControls(framework: string): Promise<{ controls: ComplianceControl[] }> {
+  const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}/controls`);
+  return response.json();
+}
+
+export async function getControlDetails(framework: string, controlId: string): Promise<any> {
+  const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}/controls/${controlId}`);
+  return response.json();
+}
+
+export async function getComplianceReport(framework: string, format?: 'json' | 'csv'): Promise<any> {
+  const params = format ? `?format=${format}` : '';
+  const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}/report${params}`);
+  return response.json();
+}
+
+export async function getDriftReport(framework: string): Promise<any> {
+  const response = await fetchWithAuth(`${API_BASE_URL}/compliance/frameworks/${framework}/drift`);
+  return response.json();
+}

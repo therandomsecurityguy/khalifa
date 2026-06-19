@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runSingleRuleExample = runSingleRuleExample;
 exports.computeRiskScoreExample = computeRiskScoreExample;
@@ -7,6 +40,7 @@ exports.demonstratePeriodicRunner = demonstratePeriodicRunner;
 const runner_1 = require("./runner");
 const rules_1 = require("./rules");
 const scoring_1 = require("./scoring");
+const compliance_engine_1 = require("./compliance-engine");
 const NEPTUNE_ENDPOINT = process.env.NEPTUNE_ENDPOINT || 'wss://neptune-cluster.us-east-1.amazonaws.com:8182/gremlin';
 const ISSUES_TABLE = process.env.ISSUES_TABLE || 'SecurityIssues';
 async function runSingleRuleExample() {
@@ -112,6 +146,48 @@ async function demonstratePeriodicRunner() {
     await runScheduledJob();
     console.log('\nTo run periodically, use:');
     console.log('  setInterval(runScheduledJob, 5 * 60 * 1000); // every 5 minutes');
+}
+async function runComplianceAssessment() {
+    console.log('\n=== Compliance Assessment ===\n');
+    const gremlin = await Promise.resolve().then(() => __importStar(require('gremlin')));
+    const Gremlin = gremlin.default || gremlin;
+    const client = new Gremlin.driver.Client(NEPTUNE_ENDPOINT, {
+        traversalSource: 'g',
+        connectTimeout: 30000,
+    });
+    const neptuneClient = {
+        async executeQuery(query) {
+            const result = await client.submit(query);
+            const items = [];
+            while (true) {
+                const item = await result.next();
+                if (!item)
+                    break;
+                items.push(item);
+            }
+            return items;
+        }
+    };
+    const { DynamoDBEvidenceStore } = await Promise.resolve().then(() => __importStar(require('./compliance-engine')));
+    const evidenceStore = new DynamoDBEvidenceStore();
+    const engine = new compliance_engine_1.ComplianceEngine(neptuneClient, evidenceStore);
+    try {
+        console.log('Running CIS AWS Foundations assessment...');
+        const cisReport = await engine.runAssessment('CIS_AWS_FOUNDATIONS');
+        console.log(`CIS: ${cisReport.summary.passed}/${cisReport.summary.totalControls} passed, ${cisReport.summary.coveragePercent}% coverage`);
+        console.log('Running SOC2 assessment...');
+        const soc2Report = await engine.runAssessment('SOC2');
+        console.log(`SOC2: ${soc2Report.summary.passed}/${soc2Report.summary.totalControls} passed, ${soc2Report.summary.coveragePercent}% coverage`);
+        console.log('Running ISO27001 assessment...');
+        const isoReport = await engine.runAssessment('ISO27001');
+        console.log(`ISO27001: ${isoReport.summary.passed}/${isoReport.summary.totalControls} passed, ${isoReport.summary.coveragePercent}% coverage`);
+    }
+    catch (error) {
+        console.error('Error in compliance assessment:', error);
+    }
+    finally {
+        await client.close();
+    }
 }
 async function main() {
     console.log('========================================');

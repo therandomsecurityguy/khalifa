@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { getAttackPaths } from '../lib/api';
-import { GraphVertex, GraphEdge } from '../types';
+import { getAttackPaths } from '@/lib/api';
+import { GraphVertex, GraphEdge } from '@/types';
 
 export default function AttackPathsPage() {
   const [fromSelector, setFromSelector] = useState('Internet');

@@ -1,0 +1,24 @@
+{
+  "name": "api-service",
+  "version": "1.0.0",
+  "description": "Security Graph API Service",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "dev": "ts-node src/app.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.450.0",
+    "@aws-sdk/lib-dynamodb": "^3.450.0",
+    "express": "^4.18.2",
+    "gremlin": "^3.6.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/gremlin": "^3.6.7",
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.2"
+  }
+}

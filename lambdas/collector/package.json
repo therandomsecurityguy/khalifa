@@ -1,15 +1,41 @@
 {
   "name": "collector",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node index.ts"
+  },
   "dependencies": {
+    "@aws-sdk/client-accessanalyzer": "^3.400.0",
+    "@aws-sdk/client-api-gateway": "^3.400.0",
+    "@aws-sdk/client-backup": "^3.400.0",
+    "@aws-sdk/client-cloudtrail": "^3.400.0",
+    "@aws-sdk/client-config-service": "^3.400.0",
+    "@aws-sdk/client-dynamodb": "^3.400.0",
     "@aws-sdk/client-ec2": "^3.400.0",
-    "@aws-sdk/client-s3": "^3.400.0",
+    "@aws-sdk/client-eks": "^3.400.0",
+    "@aws-sdk/client-elasticache": "^3.400.0",
+    "@aws-sdk/client-eventbridge": "^3.400.0",
+    "@aws-sdk/client-guardduty": "^3.400.0",
     "@aws-sdk/client-iam": "^3.400.0",
     "@aws-sdk/client-kms": "^3.400.0",
+    "@aws-sdk/client-lambda": "^3.400.0",
+    "@aws-sdk/client-opensearch": "^3.400.0",
     "@aws-sdk/client-rds": "^3.400.0",
-    "@aws-sdk/client-eks": "^3.400.0",
+    "@aws-sdk/client-redshift": "^3.400.0",
+    "@aws-sdk/client-route-53": "^3.400.0",
+    "@aws-sdk/client-s3": "^3.400.0",
+    "@aws-sdk/client-secrets-manager": "^3.400.0",
     "@aws-sdk/client-securityhub": "^3.400.0",
-    "@aws-sdk/client-sts": "^3.400.0"
+    "@aws-sdk/client-sfn": "^3.400.0",
+    "@aws-sdk/client-ssm": "^3.400.0",
+    "@aws-sdk/client-sts": "^3.400.0",
+    "@aws-sdk/credential-providers": "^3.1072.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.2"
   }
 }

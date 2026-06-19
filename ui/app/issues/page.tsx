@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getIssues, getIssueCounts } from '../lib/api';
-import { Issue, SeverityCounts } from '../types';
+import { getIssues, getIssueCounts } from '@/lib/api';
+import { Issue, SeverityCounts } from '@/types';
 
 const severityColors: Record<string, string> = {
   critical: 'bg-red-600',
