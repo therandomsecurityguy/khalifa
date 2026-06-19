@@ -1,7 +1,8 @@
 import * as cdk from 'aws-cdk-lib';
-import * as eks from 'eks-cluster';
+import * as eks from 'aws-cdk-lib/aws-eks';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import type { Construct } from 'constructs';
 
@@ -24,14 +25,13 @@ export class SecurityGraphEksStack extends cdk.Stack {
       clusterName,
       version: eks.KubernetesVersion.V1_29,
       vpc: ec2.Vpc.fromLookup(this, 'VPC', { vpcId: props.vpcId }),
-      clusterSecurityGroupId: undefined,
-      coreDnsComputeType: eks.CoreDnsComputeType.LAMBDA,
-      clusterEndpointAccess: eks.ClusterEndpointAccess.PRIVATE,
-      endpointPrivateAccess: true,
-      endpointPublicAccess: true,
-      secretsEncryptionKey: undefined,
-      kubectlLayer: undefined,
-      pruning: false,
+      coreDnsComputeType: eks.CoreDnsComputeType.FARGATE,
+      endpointAccess: eks.EndpointAccess.PUBLIC_AND_PRIVATE,
+      kubectlLayer: lambda.LayerVersion.fromLayerVersionArn(
+        this,
+        'KubectlLayer',
+        `arn:aws:lambda:${this.region}:544384666941:layer:kubectl-v29:1`
+      ),
       clusterLogging: [
         eks.ClusterLoggingTypes.API,
         eks.ClusterLoggingTypes.AUDIT,
@@ -147,10 +147,10 @@ export class SecurityGraphEksStack extends cdk.Stack {
 
     cluster.addNodegroupCapacity('SecurityGraphNodeGroup', {
       nodegroupName: 'security-graph-nodes',
-      instanceTypes: [ec2.InstanceType('m6i.xlarge')],
+      instanceTypes: [new ec2.InstanceType('m6i.xlarge')],
       minSize: 2,
       maxSize: 10,
-      desiredCapacity: 3,
+      desiredSize: 3,
       labels: {
         'workload-type': 'security-graph',
       },
