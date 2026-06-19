@@ -1,6 +1,6 @@
 # Khalifa - Security Graph & Risk Engine
 
-Agentless ingestion of AWS Org resources and Security Hub findings into a Neptune-backed security graph, with a risk and attack-path engine to identify security issues.
+Agentless ingestion of AWS Org resources and Security Hub findings into a Neptune-backed security graph, with a risk and attack-path engine and automated compliance reporting.
 
 ## Architecture
 
@@ -8,51 +8,61 @@ Agentless ingestion of AWS Org resources and Security Hub findings into a Neptun
 
 ```
 EventBridge Schedule (every 2 hours)
-    │
-    ▼
+    |
+    v
 Step Functions State Machine
-    │
-    ├─ ListAccounts Lambda
-    └─ MapAccounts (parallel per account)
-          │
-          ▼
+    |
+    +-- ListAccounts Lambda
+    +-- MapAccounts (parallel per account)
+          |
+          v
     Collector Lambda (per account)
-    ├─ STS assume role into target account
-    ├─ Collect: EC2, S3, IAM, KMS, RDS, EKS, SecurityHub
-    └─ GraphWriter Lambda → Neptune
+    +-- STS assume role into target account
+    +-- Collect: EC2, S3, IAM, KMS, RDS, EKS, SecurityHub,
+    |       CloudTrail, Config, GuardDuty, Access Analyzer,
+    |       VPC Endpoints, NACLs, Route Tables, Transit Gateway,
+    |       Route53, API Gateway, Lambda, Step Functions,
+    |       EventBridge, DynamoDB, ElastiCache, OpenSearch,
+    |       Redshift, Secrets Manager, Parameter Store, Backup
+    +-- GraphWriter Lambda -> Neptune
 
 Event-Driven (incremental updates)
-    │
-    ▼
-EventBridge → SQS Queue → IncrementalProcessor Lambda → Neptune
+    |
+    v
+EventBridge -> SQS Queue -> IncrementalProcessor Lambda -> Neptune
 
 Risk Engine (every 1 hour)
-    │
-    ▼
-EventBridge Schedule → RiskEngine Lambda → Neptune (query)
-    │
-    ▼
+    |
+    v
+EventBridge Schedule -> RiskEngine Lambda -> Neptune (query)
+    |
+    +-- Risk Rules (10 rules)
+    +-- Compliance Evaluators (40+ evaluators)
+    |
+    v
 DynamoDB (Issues table)
 ```
 
 ### EKS-Based Deployment (Recommended for Production)
 
 ```
-User → ALB (Cognito OIDC) → api-service (EKS)
-                                      │
-                    ┌─────────────────┼─────────────────┐
-                    ▼                 ▼                 ▼
+User -> ALB (Cognito OIDC) -> api-service (EKS)
+                                      |
+                    +-----------------+-----------------+
+                    v                 v                 v
               Neptune            DynamoDB           CloudWatch
              (Graph DB)      (Issues table)         (Logs)
-                    │
-                    ▼
+                    |
+                    v
          rule-runner CronJob
               (every 6h)
-                    │
-                    ▼
+                    |
+                    v
               Neptune queries
-                    │
-                    ▼
+                    |
+                    +-- Risk rules
+                    +-- Compliance evaluators
+                    v
               DynamoDB (Issues)
 ```
 
@@ -133,11 +143,16 @@ curl https://<alb-hostname>/health
 
 # Test issues endpoint
 curl https://<alb-hostname>/issues
+
+# Test compliance endpoint
+curl https://<alb-hostname>/compliance/frameworks
 ```
 
 ---
 
 ## API Endpoints
+
+### Issues & Risk
 
 | Endpoint | Description |
 |----------|-------------|
@@ -149,6 +164,17 @@ curl https://<alb-hostname>/issues
 | `GET /attack-paths?fromSelector=X&toSelector=Y` | Find attack paths |
 | `GET /resources/:arn` | Get resource with neighbors and issues |
 | `GET /resources/search?label=EC2Instance` | Search resources |
+
+### Compliance
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /compliance/frameworks` | List available compliance frameworks |
+| `GET /compliance/:framework` | Get framework overview with control summaries |
+| `GET /compliance/:framework/controls` | List all controls for a framework |
+| `GET /compliance/:framework/controls/:controlId` | Get control details with evidence |
+| `GET /compliance/:framework/report` | Generate compliance report |
+| `GET /compliance/:framework/drift` | Detect configuration drift since last evaluation |
 
 ### Query Parameters for /issues
 
@@ -175,6 +201,72 @@ curl "https://api.example.com/attack-paths?fromSelector=Internet&toSelector=S3Bu
   -H "Authorization: Bearer $TOKEN"
 ```
 
+### Example: Check CIS Compliance
+
+```bash
+# List frameworks
+curl "https://api.example.com/compliance/frameworks" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Get CIS report
+curl "https://api.example.com/compliance/CIS_AWS_FOUNDATIONS/report" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Check for drift
+curl "https://api.example.com/compliance/CIS_AWS_FOUNDATIONS/drift" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## Compliance Frameworks
+
+Khalifa includes automated compliance evaluation against three industry-standard frameworks with 124 controls and 40+ automated evaluators that run Gremlin graph queries against your security data.
+
+### CIS AWS Foundations Benchmark v3.0 (78 controls)
+
+Covers the foundational security configurations for AWS accounts:
+
+| Section | Controls | Focus |
+|---------|----------|-------|
+| 1. IAM | 18 | Root account, MFA, password policy, access keys |
+| 2. Logging | 10 | CloudTrail, Config, S3 logging |
+| 3. Monitoring | 28 | CloudWatch alarms, GuardDuty, Config rules |
+| 4. Networking | 12 | VPC flow logs, security groups, NACLs |
+| 5. Data Protection | 10 | Encryption, KMS rotation, backup |
+
+### SOC 2 Type II (22 controls)
+
+Maps to Trust Services Criteria:
+
+| Section | Controls | Focus |
+|---------|----------|-------|
+| CC6 | 8 | Logical access, authentication, authorization |
+| CC7 | 6 | Monitoring, incident response, change management |
+| CC8 | 4 | Risk mitigation, system boundaries |
+| CC9 | 4 | Additional criteria |
+
+### ISO 27001:2022 (24 controls)
+
+Based on Annex A controls:
+
+| Section | Controls | Focus |
+|---------|----------|-------|
+| A.5 | 4 | Organizational controls, policies |
+| A.6 | 4 | People controls, onboarding, training |
+| A.8 | 6 | Technological controls, encryption, logging |
+| A.9 | 4 | Physical and environmental security |
+| A.12 | 3 | Operations security, vulnerability management |
+| A.13 | 3 | Communications security, network controls |
+
+### How It Works
+
+1. **Collector** ingests AWS resource configurations into the Neptune graph
+2. **Compliance Engine** runs evaluators that query the graph to check each control
+3. Each evaluator produces evidence (pass/fail/manual) with resource-level details
+4. Results are stored in DynamoDB and exposed via the API
+5. **UI** shows a dashboard with filterable controls, evidence, and CSV export
+
 ---
 
 ## Project Structure
@@ -189,18 +281,25 @@ khalifa/
 ├── lambdas/
 │   ├── shared/                   # Shared types and utilities
 │   ├── list-accounts/            # Lists org accounts
-│   ├── collector/                # Collects AWS resources
+│   ├── collector/                # Collects AWS resources (30 services)
 │   ├── graph-writer/             # Writes to Neptune
 │   ├── incremental-collector/    # Event-driven updates
-│   └── risk-engine/              # Risk and attack-path engine
+│   └── risk-engine/              # Risk, attack-path, and compliance engine
 │       ├── types.ts              # Rule/Issue schemas
-│       ├── rules.ts              # Gremlin risk rules
+│       ├── rules.ts              # Gremlin risk rules (10)
 │       ├── scoring.ts            # Risk scoring algorithm
-│       └── runner.ts             # Rule execution engine
+│       ├── runner.ts             # Rule execution engine
+│       ├── compliance-types.ts   # Compliance schemas (124 controls)
+│       ├── compliance-rules.ts   # Automated evaluators (40+)
+│       └── compliance-engine.ts  # Compliance evaluation engine
 ├── api-service/                  # REST API (EKS)
 │   ├── src/
 │   │   ├── app.ts               # Express server
-│   │   ├── routes/              # API routes
+│   │   ├── routes/
+│   │   │   ├── issues.ts        # Issue endpoints
+│   │   │   ├── attack-paths.ts  # Attack path endpoints
+│   │   │   ├── resources.ts     # Resource endpoints
+│   │   │   └── compliance.ts    # Compliance endpoints
 │   │   ├── services/            # Neptune/DynamoDB clients
 │   │   └── types/               # TypeScript interfaces
 │   └── package.json
@@ -216,13 +315,42 @@ khalifa/
 │   └── 08-network-policy.yaml
 ├── ui/                          # Next.js UI
 │   ├── app/
-│   │   ├── issues/              # Issues pages
+│   │   ├── issues/              # Issues dashboard
 │   │   ├── attack-paths/        # Attack path explorer
-│   │   └── lib/api.ts           # API client
-│   └── package.json
+│   │   └── compliance/          # Compliance dashboard
+│   │       ├── page.tsx         # Framework overview
+│   │       └── [framework]/     # Framework-specific pages
+│   │           ├── page.tsx           # Controls list
+│   │           ├── controls/[controlId]/page.tsx  # Control detail
+│   │           ├── report/page.tsx    # Compliance report
+│   │           └── drift/page.tsx     # Drift detection
+│   ├── lib/api.ts               # API client
+│   └── types/index.ts           # UI types
+├── .github/workflows/
+│   ├── ci.yml                   # CI: lint, typecheck, build, test
+│   └── release.yml              # Manual release workflow
 └── templates/
     └── SecurityGraphCollectorRole.yaml  # Cross-account role
 ```
+
+---
+
+## AWS Services Collected
+
+The collector ingests configuration data from 30 AWS services:
+
+| Category | Services |
+|----------|---------|
+| Compute | EC2, EKS, Lambda (aliases + event source mappings) |
+| Storage | S3 (versioning, encryption, logging, public access block) |
+| Database | RDS, DynamoDB, ElastiCache, OpenSearch, Redshift |
+| Identity | IAM (users, roles, policies, credential reports), KMS |
+| Network | VPC, VPC Endpoints, NACLs, Route Tables, Transit Gateway, Route53 |
+| Security | SecurityHub, GuardDuty, Access Analyzer, Config |
+| Logging | CloudTrail, Config |
+| Serverless | API Gateway, Step Functions, EventBridge |
+| Secrets | Secrets Manager, Parameter Store |
+| Backup | Backup Vaults, Backup Plans |
 
 ---
 
@@ -250,13 +378,13 @@ The Risk Engine executes Gremlin traversals against the security graph to identi
 Risk score combines multiple factors (0-100 scale):
 
 ```
-Score = CVSS×10×0.25 + Exposure×100×0.2 + Identity×100×0.2 + DataClass×100×0.2 + Env×100×0.15 + CrownJewelBonus
+Score = CVSSx10x0.25 + Exposurex100x0.2 + Identityx100x0.2 + DataClassx100x0.2 + Envx100x0.15 + CrownJewelBonus
 ```
 
 **Severity Thresholds:**
-- Critical: ≥80
-- High: ≥60
-- Medium: ≥40
+- Critical: >=80
+- High: >=60
+- Medium: >=40
 - Low: <40
 
 ---
@@ -273,12 +401,56 @@ npm run dev
 
 Navigate to:
 - `http://localhost:3000/issues` - Issues dashboard
-- `http://localhost:3000/issues/:id` - Issue details
+- `http://localhost:3000/issues/:id` - Issue details with attack path
 - `http://localhost:3000/attack-paths` - Attack path explorer
+- `http://localhost:3000/compliance` - Compliance framework overview
+- `http://localhost:3000/compliance/CIS_AWS_FOUNDATIONS` - CIS controls list
+- `http://localhost:3000/compliance/CIS_AWS_FOUNDATIONS/controls/1.4` - Control detail with evidence
+- `http://localhost:3000/compliance/CIS_AWS_FOUNDATIONS/report` - Compliance report (CSV export)
+- `http://localhost:3000/compliance/CIS_AWS_FOUNDATIONS/drift` - Configuration drift view
 
 ### Authentication
 
 The UI uses OIDC via Cognito. Tokens are stored in localStorage and passed to the API via the `Authorization: Bearer` header.
+
+---
+
+## CI/CD
+
+### GitHub Actions Workflows
+
+**CI** (`.github/workflows/ci.yml`) runs on push/PR to main:
+
+- **Lint & Format** - ESLint and Prettier across all workspaces
+- **TypeCheck** - TypeScript compilation for all packages
+- **Build** - Build all workspaces
+- **Test** - Run unit tests
+
+**Release** (`.github/workflows/release.yml`) triggered manually:
+
+- Builds container images for API service and rule runner
+- Pushes to ECR
+- Creates GitHub release with version tag
+
+### Local Development
+
+```bash
+# Install all dependencies
+npm ci --workspaces
+
+# Run across all workspaces
+npm run lint          # Lint all packages
+npm run format        # Format all packages
+npm run format:check  # Check formatting
+npm run build         # Build all packages
+npm run test          # Run all tests
+
+# Build a specific package
+npm run build:api
+npm run build:cdk
+npm run build:ui
+npm run build:lambdas
+```
 
 ---
 
@@ -377,6 +549,13 @@ kubectl logs job/<job-name> -n security-graph
 curl https://<api-host>/issues/counts
 ```
 
+### Check Compliance Status
+
+```bash
+curl https://<api-host>/compliance/frameworks
+curl https://<api-host>/compliance/CIS_AWS_FOUNDATIONS
+```
+
 ---
 
 ## Security Hardening Checklist
@@ -393,5 +572,6 @@ Before production deployment:
 - [ ] Review and restrict NetworkPolicies
 - [ ] Enable Pod Security Standards (restricted)
 - [ ] Configure RBAC for namespace access
+- [ ] Review compliance findings and address critical/high controls
 
 See `OPERATIONAL.md` for complete operational procedures.
