@@ -31,6 +31,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
+            package-lock.json
             api-service/package-lock.json
             lambdas/risk-engine/package-lock.json
             lambdas/collector/package-lock.json
@@ -40,37 +41,8 @@ jobs:
             ui/package-lock.json
             cdk/package-lock.json
 
-      - name: Install API service deps
-        working-directory: api-service
-        run: npm ci
-
-      - name: Install risk-engine deps
-        working-directory: lambdas/risk-engine
-        run: npm ci
-
-      - name: Install collector deps
-        working-directory: lambdas/collector
-        run: npm ci
-
-      - name: Install incremental-collector deps
-        working-directory: lambdas/incremental-collector
-        run: npm ci
-
-      - name: Install list-accounts deps
-        working-directory: lambdas/list-accounts
-        run: npm ci
-
-      - name: Install graph-writer deps
-        working-directory: lambdas/graph-writer
-        run: npm ci
-
-      - name: Install UI deps
-        working-directory: ui
-        run: npm ci
-
-      - name: Install CDK deps
-        working-directory: cdk
-        run: npm ci
+      - name: Install all workspace deps
+        run: npm ci --workspaces
 
       - name: Check formatting (API service)
         working-directory: api-service
@@ -128,6 +100,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
+            package-lock.json
             api-service/package-lock.json
             lambdas/risk-engine/package-lock.json
             lambdas/collector/package-lock.json
@@ -137,37 +110,8 @@ jobs:
             ui/package-lock.json
             cdk/package-lock.json
 
-      - name: Install API service deps
-        working-directory: api-service
-        run: npm ci
-
-      - name: Install risk-engine deps
-        working-directory: lambdas/risk-engine
-        run: npm ci
-
-      - name: Install collector deps
-        working-directory: lambdas/collector
-        run: npm ci
-
-      - name: Install incremental-collector deps
-        working-directory: lambdas/incremental-collector
-        run: npm ci
-
-      - name: Install list-accounts deps
-        working-directory: lambdas/list-accounts
-        run: npm ci
-
-      - name: Install graph-writer deps
-        working-directory: lambdas/graph-writer
-        run: npm ci
-
-      - name: Install UI deps
-        working-directory: ui
-        run: npm ci
-
-      - name: Install CDK deps
-        working-directory: cdk
-        run: npm ci
+      - name: Install all workspace deps
+        run: npm ci --workspaces
 
       - name: Type check API service
         working-directory: api-service
@@ -216,6 +160,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
+            package-lock.json
             api-service/package-lock.json
             lambdas/risk-engine/package-lock.json
             lambdas/collector/package-lock.json
@@ -225,37 +170,8 @@ jobs:
             ui/package-lock.json
             cdk/package-lock.json
 
-      - name: Install API service deps
-        working-directory: api-service
-        run: npm ci
-
-      - name: Install risk-engine deps
-        working-directory: lambdas/risk-engine
-        run: npm ci
-
-      - name: Install collector deps
-        working-directory: lambdas/collector
-        run: npm ci
-
-      - name: Install incremental-collector deps
-        working-directory: lambdas/incremental-collector
-        run: npm ci
-
-      - name: Install list-accounts deps
-        working-directory: lambdas/list-accounts
-        run: npm ci
-
-      - name: Install graph-writer deps
-        working-directory: lambdas/graph-writer
-        run: npm ci
-
-      - name: Install UI deps
-        working-directory: ui
-        run: npm ci
-
-      - name: Install CDK deps
-        working-directory: cdk
-        run: npm ci
+      - name: Install all workspace deps
+        run: npm ci --workspaces
 
       - name: Build API service
         working-directory: api-service
@@ -308,6 +224,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
+            package-lock.json
             api-service/package-lock.json
             lambdas/risk-engine/package-lock.json
             lambdas/collector/package-lock.json
@@ -317,37 +234,8 @@ jobs:
             ui/package-lock.json
             cdk/package-lock.json
 
-      - name: Install API service deps
-        working-directory: api-service
-        run: npm ci
-
-      - name: Install risk-engine deps
-        working-directory: lambdas/risk-engine
-        run: npm ci
-
-      - name: Install collector deps
-        working-directory: lambdas/collector
-        run: npm ci
-
-      - name: Install incremental-collector deps
-        working-directory: lambdas/incremental-collector
-        run: npm ci
-
-      - name: Install list-accounts deps
-        working-directory: lambdas/list-accounts
-        run: npm ci
-
-      - name: Install graph-writer deps
-        working-directory: lambdas/graph-writer
-        run: npm ci
-
-      - name: Install UI deps
-        working-directory: ui
-        run: npm ci
-
-      - name: Install CDK deps
-        working-directory: cdk
-        run: npm ci
+      - name: Install all workspace deps
+        run: npm ci --workspaces
 
       - name: Run API service tests
         working-directory: api-service
