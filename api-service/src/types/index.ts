@@ -37,13 +37,13 @@ export interface Issue {
   updatedAt: string;
   owningTeam: string;
   remediationHint: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface GraphVertex {
   id: string;
   label: string;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
 }
 
 export interface GraphEdge {
@@ -51,7 +51,7 @@ export interface GraphEdge {
   label: string;
   from: string;
   to: string;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
 }
 
 export interface IssueListQuery {
@@ -112,5 +112,5 @@ export interface RiskRule {
 export interface ApiError {
   code: string;
   message: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }

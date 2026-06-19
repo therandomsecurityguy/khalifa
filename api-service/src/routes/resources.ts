@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { NeptuneClient } from '../services/neptune-client';
+import type { NeptuneRawVertex } from '../services/neptune-client';
 import { IssueStore } from '../services/issue-store';
 import type { GraphVertex, GraphEdge, Issue } from '../types';
 
@@ -81,7 +82,7 @@ export async function searchResources(req: Request, res: Response): Promise<void
 
     const results = await neptuneClient.executeQuery(query);
 
-    const resources: GraphVertex[] = results.map((result: any) => ({
+    const resources: GraphVertex[] = (results as NeptuneRawVertex[]).map((result) => ({
       id: result.id?.value || result.id,
       label: result.label,
       properties: extractProperties(result),
@@ -165,15 +166,21 @@ async function getResourceWithNeighbors(
   return { nodes, edges };
 }
 
-function extractProperties(obj: any): Record<string, any> {
-  const properties: Record<string, any> = {};
+function extractProperties(obj: NeptuneRawVertex): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(obj)) {
     if (key !== 'id' && key !== 'label') {
-      const val = value as any;
-      properties[key] = val?.value ?? val;
+      properties[key] = unwrapGremlinValue(value);
     }
   }
 
   return properties;
+}
+
+function unwrapGremlinValue(val: unknown): unknown {
+  if (val && typeof val === 'object' && 'value' in val) {
+    return (val as { value: unknown }).value ?? val;
+  }
+  return val;
 }

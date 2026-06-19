@@ -7,6 +7,8 @@ import type {
   Severity,
   IssueStatus,
   Environment,
+  GraphVertex,
+  GraphEdge,
 } from '../types';
 
 const issueStore = new IssueStore();
@@ -63,13 +65,13 @@ export async function getIssue(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    let attackPathNodes: any[] = [];
-    let attackPathEdges: any[] = [];
+    let attackPathNodes: GraphVertex[] = [];
+    let attackPathEdges: GraphEdge[] = [];
 
     if (issue.pathSummary && issue.pathSummary.length > 0) {
       try {
         await neptuneClient.connect();
-        const pathNodes: any[] = [];
+        const pathNodes: GraphVertex[] = [];
 
         for (const segment of issue.pathSummary) {
           const fromNode = await neptuneClient.getResource(segment.from);

@@ -5,6 +5,22 @@ const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_RETRY_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY = 1000;
 
+export interface NeptuneRawVertex {
+  id: { value: string } | string;
+  label: string;
+  [key: string]: unknown;
+}
+
+export interface NeptunePathResult {
+  objects: NeptuneRawVertex[];
+}
+
+export interface NeptuneNeighborResult {
+  node: NeptuneRawVertex;
+  neighbor: NeptuneRawVertex;
+  edge: NeptuneRawVertex;
+}
+
 export interface NeptuneConfig {
   endpoint: string;
   port?: number;
@@ -55,9 +71,9 @@ export class NeptuneClient {
 
   async executeQuery(
     query: string,
-    bindings: Record<string, any> = {},
+    bindings: Record<string, unknown> = {},
     options: { timeout?: number; retries?: number } = {}
-  ): Promise<any[]> {
+  ): Promise<unknown[]> {
     const { retries = DEFAULT_RETRY_ATTEMPTS } = options;
     const timeout = options.timeout || this.config.timeout;
 
@@ -69,7 +85,7 @@ export class NeptuneClient {
           await this.connect();
         }
 
-        const result = await this.executeWithTimeout(query, bindings, timeout!);
+        const result = await this.executeWithTimeout(query, bindings, timeout ?? DEFAULT_TIMEOUT);
         return this.processResult(result);
       } catch (error) {
         lastError = error as Error;
@@ -90,55 +106,39 @@ export class NeptuneClient {
 
   private async executeWithTimeout(
     query: string,
-    bindings: Record<string, any>,
+    bindings: Record<string, unknown>,
     timeout: number
-  ): Promise<any> {
-    return new Promise(async (resolve, reject) => {
-      let timedOut = false;
+  ): Promise<unknown> {
+    if (!this.client) {
+      throw new Error('Neptune client not initialized');
+    }
 
-      const timeoutId = setTimeout(() => {
-        timedOut = true;
-        reject(new Error(`Query timeout after ${timeout}ms`));
-      }, timeout);
-
-      try {
-        if (!this.client) {
-          throw new Error('Neptune client not initialized');
-        }
-
-        const result = await this.client.submit(query, bindings);
-        clearTimeout(timeoutId);
-
-        if (!timedOut) {
-          resolve(result);
-        }
-      } catch (error) {
-        clearTimeout(timeoutId);
-        if (!timedOut) {
-          reject(error);
-        }
-      }
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`Query timeout after ${timeout}ms`)), timeout);
     });
+
+    return Promise.race([this.client.submit(query, bindings), timeoutPromise]);
   }
 
-  private processResult(result: any): any[] {
+  private processResult(result: unknown): unknown[] {
     if (!result) return [];
 
     if (Array.isArray(result)) {
       return result;
     }
 
-    if (result._items) {
-      return result._items;
+    if (typeof result === 'object' && result !== null && '_items' in result) {
+      return (result as { _items: unknown[] })._items;
     }
 
     return [result];
   }
 
-  private isRetriableError(error: any): boolean {
+  private isRetriableError(error: unknown): boolean {
     if (!error) return false;
 
-    const message = error.message?.toLowerCase() || '';
+    const message =
+      error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
 
     const retriablePatterns = [
       'timeout',
@@ -185,7 +185,7 @@ export class NeptuneClient {
       return { nodes: [], edges: [] };
     }
 
-    const path = this.extractPathFromResult(results[0]);
+    const path = this.extractPathFromResult(results[0] as NeptunePathResult);
     return path;
   }
 
@@ -203,7 +203,7 @@ export class NeptuneClient {
 
     try {
       const results = await this.executeQuery(query);
-      return this.extractNeighborsFromResult(results);
+      return this.extractNeighborsFromResult(results as NeptuneNeighborResult[]);
     } catch (error) {
       return { nodes: [], edges: [] };
     }
@@ -218,10 +218,13 @@ export class NeptuneClient {
       return null;
     }
 
-    return this.extractVertexFromResult(results[0]);
+    return this.extractVertexFromResult(results[0] as NeptuneRawVertex);
   }
 
-  private extractPathFromResult(result: any): { nodes: GraphVertex[]; edges: GraphEdge[] } {
+  private extractPathFromResult(result: NeptunePathResult): {
+    nodes: GraphVertex[];
+    edges: GraphEdge[];
+  } {
     const nodes: GraphVertex[] = [];
     const edges: GraphEdge[] = [];
 
@@ -247,24 +250,33 @@ export class NeptuneClient {
     return { nodes, edges };
   }
 
-  private extractVertexFromResult(obj: any): GraphVertex {
-    const properties: Record<string, any> = {};
+  private extractVertexFromResult(obj: NeptuneRawVertex): GraphVertex {
+    const properties: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(obj)) {
       if (key === 'id' || key === 'label') continue;
 
-      const val = value as any;
-      properties[key] = val?.value ?? val;
+      properties[key] = this.unwrapGremlinValue(value);
     }
 
     return {
-      id: obj.id?.value || obj.id,
+      id: typeof obj.id === 'object' ? obj.id.value : obj.id,
       label: obj.label || 'unknown',
       properties,
     };
   }
 
-  private extractNeighborsFromResult(results: any[]): { nodes: GraphVertex[]; edges: GraphEdge[] } {
+  private unwrapGremlinValue(val: unknown): unknown {
+    if (val && typeof val === 'object' && 'value' in val) {
+      return (val as { value: unknown }).value ?? val;
+    }
+    return val;
+  }
+
+  private extractNeighborsFromResult(results: NeptuneNeighborResult[]): {
+    nodes: GraphVertex[];
+    edges: GraphEdge[];
+  } {
     const nodes: GraphVertex[] = [];
     const edges: GraphEdge[] = [];
 
@@ -282,18 +294,17 @@ export class NeptuneClient {
     return { nodes, edges };
   }
 
-  private extractEdgeFromResult(obj: any, from: string, to: string): GraphEdge {
-    const properties: Record<string, any> = {};
+  private extractEdgeFromResult(obj: NeptuneRawVertex, from: string, to: string): GraphEdge {
+    const properties: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(obj)) {
       if (key === 'id' || key === 'label') continue;
 
-      const val = value as any;
-      properties[key] = val?.value ?? val;
+      properties[key] = this.unwrapGremlinValue(value);
     }
 
     return {
-      id: obj.id?.value || obj.id,
+      id: typeof obj.id === 'object' ? obj.id.value : obj.id,
       label: obj.label || 'CONNECTED',
       from,
       to,

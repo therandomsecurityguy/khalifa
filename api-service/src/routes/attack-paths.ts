@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { NeptuneClient } from '../services/neptune-client';
+import type { NeptunePathResult, NeptuneRawVertex } from '../services/neptune-client';
 import type { GraphVertex, GraphEdge } from '../types';
 
 const neptuneEndpoint = process.env.NEPTUNE_ENDPOINT || '';
@@ -66,7 +67,7 @@ export async function findAllAttackPaths(req: Request, res: Response): Promise<v
 
     const results = await neptuneClient.executeQuery(query);
 
-    const paths = results.map((result: any) => {
+    const paths = (results as NeptunePathResult[]).map((result) => {
       const nodes: GraphVertex[] = [];
       const edges: GraphEdge[] = [];
 
@@ -110,15 +111,21 @@ export async function findAllAttackPaths(req: Request, res: Response): Promise<v
   }
 }
 
-function extractProperties(obj: any): Record<string, any> {
-  const properties: Record<string, any> = {};
+function extractProperties(obj: NeptuneRawVertex): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(obj)) {
     if (key !== 'id' && key !== 'label') {
-      const val = value as any;
-      properties[key] = val?.value ?? val;
+      properties[key] = unwrapGremlinValue(value);
     }
   }
 
   return properties;
+}
+
+function unwrapGremlinValue(val: unknown): unknown {
+  if (val && typeof val === 'object' && 'value' in val) {
+    return (val as { value: unknown }).value ?? val;
+  }
+  return val;
 }

@@ -16,6 +16,37 @@ interface ComplianceReportItem {
   };
 }
 
+interface ComplianceControl {
+  id: string;
+  title: string;
+  section: string;
+  severity: string;
+  automated: boolean;
+  status: string;
+  relatedRules: string[];
+}
+
+interface ComplianceControlResult {
+  control: {
+    id: string;
+    title: string;
+    section: string;
+    severity: string;
+    automated: boolean;
+  };
+  status: string;
+  evidence: unknown[];
+  issues: string[];
+  lastEvaluated: string;
+}
+
+interface ComplianceFullReport {
+  framework: ComplianceFramework;
+  generatedAt: string;
+  summary: ComplianceReportItem['summary'];
+  controls: ComplianceControlResult[];
+}
+
 const mockReports: Map<ComplianceFramework, ComplianceReportItem> = new Map([
   [
     'CIS_AWS_FOUNDATIONS',
@@ -67,7 +98,7 @@ const mockReports: Map<ComplianceFramework, ComplianceReportItem> = new Map([
   ],
 ]);
 
-const mockControls: Record<string, any[]> = {
+const mockControls: Record<string, ComplianceControl[]> = {
   CIS_AWS_FOUNDATIONS: [
     {
       id: '1.4',
@@ -979,7 +1010,7 @@ function getRemediationHint(controlId: string): string {
   );
 }
 
-function generateCSVReport(report: any): string {
+function generateCSVReport(report: ComplianceFullReport): string {
   const headers = [
     'Control ID',
     'Title',
@@ -990,7 +1021,7 @@ function generateCSVReport(report: any): string {
     'Last Evaluated',
     'Issues',
   ];
-  const rows = report.controls.map((c: any) => [
+  const rows = report.controls.map((c) => [
     c.control.id,
     c.control.title,
     c.control.section,

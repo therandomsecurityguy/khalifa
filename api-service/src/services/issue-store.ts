@@ -96,9 +96,9 @@ export class IssueStore {
       const isQuery = 'KeyConditionExpression' in scanOrQuery;
 
       if (isQuery) {
-        (scanOrQuery as any).FilterExpression = filterExpr;
-        (scanOrQuery as any).ExpressionAttributeValues = {
-          ...(scanOrQuery as any).ExpressionAttributeValues,
+        (scanOrQuery as QueryCommandInput).FilterExpression = filterExpr;
+        (scanOrQuery as QueryCommandInput).ExpressionAttributeValues = {
+          ...(scanOrQuery as QueryCommandInput).ExpressionAttributeValues,
           ...expressionAttrValues,
         };
       } else {
@@ -188,8 +188,11 @@ export class IssueStore {
     return counts;
   }
 
-  private formatQueryResponse(result: any): IssueListResponse {
-    const items = result.Items?.map((item: any) => unmarshall(item) as Issue) || [];
+  private formatQueryResponse(result: {
+    Items?: Record<string, AttributeValue>[];
+    LastEvaluatedKey?: Record<string, AttributeValue>;
+  }): IssueListResponse {
+    const items = result.Items?.map((item) => unmarshall(item) as Issue) || [];
 
     return {
       items,
@@ -198,8 +201,12 @@ export class IssueStore {
     };
   }
 
-  private formatScanResponse(result: any): IssueListResponse {
-    const items = result.Items?.map((item: any) => unmarshall(item) as Issue) || [];
+  private formatScanResponse(result: {
+    Items?: Record<string, AttributeValue>[];
+    LastEvaluatedKey?: Record<string, AttributeValue>;
+    ScannedCount?: number;
+  }): IssueListResponse {
+    const items = result.Items?.map((item) => unmarshall(item) as Issue) || [];
 
     return {
       items,
