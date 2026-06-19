@@ -139,7 +139,7 @@ export class SecurityGraphEksStack extends cdk.Stack {
       })
     );
 
-    const logGroup = new logs.LogGroup(this, 'SecurityGraphLogGroup', {
+    new logs.LogGroup(this, 'SecurityGraphLogGroup', {
       logGroupName: `/aws/eks/${clusterName}/workload`,
       retention: logs.RetentionDays.THREE_MONTHS,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
