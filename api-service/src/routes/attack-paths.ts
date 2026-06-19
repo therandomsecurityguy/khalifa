@@ -75,7 +75,7 @@ export async function findAllAttackPaths(req: Request, res: Response): Promise<v
         for (const obj of result.objects) {
           if (obj) {
             const vertex: GraphVertex = {
-              id: obj.id?.value || obj.id,
+              id: typeof obj.id === 'object' ? obj.id.value : obj.id,
               label: obj.label,
               properties: extractProperties(obj),
             };

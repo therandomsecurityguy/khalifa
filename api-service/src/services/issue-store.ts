@@ -132,7 +132,7 @@ export class IssueStore {
       return [];
     }
 
-    return result.Items.map((item) => unmarshall(item) as Issue);
+    return result.Items.map((item: Record<string, AttributeValue>) => unmarshall(item) as Issue);
   }
 
   async getOpenIssuesByResourceArn(arn: string): Promise<Issue[]> {
@@ -154,7 +154,7 @@ export class IssueStore {
       return [];
     }
 
-    return result.Items.map((item) => unmarshall(item) as Issue);
+    return result.Items.map((item: Record<string, AttributeValue>) => unmarshall(item) as Issue);
   }
 
   async getTotalCounts(): Promise<Record<Severity, number>> {

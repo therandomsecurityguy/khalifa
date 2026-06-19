@@ -83,7 +83,7 @@ export async function searchResources(req: Request, res: Response): Promise<void
     const results = await neptuneClient.executeQuery(query);
 
     const resources: GraphVertex[] = (results as NeptuneRawVertex[]).map((result) => ({
-      id: result.id?.value || result.id,
+      id: typeof result.id === 'object' ? result.id.value : result.id,
       label: result.label,
       properties: extractProperties(result),
     }));
