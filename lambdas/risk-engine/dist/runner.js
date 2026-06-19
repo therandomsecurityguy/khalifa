@@ -48,7 +48,9 @@ class GremlinNeptuneClient {
     }
     async connect() {
         const Gremlin = await Promise.resolve().then(() => __importStar(require('gremlin')));
-        this.client = new Gremlin.driver.DriverRemoteConnection(`wss://${this.endpoint}/gremlin`, { traversalSource: 'g' });
+        this.client = new Gremlin.driver.DriverRemoteConnection(`wss://${this.endpoint}/gremlin`, {
+            traversalSource: 'g',
+        });
     }
     async close() {
         if (this.client) {

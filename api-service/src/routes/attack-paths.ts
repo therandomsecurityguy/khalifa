@@ -1,11 +1,9 @@
 import type { Request, Response } from 'express';
 import { NeptuneClient } from '../services/neptune-client';
-import { IssueStore } from '../services/issue-store';
 import type { GraphVertex, GraphEdge } from '../types';
 
 const neptuneEndpoint = process.env.NEPTUNE_ENDPOINT || '';
 const neptuneClient = new NeptuneClient({ endpoint: neptuneEndpoint });
-const issueStore = new IssueStore();
 
 export async function findAttackPath(req: Request, res: Response): Promise<void> {
   try {

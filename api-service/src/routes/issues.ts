@@ -8,7 +8,6 @@ import type {
   IssueStatus,
   Environment,
 } from '../types';
-import { IssueListResponse } from '../types';
 
 const issueStore = new IssueStore();
 

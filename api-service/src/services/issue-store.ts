@@ -7,9 +7,8 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import type { QueryCommandInput, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import { unmarshall } from '@aws-sdk/util-dynamodb';
 import type { Issue, IssueListQuery, IssueListResponse, Severity } from '../types';
-import { IssueStatus, Environment } from '../types';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 1000;
@@ -42,7 +41,7 @@ export class IssueStore {
   }
 
   async listIssues(query: IssueListQuery): Promise<IssueListResponse> {
-    const { severity, team, env, status, ruleId, limit = DEFAULT_LIMIT, nextToken } = query;
+    const { severity, team, _env, status, ruleId, limit = DEFAULT_LIMIT, nextToken } = query;
 
     let scanOrQuery: QueryCommandInput | ScanCommandInput;
 
