@@ -1,5 +1,4 @@
-# Khalifa - Security Graph & Risk Engine
-
+# Khalifa
 Agentless ingestion of AWS Org resources and Security Hub findings into a Neptune-backed security graph, with a risk and attack-path engine, CIEM (Cloud Infrastructure Entitlement Management) for effective permissions, and automated compliance reporting.
 
 ## Architecture
