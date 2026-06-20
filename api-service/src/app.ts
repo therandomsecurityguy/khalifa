@@ -11,6 +11,7 @@ import {
   getComplianceReport,
   getDriftReport,
 } from './routes/compliance';
+import { validateGremlinSelectors, validateArnParam } from './middleware/gremlin-validator';
 
 const app = express();
 
@@ -19,6 +20,9 @@ app.use(express.json());
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
+
+app.use(validateGremlinSelectors);
+app.use('/resources/:arn', validateArnParam);
 
 app.get('/issues', listIssues);
 app.get('/issues/counts', getIssueCounts);

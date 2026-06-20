@@ -104,6 +104,13 @@ export class NeptuneClient {
     throw lastError;
   }
 
+  async executeBoundQuery(
+    queryTemplate: string,
+    bindings: Record<string, unknown>
+  ): Promise<unknown[]> {
+    return this.executeQuery(queryTemplate, bindings);
+  }
+
   private async executeWithTimeout(
     query: string,
     bindings: Record<string, unknown>,
@@ -165,21 +172,25 @@ export class NeptuneClient {
   ): Promise<{ nodes: GraphVertex[]; edges: GraphEdge[] }> {
     const query = `
       g.V()
-        .hasLabel(${fromSelector})
+        .hasLabel(P.fromSelector)
         .as('start')
         .repeat(
           out().simplePath()
-        ).times(${maxPathLength})
+        ).times(P.maxLength)
         .until(
-          hasLabel(${toSelector})
+          hasLabel(P.toSelector)
         )
-        .hasLabel(${toSelector})
+        .hasLabel(P.toSelector)
         .as('target')
         .path()
           .by(valueMap(true))
     `;
 
-    const results = await this.executeQuery(query);
+    const results = await this.executeQuery(query, {
+      fromSelector,
+      toSelector,
+      maxLength: maxPathLength,
+    });
 
     if (results.length === 0) {
       return { nodes: [], edges: [] };
@@ -191,7 +202,7 @@ export class NeptuneClient {
 
   async getNeighbors(arn: string): Promise<{ nodes: GraphVertex[]; edges: GraphEdge[] }> {
     const query = `
-      g.V().has('arn', '${arn}')
+      g.V().has('arn', P.arn)
         .as('node')
         .both()
         .fold()
@@ -202,7 +213,7 @@ export class NeptuneClient {
     `;
 
     try {
-      const results = await this.executeQuery(query);
+      const results = await this.executeQuery(query, { arn });
       return this.extractNeighborsFromResult(results as NeptuneNeighborResult[]);
     } catch (error) {
       return { nodes: [], edges: [] };
@@ -210,9 +221,9 @@ export class NeptuneClient {
   }
 
   async getResource(arn: string): Promise<GraphVertex | null> {
-    const query = `g.V().has('arn', '${arn}').valueMap(true)`;
+    const query = `g.V().has('arn', P.arn).valueMap(true)`;
 
-    const results = await this.executeQuery(query);
+    const results = await this.executeQuery(query, { arn });
 
     if (results.length === 0) {
       return null;
