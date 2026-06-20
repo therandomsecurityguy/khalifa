@@ -26,6 +26,18 @@ import {
   ListRolesCommand,
   ListPoliciesCommand,
   GetAccountPasswordPolicyCommand,
+  ListGroupsCommand,
+  ListGroupPoliciesCommand,
+  GetGroupPolicyCommand,
+  ListAttachedRolePoliciesCommand,
+  ListAttachedGroupPoliciesCommand,
+  ListRolePoliciesCommand,
+  GetRolePolicyCommand,
+  ListPolicyVersionsCommand,
+  GetPolicyVersionCommand,
+  ListUserPoliciesCommand,
+  GetUserPolicyCommand,
+  ListAttachedUserPoliciesCommand,
 } from '@aws-sdk/client-iam';
 import { KMSClient, ListKeysCommand, DescribeKeyCommand } from '@aws-sdk/client-kms';
 import { RDSClient, DescribeDBInstancesCommand } from '@aws-sdk/client-rds';
@@ -821,9 +833,9 @@ async function cacheManagedPolicyDocument(
 
   try {
     const versions = await client.send(
-      new (await import('@aws-sdk/client-iam')).ListPolicyVersionsCommand({ PolicyArn: policyArn })
+      new ListPolicyVersionsCommand({ PolicyArn: policyArn })
     );
-    const defaultVersion = versions.Versions?.find((v) => v.IsDefaultVersion);
+    const defaultVersion = versions.Versions?.find((v: any) => v.IsDefaultVersion);
     if (!defaultVersion?.VersionId) return;
 
     const versionDoc = await client.send(
