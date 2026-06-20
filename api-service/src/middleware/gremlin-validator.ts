@@ -4,11 +4,7 @@ const LABEL_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 const QUERY_PARAMS_TO_VALIDATE = ['fromSelector', 'toSelector', 'label', 'property'];
 
-export function validateGremlinSelectors(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
+export function validateGremlinSelectors(req: Request, res: Response, next: NextFunction): void {
   for (const param of QUERY_PARAMS_TO_VALIDATE) {
     const value = req.query[param];
     if (value === undefined) continue;

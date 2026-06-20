@@ -49,7 +49,8 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   if (!config) {
     res.status(500).json({
       code: 'AUTH_NOT_CONFIGURED',
-      message: 'Authentication is not configured (COGNITO_USER_POOL_ID / COGNITO_CLIENT_ID missing)',
+      message:
+        'Authentication is not configured (COGNITO_USER_POOL_ID / COGNITO_CLIENT_ID missing)',
     });
     return;
   }
@@ -84,9 +85,9 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   } catch (error) {
     const code = (error as { code?: string }).code || 'INVALID_TOKEN';
     const messages: Record<string, string> = {
-      'ERR_JWT_EXPIRED': 'Token has expired',
-      'ERR_JWS_INVALID': 'Token signature is invalid',
-      'ERR_JWT_CLAIM_VALIDATION_FAILED': 'Token claim validation failed (issuer/audience/exp)',
+      ERR_JWT_EXPIRED: 'Token has expired',
+      ERR_JWS_INVALID: 'Token signature is invalid',
+      ERR_JWT_CLAIM_VALIDATION_FAILED: 'Token claim validation failed (issuer/audience/exp)',
     };
     res.status(401).json({
       code,
@@ -95,11 +96,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   }
 }
 
-export function optionalAuthenticate(
-  req: Request,
-  _res: Response,
-  next: NextFunction
-): void {
+export function optionalAuthenticate(req: Request, _res: Response, next: NextFunction): void {
   const config = getCognitoConfig();
   if (!config) {
     next();

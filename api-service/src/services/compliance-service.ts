@@ -64,9 +64,7 @@ export class ComplianceService {
     return summaries;
   }
 
-  async getFrameworkSummary(
-    framework: ComplianceFramework
-  ): Promise<ComplianceFrameworkSummary> {
+  async getFrameworkSummary(framework: ComplianceFramework): Promise<ComplianceFrameworkSummary> {
     return this.engine.getFrameworkSummary(framework);
   }
 

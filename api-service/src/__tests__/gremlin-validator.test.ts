@@ -33,11 +33,7 @@ describe('validateGremlinSelectors', () => {
   it('rejects label with Gremlin injection attempt', () => {
     const next = jest.fn();
     const res = makeRes();
-    validateGremlinSelectors(
-      makeReq({ label: "EC2'); g.drop()--" }),
-      res,
-      next
-    );
+    validateGremlinSelectors(makeReq({ label: "EC2'); g.drop()--" }), res, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
     expect((res as any).body.code).toBe('INVALID_SELECTOR');
@@ -54,11 +50,7 @@ describe('validateGremlinSelectors', () => {
   it('rejects fromSelector injection', () => {
     const next = jest.fn();
     const res = makeRes();
-    validateGremlinSelectors(
-      makeReq({ fromSelector: 'Internet&.drop()' }),
-      res,
-      next
-    );
+    validateGremlinSelectors(makeReq({ fromSelector: 'Internet&.drop()' }), res, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
   });

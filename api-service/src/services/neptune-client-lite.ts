@@ -41,10 +41,7 @@ export class NeptuneClient {
     }
   }
 
-  async executeQuery(
-    query: string,
-    bindings: Record<string, unknown> = {}
-  ): Promise<unknown[]> {
+  async executeQuery(query: string, bindings: Record<string, unknown> = {}): Promise<unknown[]> {
     if (!this.client) await this.connect();
     const client = this.client!;
     const result = await client.submit(query, bindings);
