@@ -14,6 +14,15 @@ import {
   getAllControls,
 } from './compliance-types';
 import { complianceRuleEvaluators } from './compliance-rules';
+import {
+  DynamoDBClient,
+  BatchWriteItemCommand,
+  QueryCommand,
+  PutItemCommand,
+  ScanCommand,
+} from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 
 export interface GraphClient {
   executeQuery(query: string): Promise<any[]>;
@@ -28,10 +37,12 @@ export interface EvidenceStore {
 export class ComplianceEngine {
   private graphClient: GraphClient;
   private evidenceStore: EvidenceStore;
+  private reportStore: ReportStore;
 
-  constructor(graphClient: GraphClient, evidenceStore: EvidenceStore) {
+  constructor(graphClient: GraphClient, evidenceStore: EvidenceStore, reportStore?: ReportStore) {
     this.graphClient = graphClient;
     this.evidenceStore = evidenceStore;
+    this.reportStore = reportStore || new InMemoryReportStore();
   }
 
   async runAssessment(framework: ComplianceFramework): Promise<ComplianceReport> {
@@ -97,7 +108,7 @@ export class ComplianceEngine {
     const coveragePercent =
       totalAutomated > 0 ? Math.round((evaluatedAutomated / totalAutomated) * 100) : 0;
 
-    return {
+    const report: ComplianceReport = {
       framework,
       generatedAt: new Date().toISOString(),
       summary: {
@@ -111,6 +122,10 @@ export class ComplianceEngine {
       },
       controls: results,
     };
+
+    await this.reportStore.saveReport(report);
+
+    return report;
   }
 
   async runAllAssessments(): Promise<ComplianceReport[]> {
@@ -161,43 +176,173 @@ export class ComplianceEngine {
     return report.controls.find((c) => c.control.id === controlId) || null;
   }
 
-  private async getLatestReport(framework: ComplianceFramework): Promise<ComplianceReport | null> {
-    return null;
+  async getLatestReport(framework: ComplianceFramework): Promise<ComplianceReport | null> {
+    return this.reportStore.getLatestReport(framework);
+  }
+}
+
+export interface ReportStore {
+  saveReport(report: ComplianceReport): Promise<void>;
+  getLatestReport(framework: ComplianceFramework): Promise<ComplianceReport | null>;
+  listReports(framework: ComplianceFramework, limit?: number): Promise<ComplianceReport[]>;
+}
+
+export class InMemoryReportStore implements ReportStore {
+  private reports = new Map<ComplianceFramework, ComplianceReport[]>();
+
+  async saveReport(report: ComplianceReport): Promise<void> {
+    const existing = this.reports.get(report.framework) || [];
+    existing.push(report);
+    this.reports.set(report.framework, existing);
+  }
+
+  async getLatestReport(framework: ComplianceFramework): Promise<ComplianceReport | null> {
+    const list = this.reports.get(framework) || [];
+    if (list.length === 0) return null;
+    return list[list.length - 1];
+  }
+
+  async listReports(framework: ComplianceFramework, limit?: number): Promise<ComplianceReport[]> {
+    const list = this.reports.get(framework) || [];
+    return limit ? list.slice(-limit) : list;
   }
 }
 
 export class DynamoDBEvidenceStore implements EvidenceStore {
   private tableName: string;
-  private docClient: any;
+  private docClient: DynamoDBDocumentClient;
 
   constructor(tableName: string = 'ComplianceEvidence') {
+    const client = new DynamoDBClient({
+      region: process.env.AWS_REGION || 'us-east-1',
+    });
     this.tableName = tableName;
+    this.docClient = DynamoDBDocumentClient.from(client);
   }
 
   async saveEvidence(evidence: ComplianceEvidence[]): Promise<void> {
-    // Implementation would use DynamoDB batch write
+    if (evidence.length === 0) return;
+    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+    const items = evidence.map((e) => ({
+      PutRequest: {
+        Item: marshall({
+          ...e,
+          pk: `${e.controlId}#${e.resourceId}#${e.collectedAt}`,
+        }),
+      },
+    }));
+
+    for (let i = 0; i < items.length; i += 25) {
+      await client.send(
+        new BatchWriteItemCommand({
+          RequestItems: {
+            [this.tableName]: items.slice(i, i + 25),
+          },
+        })
+      );
+    }
   }
 
   async getEvidence(controlId: string): Promise<ComplianceEvidence[]> {
-    // Implementation would query by controlId GSI
-    return [];
+    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+    const result = await client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: 'controlId = :controlId',
+        ExpressionAttributeValues: {
+          ':controlId': { S: controlId },
+        },
+      })
+    );
+    if (!result.Items) return [];
+    return result.Items.map((item) => unmarshall(item) as ComplianceEvidence);
   }
 
   async getAllEvidence(): Promise<ComplianceEvidence[]> {
-    // Implementation would scan table
-    return [];
+    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+    const result = await client.send(
+      new ScanCommand({ TableName: this.tableName })
+    );
+    if (!result.Items) return [];
+    return result.Items.map((item) => unmarshall(item) as ComplianceEvidence);
+  }
+}
+
+export class DynamoDBReportStore implements ReportStore {
+  private tableName: string;
+  private docClient: DynamoDBDocumentClient;
+
+  constructor(tableName: string = 'ComplianceReports') {
+    const client = new DynamoDBClient({
+      region: process.env.AWS_REGION || 'us-east-1',
+    });
+    this.tableName = tableName;
+    this.docClient = DynamoDBDocumentClient.from(client);
+  }
+
+  async saveReport(report: ComplianceReport): Promise<void> {
+    await this.docClient.send(
+      new PutItemCommand({
+        TableName: this.tableName,
+        Item: marshall({
+          framework: report.framework,
+          generatedAt: report.generatedAt,
+          report,
+        }),
+      })
+    );
+  }
+
+  async getLatestReport(framework: ComplianceFramework): Promise<ComplianceReport | null> {
+    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+    const result = await client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: 'framework = :framework',
+        ExpressionAttributeValues: {
+          ':framework': { S: framework },
+        },
+        ScanIndexForward: false,
+        Limit: 1,
+      })
+    );
+    if (!result.Items || result.Items.length === 0) return null;
+    const item = unmarshall(result.Items[0]);
+    return item.report as ComplianceReport;
+  }
+
+  async listReports(
+    framework: ComplianceFramework,
+    limit?: number
+  ): Promise<ComplianceReport[]> {
+    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+    const result = await client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: 'framework = :framework',
+        ExpressionAttributeValues: {
+          ':framework': { S: framework },
+        },
+        ScanIndexForward: false,
+        Limit: limit || 50,
+      })
+    );
+    if (!result.Items) return [];
+    return result.Items.map((item) => unmarshall(item).report as ComplianceReport);
   }
 }
 
 export function createComplianceEngine(
   graphClient: GraphClient,
-  evidenceStore: EvidenceStore
+  evidenceStore: EvidenceStore,
+  reportStore?: ReportStore
 ): ComplianceEngine {
-  return new ComplianceEngine(graphClient, evidenceStore);
+  return new ComplianceEngine(graphClient, evidenceStore, reportStore);
 }
 
 export async function runScheduledComplianceAssessment(neptuneClient: GraphClient): Promise<void> {
-  const store = new DynamoDBEvidenceStore();
-  const engine = new ComplianceEngine(neptuneClient, store);
+  const evidenceStore = new DynamoDBEvidenceStore();
+  const reportStore = new DynamoDBReportStore();
+  const engine = new ComplianceEngine(neptuneClient, evidenceStore, reportStore);
   await engine.runAllAssessments();
 }

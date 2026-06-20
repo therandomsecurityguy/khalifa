@@ -6,8 +6,16 @@ import { Issue } from './types';
 import {
   ComplianceEngine,
   runScheduledComplianceAssessment,
-  GraphClient,
+  DynamoDBEvidenceStore,
+  DynamoDBReportStore,
+  InMemoryReportStore,
+  type GraphClient,
+  type ReportStore,
 } from './compliance-engine';
+
+export * from './compliance-types';
+export { ComplianceEngine, DynamoDBEvidenceStore, DynamoDBReportStore, InMemoryReportStore, runScheduledComplianceAssessment };
+export type { GraphClient, ReportStore };
 
 const NEPTUNE_ENDPOINT =
   process.env.NEPTUNE_ENDPOINT || 'wss://neptune-cluster.us-east-1.amazonaws.com:8182/gremlin';

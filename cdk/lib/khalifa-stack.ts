@@ -14,13 +14,14 @@ import type { Construct } from 'constructs';
 export interface SecurityGraphIngestionStackProps extends cdk.StackProps {
   neptuneEndpoint: string;
   masterAccountId: string;
+  accountIds: string[];
 }
 
 export class SecurityGraphIngestionStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: SecurityGraphIngestionStackProps) {
     super(scope, id, props);
 
-    const { neptuneEndpoint, masterAccountId } = props;
+    const { neptuneEndpoint, masterAccountId, accountIds } = props;
 
     const neptuneSecret = new secretsmanager.Secret(this, 'NeptuneAuthSecret', {
       secretName: 'khalifa-neptune-auth',
@@ -158,9 +159,18 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     });
 
     const mapAccounts = new stepfunctions.Map(this, 'MapAccounts', {
-      itemsPath: '$.accounts',
+      itemsPath: stepfunctions.JsonPath.stringAt('$.accounts'),
+      parameters: {
+        'accountId.$': '$$.Map.Item.Value',
+      },
       maxConcurrency: 20,
       resultPath: stepfunctions.JsonPath.DISCARD,
+    });
+
+    new cdk.CfnOutput(this, 'AccountIds', {
+      value: cdk.Fn.join(',', accountIds),
+      description: 'AWS account IDs covered by the security graph',
+      exportName: 'SecurityGraphAccountIds',
     });
 
     const collector = new tasks.LambdaInvoke(this, 'Collector', {
@@ -294,6 +304,22 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING },
     });
 
+    const evidenceTable = new dynamodb.Table(this, 'ComplianceEvidenceTable', {
+      tableName: 'ComplianceEvidence',
+      partitionKey: { name: 'controlId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'resourceId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    const reportsTable = new dynamodb.Table(this, 'ComplianceReportsTable', {
+      tableName: 'ComplianceReports',
+      partitionKey: { name: 'framework', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'generatedAt', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     const riskEngineFn = new lambda.Function(this, 'RiskEngineFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'index.handler',
@@ -312,6 +338,13 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
         resources: [issuesTable.tableArn, issuesTable.tableArn + '/index/*'],
+      })
+    );
+    riskEngineFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query', 'dynamodb:Scan', 'dynamodb:BatchWriteItem'],
+        resources: [evidenceTable.tableArn, reportsTable.tableArn],
       })
     );
 
