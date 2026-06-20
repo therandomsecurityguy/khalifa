@@ -359,7 +359,7 @@ export class NeptuneClient {
     return { nodes, edges };
   }
 
-  async getUnusedPermissionsFromDynamo(principalArn: string): Promise<Record<string, unknown>[]> {
+  async getUnusedPermissionsFromDynamo(_principalArn: string): Promise<Record<string, unknown>[]> {
     return [];
   }
 

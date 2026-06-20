@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 import { NeptuneClient } from '../services/neptune-client';
-import type { NeptuneRawVertex } from '../services/neptune-client';
 import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
@@ -102,7 +101,6 @@ export async function getEscalationPaths(req: Request, res: Response): Promise<v
 export async function getUnusedPermissions(req: Request, res: Response): Promise<void> {
   try {
     const { principal } = req.query;
-    const days = parseInt((req.query.days as string) || '90', 10);
 
     if (!principal) {
       res
@@ -156,14 +154,6 @@ export async function getRightsizingRecommendation(req: Request, res: Response):
 
     const allowedActions = parseJsonArray(perm.allowed_actions as string);
     const usedActions = await fetchUsedActionsFromDynamo(principal);
-
-    const usedActionEntries = usedActions.map((a) => ({
-      principalArn: principal,
-      eventSource: a.service,
-      eventName: a.eventName,
-      lastUsed: new Date().toISOString(),
-      eventCount: 1,
-    }));
 
     const currentPolicy: IamPolicyStatement[] = [
       {
@@ -259,6 +249,12 @@ interface UsedAction {
   lastUsed: string;
 }
 
+interface DynamoAccessItem {
+  eventSource?: string;
+  eventName?: string;
+  lastUsed?: string;
+}
+
 async function fetchUsedActionsFromDynamo(principalArn: string): Promise<UsedAction[]> {
   try {
     const result = await docClient.send(
@@ -271,11 +267,14 @@ async function fetchUsedActionsFromDynamo(principalArn: string): Promise<UsedAct
       })
     );
 
-    return (result.Items || []).map((item) => ({
-      service: (unmarshall(item) as any).eventSource || '',
-      eventName: (unmarshall(item) as any).eventName || '',
-      lastUsed: (unmarshall(item) as any).lastUsed || '',
-    }));
+    return (result.Items || []).map((item) => {
+      const data = unmarshall(item) as unknown as DynamoAccessItem;
+      return {
+        service: data.eventSource || '',
+        eventName: data.eventName || '',
+        lastUsed: data.lastUsed || '',
+      };
+    });
   } catch {
     return [];
   }
