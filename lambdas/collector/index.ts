@@ -26,6 +26,17 @@ import {
   ListPoliciesCommand,
   GetAccountPasswordPolicyCommand,
   GetCredentialReportCommand,
+  ListGroupsCommand,
+  ListGroupPoliciesCommand,
+  GetGroupPolicyCommand,
+  ListAttachedRolePoliciesCommand,
+  ListAttachedUserPoliciesCommand,
+  ListAttachedGroupPoliciesCommand,
+  GetPolicyVersionCommand,
+  ListRolePoliciesCommand,
+  GetRolePolicyCommand,
+  ListUserPoliciesCommand,
+  GetUserPolicyCommand,
 } from '@aws-sdk/client-iam';
 import { KMSClient, ListKeysCommand, DescribeKeyCommand } from '@aws-sdk/client-kms';
 import { RDSClient, DescribeDBInstancesCommand } from '@aws-sdk/client-rds';
@@ -408,8 +419,10 @@ async function collectS3(client: S3Client, accountId: string) {
 async function collectIam(client: IAMClient, accountId: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
+  const policyDocumentCache = new Map<string, string>();
 
   const users = await client.send(new ListUsersCommand({}));
+  const userPolicies = new Map<string, string[]>();
   for (const user of users.Users || []) {
     const userArn = `arn:aws:iam::${accountId}:user/${user.UserName}`;
     nodes.push({
@@ -424,6 +437,67 @@ async function collectIam(client: IAMClient, accountId: string) {
       },
     });
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: userArn, label: 'OWNS' });
+
+    try {
+      const inlinePolicies = await client.send(
+        new ListUserPoliciesCommand({ UserName: user.UserName! })
+      );
+      for (const policyName of inlinePolicies.PolicyNames || []) {
+        const policyDoc = await client.send(
+          new GetUserPolicyCommand({ UserName: user.UserName!, PolicyName: policyName })
+        );
+        const policyArn = `${userArn}/inline-policy/${policyName}`;
+        const documentJson = policyDoc.PolicyDocument
+          ? decodeURIComponent(policyDoc.PolicyDocument)
+          : '{}';
+        nodes.push({
+          id: policyArn,
+          label: 'IamPolicyDocument',
+          properties: {
+            id: policyName,
+            arn: policyArn,
+            policy_arn: policyArn,
+            default_version_id: 'inline',
+            document_json: documentJson,
+            policy_type: 'inline',
+            account_id: accountId,
+          },
+        });
+        edges.push({ from: userArn, to: policyArn, label: 'ATTACHED_TO' });
+        addStatementNodeAndEdges(nodes, edges, policyArn, documentJson, accountId);
+      }
+    } catch (e) {}
+
+    try {
+      const attached = await client.send(
+        new ListAttachedUserPoliciesCommand({ UserName: user.UserName! })
+      );
+      for (const policy of attached.AttachedPolicies || []) {
+        edges.push({ from: userArn, to: policy.PolicyArn!, label: 'ATTACHED_TO' });
+        if (!policyDocumentCache.has(policy.PolicyArn!)) {
+          await cacheManagedPolicyDocument(
+            client,
+            policy.PolicyArn!,
+            policyDocumentCache,
+            nodes,
+            edges,
+            accountId
+          );
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const groups = await client.send(
+        new (await import('@aws-sdk/client-iam')).ListGroupsForUserCommand({
+          UserName: user.UserName!,
+        })
+      );
+      for (const group of groups.Groups || []) {
+        const groupArn = `arn:aws:iam::${accountId}:group/${group.GroupName}`;
+        edges.push({ from: userArn, to: groupArn, label: 'MEMBER_OF' });
+      }
+    } catch (e) {}
   }
 
   const roles = await client.send(new ListRolesCommand({}));
@@ -438,9 +512,145 @@ async function collectIam(client: IAMClient, accountId: string) {
         account_id: accountId,
         path: role.Path,
         create_date: role.CreateDate?.toISOString(),
+        assume_role_policy_document: role.AssumeRolePolicyDocument
+          ? decodeURIComponent(role.AssumeRolePolicyDocument)
+          : undefined,
       },
     });
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: roleArn, label: 'OWNS' });
+
+    if (role.AssumeRolePolicyDocument) {
+      parseTrustPolicy(
+        nodes,
+        edges,
+        roleArn,
+        decodeURIComponent(role.AssumeRolePolicyDocument),
+        accountId
+      );
+    }
+
+    try {
+      const inlinePolicies = await client.send(
+        new ListRolePoliciesCommand({ RoleName: role.RoleName! })
+      );
+      for (const policyName of inlinePolicies.PolicyNames || []) {
+        const policyDoc = await client.send(
+          new GetRolePolicyCommand({ RoleName: role.RoleName!, PolicyName: policyName })
+        );
+        const policyArn = `${roleArn}/inline-policy/${policyName}`;
+        const documentJson = policyDoc.PolicyDocument
+          ? decodeURIComponent(policyDoc.PolicyDocument)
+          : '{}';
+        nodes.push({
+          id: policyArn,
+          label: 'IamPolicyDocument',
+          properties: {
+            id: policyName,
+            arn: policyArn,
+            policy_arn: policyArn,
+            default_version_id: 'inline',
+            document_json: documentJson,
+            policy_type: 'inline',
+            account_id: accountId,
+          },
+        });
+        edges.push({ from: roleArn, to: policyArn, label: 'ATTACHED_TO' });
+        addStatementNodeAndEdges(nodes, edges, policyArn, documentJson, accountId);
+      }
+    } catch (e) {}
+
+    try {
+      const attached = await client.send(
+        new ListAttachedRolePoliciesCommand({ RoleName: role.RoleName! })
+      );
+      for (const policy of attached.AttachedPolicies || []) {
+        edges.push({ from: roleArn, to: policy.PolicyArn!, label: 'ATTACHED_TO' });
+        if (!policyDocumentCache.has(policy.PolicyArn!)) {
+          await cacheManagedPolicyDocument(
+            client,
+            policy.PolicyArn!,
+            policyDocumentCache,
+            nodes,
+            edges,
+            accountId
+          );
+        }
+      }
+    } catch (e) {}
+
+    if (role.PermissionsBoundary?.PermissionsBoundaryArn) {
+      edges.push({
+        from: roleArn,
+        to: role.PermissionsBoundary.PermissionsBoundaryArn,
+        label: 'HAS_PERMISSION_BOUNDARY',
+      });
+    }
+  }
+
+  const groups = await client.send(new ListGroupsCommand({}));
+  for (const group of groups.Groups || []) {
+    const groupArn = `arn:aws:iam::${accountId}:group/${group.GroupName}`;
+    nodes.push({
+      id: groupArn,
+      label: 'IamGroup',
+      properties: {
+        id: group.GroupName,
+        arn: groupArn,
+        account_id: accountId,
+        path: group.Path,
+        create_date: group.CreateDate?.toISOString(),
+      },
+    });
+    edges.push({ from: `arn:aws:iam::${accountId}:root`, to: groupArn, label: 'OWNS' });
+
+    try {
+      const inlinePolicies = await client.send(
+        new ListGroupPoliciesCommand({ GroupName: group.GroupName! })
+      );
+      for (const policyName of inlinePolicies.PolicyNames || []) {
+        const policyDoc = await client.send(
+          new GetGroupPolicyCommand({ GroupName: group.GroupName!, PolicyName: policyName })
+        );
+        const policyArn = `${groupArn}/inline-policy/${policyName}`;
+        const documentJson = policyDoc.PolicyDocument
+          ? decodeURIComponent(policyDoc.PolicyDocument)
+          : '{}';
+        nodes.push({
+          id: policyArn,
+          label: 'IamPolicyDocument',
+          properties: {
+            id: policyName,
+            arn: policyArn,
+            policy_arn: policyArn,
+            default_version_id: 'inline',
+            document_json: documentJson,
+            policy_type: 'inline',
+            account_id: accountId,
+          },
+        });
+        edges.push({ from: groupArn, to: policyArn, label: 'ATTACHED_TO' });
+        addStatementNodeAndEdges(nodes, edges, policyArn, documentJson, accountId);
+      }
+    } catch (e) {}
+
+    try {
+      const attached = await client.send(
+        new ListAttachedGroupPoliciesCommand({ GroupName: group.GroupName! })
+      );
+      for (const policy of attached.AttachedPolicies || []) {
+        edges.push({ from: groupArn, to: policy.PolicyArn!, label: 'ATTACHED_TO' });
+        if (!policyDocumentCache.has(policy.PolicyArn!)) {
+          await cacheManagedPolicyDocument(
+            client,
+            policy.PolicyArn!,
+            policyDocumentCache,
+            nodes,
+            edges,
+            accountId
+          );
+        }
+      }
+    } catch (e) {}
   }
 
   const policies = await client.send(new ListPoliciesCommand({ Scope: 'Local' }));
@@ -458,6 +668,33 @@ async function collectIam(client: IAMClient, accountId: string) {
       },
     });
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: policyArn, label: 'OWNS' });
+
+    if (!policyDocumentCache.has(policyArn)) {
+      await cacheManagedPolicyDocument(
+        client,
+        policyArn,
+        policyDocumentCache,
+        nodes,
+        edges,
+        accountId
+      );
+    }
+  }
+
+  const awsManagedPolicies = await client.send(
+    new ListPoliciesCommand({ Scope: 'AWS', OnlyAttached: true })
+  );
+  for (const policy of awsManagedPolicies.Policies || []) {
+    if (!policyDocumentCache.has(policy.Arn!)) {
+      await cacheManagedPolicyDocument(
+        client,
+        policy.Arn!,
+        policyDocumentCache,
+        nodes,
+        edges,
+        accountId
+      );
+    }
   }
 
   try {
@@ -489,6 +726,159 @@ async function collectIam(client: IAMClient, accountId: string) {
   } catch (e) {}
 
   return { nodes, edges };
+}
+
+async function cacheManagedPolicyDocument(
+  client: IAMClient,
+  policyArn: string,
+  cache: Map<string, string>,
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  accountId: string
+): Promise<void> {
+  if (cache.has(policyArn)) return;
+
+  try {
+    const versions = await client.send(
+      new (await import('@aws-sdk/client-iam')).ListPolicyVersionsCommand({ PolicyArn: policyArn })
+    );
+    const defaultVersion = versions.Versions?.find((v) => v.IsDefaultVersion);
+    if (!defaultVersion?.VersionId) return;
+
+    const versionDoc = await client.send(
+      new GetPolicyVersionCommand({ PolicyArn: policyArn, VersionId: defaultVersion.VersionId })
+    );
+    const documentJson = versionDoc.PolicyVersion?.Document
+      ? decodeURIComponent(versionDoc.PolicyVersion.Document)
+      : '{}';
+
+    const docNodeArn = `${policyArn}/version/${defaultVersion.VersionId}`;
+    nodes.push({
+      id: docNodeArn,
+      label: 'IamPolicyDocument',
+      properties: {
+        id: `${policyArn}/version/${defaultVersion.VersionId}`,
+        arn: docNodeArn,
+        policy_arn: policyArn,
+        default_version_id: defaultVersion.VersionId,
+        document_json: documentJson,
+        policy_type: policyArn.startsWith('arn:aws:iam::aws:') ? 'aws-managed' : 'managed',
+        account_id: accountId,
+      },
+    });
+    edges.push({ from: policyArn, to: docNodeArn, label: 'CONTAINS' });
+
+    addStatementNodeAndEdges(nodes, edges, docNodeArn, documentJson, accountId);
+    cache.set(policyArn, documentJson);
+  } catch (e) {}
+}
+
+function addStatementNodeAndEdges(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  policyDocArn: string,
+  documentJson: string,
+  accountId: string
+): void {
+  try {
+    const doc = JSON.parse(documentJson);
+    const statements = Array.isArray(doc.Statement) ? doc.Statement : [doc.Statement];
+    statements.forEach((stmt: any, index: number) => {
+      const stmtId = stmt.Sid || `stmt-${index}`;
+      const stmtArn = `${policyDocArn}/statement/${stmtId}`;
+      const actions = Array.isArray(stmt.Action) ? stmt.Action : stmt.Action ? [stmt.Action] : [];
+      const resources = Array.isArray(stmt.Resource)
+        ? stmt.Resource
+        : stmt.Resource
+          ? [stmt.Resource]
+          : [];
+      const conditions = stmt.Condition || undefined;
+      const notActions = Array.isArray(stmt.NotAction)
+        ? stmt.NotAction
+        : stmt.NotAction
+          ? [stmt.NotAction]
+          : undefined;
+      const notResources = Array.isArray(stmt.NotResource)
+        ? stmt.NotResource
+        : stmt.NotResource
+          ? [stmt.NotResource]
+          : undefined;
+
+      nodes.push({
+        id: stmtArn,
+        label: 'IamPolicyStatement',
+        properties: {
+          id: stmtId,
+          arn: stmtArn,
+          effect: stmt.Effect,
+          actions,
+          resources,
+          conditions_json: conditions ? JSON.stringify(conditions) : undefined,
+          not_actions: notActions,
+          not_resources: notResources,
+          account_id: accountId,
+        },
+      });
+      edges.push({ from: policyDocArn, to: stmtArn, label: 'CONTAINS' });
+
+      for (const resource of resources) {
+        if (resource !== '*') {
+          edges.push({ from: stmtArn, to: resource, label: 'GRANTS' });
+        }
+      }
+    });
+  } catch (e) {}
+}
+
+function parseTrustPolicy(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  roleArn: string,
+  trustPolicyJson: string,
+  accountId: string
+): void {
+  try {
+    const doc = JSON.parse(trustPolicyJson);
+    const statements = Array.isArray(doc.Statement) ? doc.Statement : [doc.Statement];
+    statements.forEach((stmt: any, index: number) => {
+      if (stmt.Effect !== 'Allow') return;
+      const principals = stmt.Principal || {};
+      const principalEntries = Object.entries(principals) as [string, string | string[]][];
+
+      for (const [principalType, principalValues] of principalEntries) {
+        const values = Array.isArray(principalValues) ? principalValues : [principalValues];
+        for (const principal of values) {
+          const normalizedPrincipal = principal === '*' ? '*' : principal;
+          const isCrossAccount = isCrossAccountPrincipal(normalizedPrincipal, accountId);
+
+          edges.push({
+            from: normalizedPrincipal,
+            to: roleArn,
+            label: 'TRUSTS',
+            properties: {
+              trusted_principal: normalizedPrincipal,
+              principal_type:
+                principalType === 'AWS'
+                  ? 'AWS'
+                  : principalType === 'Service'
+                    ? 'Service'
+                    : 'Federated',
+              is_cross_account: isCrossAccount,
+              conditions_json: stmt.Condition ? JSON.stringify(stmt.Condition) : undefined,
+              allows_assume_role: true,
+            },
+          });
+        }
+      }
+    });
+  } catch (e) {}
+}
+
+function isCrossAccountPrincipal(principal: string, accountId: string): boolean {
+  if (principal === '*') return true;
+  const match = principal.match(/^arn:aws:iam::(\d+)/);
+  if (match) return match[1] !== accountId;
+  return false;
 }
 
 async function collectKms(client: KMSClient, accountId: string) {

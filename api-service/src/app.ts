@@ -11,6 +11,13 @@ import {
   getComplianceReport,
   getDriftReport,
 } from './routes/compliance';
+import {
+  getEffectivePermissions,
+  getEscalationPaths,
+  getUnusedPermissions,
+  getRightsizingRecommendation,
+  getTrustGraph,
+} from './routes/identity';
 
 const app = express();
 
@@ -38,6 +45,12 @@ app.get('/compliance/frameworks/:framework/controls', getFrameworkControls);
 app.get('/compliance/frameworks/:framework/controls/:controlId', getControlDetails);
 app.get('/compliance/frameworks/:framework/report', getComplianceReport);
 app.get('/compliance/frameworks/:framework/drift', getDriftReport);
+
+app.get('/identity/effective-permissions/:principal', getEffectivePermissions);
+app.get('/identity/escalation-paths', getEscalationPaths);
+app.get('/identity/unused-permissions', getUnusedPermissions);
+app.get('/identity/rightsizing/:principal', getRightsizingRecommendation);
+app.get('/identity/trust-graph', getTrustGraph);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);
