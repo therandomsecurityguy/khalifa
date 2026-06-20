@@ -1,4 +1,9 @@
-import type { ServiceActions, UnusedPermissions, RightsizingRecommendation, ParsedStatement } from './types';
+import type {
+  ServiceActions,
+  UnusedPermissions,
+  RightsizingRecommendation,
+  ParsedStatement,
+} from './types';
 import { isActionMatched, parsePolicyDocument } from './policy-parser';
 
 export interface UsedActionEntry {
@@ -76,7 +81,9 @@ export function generateRightsizingRecommendation(
   const cutoff = new Date(Date.now() - safetyMarginDays * 86400000);
 
   const usedActionStrings = new Set<string>();
-  const recentActions = usedActions.filter((a) => a.principalArn === principalArn && new Date(a.lastUsed) >= cutoff);
+  const recentActions = usedActions.filter(
+    (a) => a.principalArn === principalArn && new Date(a.lastUsed) >= cutoff
+  );
 
   for (const entry of recentActions) {
     const service = entry.eventSource.replace('.amazonaws.com', '');
@@ -121,7 +128,8 @@ export function generateRightsizingRecommendation(
     },
   ];
 
-  const removalRatio = allowedActions.length > 0 ? removedActions.length / allowedActions.length : 0;
+  const removalRatio =
+    allowedActions.length > 0 ? removedActions.length / allowedActions.length : 0;
   const riskLevel = removalRatio > 0.5 ? 'high' : removalRatio > 0.2 ? 'medium' : 'low';
   const confidence = recentActions.length > 0 ? Math.min(1, recentActions.length / 100) : 0;
 

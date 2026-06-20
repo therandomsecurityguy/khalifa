@@ -1,10 +1,7 @@
 import type { Request, Response } from 'express';
 import { NeptuneClient } from '../services/neptune-client';
 import type { NeptuneRawVertex } from '../services/neptune-client';
-import {
-  DynamoDBClient,
-  QueryCommand,
-} from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import type {
@@ -38,25 +35,29 @@ export async function getEffectivePermissions(req: Request, res: Response): Prom
     const perm = await neptuneClient.getEffectivePermissions(principal);
 
     if (!perm) {
-      res.status(404).json({ code: 'NOT_FOUND', message: `No effective permissions found for: ${principal}` });
+      res
+        .status(404)
+        .json({ code: 'NOT_FOUND', message: `No effective permissions found for: ${principal}` });
       return;
     }
 
     const response: EffectivePermissionsResponse = {
-      principal: perm.principal_arn as string || principal,
+      principal: (perm.principal_arn as string) || principal,
       allowedActions: parseJsonArray(perm.allowed_actions as string),
       deniedActions: parseJsonArray(perm.denied_actions as string),
       conditionalGrants: parseConditionalGrants(perm.conditional_grants as string),
       policiesEvaluated: parseJsonArray(perm.policies_evaluated as string),
-      isAdmin: perm.is_admin as boolean || false,
-      blastRadius: perm.blast_radius as number || 0,
-      evaluatedAt: perm.evaluated_at as string || '',
+      isAdmin: (perm.is_admin as boolean) || false,
+      blastRadius: (perm.blast_radius as number) || 0,
+      evaluatedAt: (perm.evaluated_at as string) || '',
     };
 
     res.json(response);
   } catch (error) {
     console.error('Error getting effective permissions:', error);
-    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to get effective permissions' });
+    res
+      .status(500)
+      .json({ code: 'INTERNAL_ERROR', message: 'Failed to get effective permissions' });
   }
 }
 
@@ -73,15 +74,17 @@ export async function getEscalationPaths(req: Request, res: Response): Promise<v
     });
 
     const escalationPaths: EscalationPath[] = paths.map((p, index) => ({
-      id: p.id as string || `esc-${index}`,
-      sourceArn: p.source_arn as string || '',
-      targetArn: p.target_arn as string || '',
+      id: (p.id as string) || `esc-${index}`,
+      sourceArn: (p.source_arn as string) || '',
+      targetArn: (p.target_arn as string) || '',
       path: [],
-      pathLength: p.path_length as number || 0,
-      riskLevel: p.risk_level as 'critical' | 'high' | 'medium' | 'low' || 'medium',
-      escalationType: p.escalation_type as 'admin' | 'privilege_escalation' | 'lateral_movement' || 'privilege_escalation',
+      pathLength: (p.path_length as number) || 0,
+      riskLevel: (p.risk_level as 'critical' | 'high' | 'medium' | 'low') || 'medium',
+      escalationType:
+        (p.escalation_type as 'admin' | 'privilege_escalation' | 'lateral_movement') ||
+        'privilege_escalation',
       conditions: parseConditionBlock(p.conditions_json as string),
-      detectedAt: p.detected_at as string || '',
+      detectedAt: (p.detected_at as string) || '',
     }));
 
     const response: EscalationPathsResponse = {
@@ -99,10 +102,12 @@ export async function getEscalationPaths(req: Request, res: Response): Promise<v
 export async function getUnusedPermissions(req: Request, res: Response): Promise<void> {
   try {
     const { principal } = req.query;
-    const days = parseInt(req.query.days as string || '90', 10);
+    const days = parseInt((req.query.days as string) || '90', 10);
 
     if (!principal) {
-      res.status(400).json({ code: 'BAD_REQUEST', message: 'principal query parameter is required' });
+      res
+        .status(400)
+        .json({ code: 'BAD_REQUEST', message: 'principal query parameter is required' });
       return;
     }
 
@@ -120,7 +125,7 @@ export async function getUnusedPermissions(req: Request, res: Response): Promise
       principalArn: principal as string,
       unusedActions: unusedByService,
       usedActions: usedByService,
-      lastAnalyzed: perm?.evaluated_at as string || new Date().toISOString(),
+      lastAnalyzed: (perm?.evaluated_at as string) || new Date().toISOString(),
     };
 
     res.json(response);
@@ -143,7 +148,9 @@ export async function getRightsizingRecommendation(req: Request, res: Response):
     const perm = await neptuneClient.getEffectivePermissions(principal);
 
     if (!perm) {
-      res.status(404).json({ code: 'NOT_FOUND', message: `No effective permissions found for: ${principal}` });
+      res
+        .status(404)
+        .json({ code: 'NOT_FOUND', message: `No effective permissions found for: ${principal}` });
       return;
     }
 
@@ -158,27 +165,32 @@ export async function getRightsizingRecommendation(req: Request, res: Response):
       eventCount: 1,
     }));
 
-    const currentPolicy: IamPolicyStatement[] = [{
-      sid: 'current',
-      effect: 'Allow',
-      actions: allowedActions,
-      resources: ['*'],
-    }];
+    const currentPolicy: IamPolicyStatement[] = [
+      {
+        sid: 'current',
+        effect: 'Allow',
+        actions: allowedActions,
+        resources: ['*'],
+      },
+    ];
 
     const keptActions = computeKeptActions(allowedActions, usedActions);
     const removedActions = allowedActions.filter((a) => !keptActions.includes(a));
 
-    const removalRatio = allowedActions.length > 0 ? removedActions.length / allowedActions.length : 0;
+    const removalRatio =
+      allowedActions.length > 0 ? removedActions.length / allowedActions.length : 0;
 
     const response: RightsizingResponse = {
       principalArn: principal,
       currentPolicy,
-      recommendedPolicy: [{
-        sid: 'rightsized',
-        effect: 'Allow',
-        actions: keptActions.length > 0 ? keptActions : ['*'],
-        resources: ['*'],
-      }],
+      recommendedPolicy: [
+        {
+          sid: 'rightsized',
+          effect: 'Allow',
+          actions: keptActions.length > 0 ? keptActions : ['*'],
+          resources: ['*'],
+        },
+      ],
       removedActions,
       keptActions,
       riskLevel: removalRatio > 0.5 ? 'high' : removalRatio > 0.2 ? 'medium' : 'low',
@@ -188,7 +200,9 @@ export async function getRightsizingRecommendation(req: Request, res: Response):
     res.json(response);
   } catch (error) {
     console.error('Error getting rightsizing recommendation:', error);
-    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to get rightsizing recommendation' });
+    res
+      .status(500)
+      .json({ code: 'INTERNAL_ERROR', message: 'Failed to get rightsizing recommendation' });
   }
 }
 
@@ -267,7 +281,10 @@ async function fetchUsedActionsFromDynamo(principalArn: string): Promise<UsedAct
   }
 }
 
-function groupActionsByService(allowedActions: string[], usedActions: UsedAction[]): ServiceActions[] {
+function groupActionsByService(
+  allowedActions: string[],
+  usedActions: UsedAction[]
+): ServiceActions[] {
   const usedSet = new Set<string>();
   for (const ua of usedActions) {
     usedSet.add(`${ua.service}:${ua.eventName}`);
@@ -320,10 +337,15 @@ function computeKeptActions(allowedActions: string[], usedActions: UsedAction[])
 
 function actionMatch(pattern: string, action: string): boolean {
   if (pattern === '*' || pattern === '*:*') return true;
-  const regexStr = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+  const regexStr = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
   return new RegExp(`^${regexStr}$`, 'i').test(action);
 }
 
 function isReadOnlyAction(action: string): boolean {
-  return /^.*:Get[A-Z]/.test(action) || /^.*:List[A-Z]/.test(action) || /^.*:Describe[A-Z]/.test(action);
+  return (
+    /^.*:Get[A-Z]/.test(action) || /^.*:List[A-Z]/.test(action) || /^.*:Describe[A-Z]/.test(action)
+  );
 }

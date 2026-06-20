@@ -35,7 +35,11 @@ describe('detectEscalationPaths', () => {
     ];
 
     const roles: RoleWithPermissions[] = [
-      { arn: 'arn:aws:iam::444455556666:role/PowerRole', allowedActions: ['iam:PassRole', 'ec2:RunInstances'], isAdmin: false },
+      {
+        arn: 'arn:aws:iam::444455556666:role/PowerRole',
+        allowedActions: ['iam:PassRole', 'ec2:RunInstances'],
+        isAdmin: false,
+      },
     ];
 
     const paths = detectEscalationPaths(trustEdges, roles);
@@ -60,7 +64,11 @@ describe('detectEscalationPaths', () => {
     ];
 
     const roles: RoleWithPermissions[] = [
-      { arn: 'arn:aws:iam::444455556666:role/IntermediateRole', allowedActions: ['sts:AssumeRole'], isAdmin: false },
+      {
+        arn: 'arn:aws:iam::444455556666:role/IntermediateRole',
+        allowedActions: ['sts:AssumeRole'],
+        isAdmin: false,
+      },
       { arn: 'arn:aws:iam::555566667777:role/AdminRole', allowedActions: ['*'], isAdmin: true },
     ];
 
@@ -144,7 +152,9 @@ describe('detectEscalationPaths', () => {
     ];
 
     const paths = detectEscalationPaths(trustEdges, roles);
-    const uniqueKeys = new Set(paths.map((p) => `${p.sourceArn}:${p.targetArn}:${p.escalationType}`));
+    const uniqueKeys = new Set(
+      paths.map((p) => `${p.sourceArn}:${p.targetArn}:${p.escalationType}`)
+    );
     expect(uniqueKeys.size).toBe(paths.length);
   });
 });
@@ -161,7 +171,11 @@ describe('detectLateralMovement', () => {
     ];
 
     const roles: RoleWithPermissions[] = [
-      { arn: 'arn:aws:iam::444455556666:role/DataRole', allowedActions: ['s3:GetObject', 'dynamodb:Query'], isAdmin: false },
+      {
+        arn: 'arn:aws:iam::444455556666:role/DataRole',
+        allowedActions: ['s3:GetObject', 'dynamodb:Query'],
+        isAdmin: false,
+      },
     ];
 
     const paths = detectLateralMovement(trustEdges, roles);
@@ -181,7 +195,11 @@ describe('detectLateralMovement', () => {
     ];
 
     const roles: RoleWithPermissions[] = [
-      { arn: 'arn:aws:iam::444455556666:role/NoDataRole', allowedActions: ['ec2:DescribeInstances'], isAdmin: false },
+      {
+        arn: 'arn:aws:iam::444455556666:role/NoDataRole',
+        allowedActions: ['ec2:DescribeInstances'],
+        isAdmin: false,
+      },
     ];
 
     const paths = detectLateralMovement(trustEdges, roles);
@@ -199,7 +217,11 @@ describe('detectLateralMovement', () => {
     ];
 
     const roles: RoleWithPermissions[] = [
-      { arn: 'arn:aws:iam::111122223333:role/DataRole', allowedActions: ['s3:GetObject'], isAdmin: false },
+      {
+        arn: 'arn:aws:iam::111122223333:role/DataRole',
+        allowedActions: ['s3:GetObject'],
+        isAdmin: false,
+      },
     ];
 
     const paths = detectLateralMovement(trustEdges, roles);

@@ -22,41 +22,57 @@ describe('evaluateCondition', () => {
 
   describe('StringEquals', () => {
     it('returns true when string matches', () => {
-      expect(evaluateCondition('StringEquals', 'aws:SourceVpc', ['vpc-12345'], baseContext)).toBe(true);
+      expect(evaluateCondition('StringEquals', 'aws:SourceVpc', ['vpc-12345'], baseContext)).toBe(
+        true
+      );
     });
 
     it('returns false when string does not match', () => {
-      expect(evaluateCondition('StringEquals', 'aws:SourceVpc', ['vpc-99999'], baseContext)).toBe(false);
+      expect(evaluateCondition('StringEquals', 'aws:SourceVpc', ['vpc-99999'], baseContext)).toBe(
+        false
+      );
     });
   });
 
   describe('StringNotEquals', () => {
     it('returns true when string does not match', () => {
-      expect(evaluateCondition('StringNotEquals', 'aws:SourceVpc', ['vpc-99999'], baseContext)).toBe(true);
+      expect(
+        evaluateCondition('StringNotEquals', 'aws:SourceVpc', ['vpc-99999'], baseContext)
+      ).toBe(true);
     });
 
     it('returns false when string matches', () => {
-      expect(evaluateCondition('StringNotEquals', 'aws:SourceVpc', ['vpc-12345'], baseContext)).toBe(false);
+      expect(
+        evaluateCondition('StringNotEquals', 'aws:SourceVpc', ['vpc-12345'], baseContext)
+      ).toBe(false);
     });
   });
 
   describe('StringLike', () => {
     it('matches wildcard patterns', () => {
-      expect(evaluateCondition('StringLike', 'aws:SourceArn', ['arn:aws:s3:::my-*'], baseContext)).toBe(true);
+      expect(
+        evaluateCondition('StringLike', 'aws:SourceArn', ['arn:aws:s3:::my-*'], baseContext)
+      ).toBe(true);
     });
 
     it('does not match non-matching patterns', () => {
-      expect(evaluateCondition('StringLike', 'aws:SourceArn', ['arn:aws:s3:::other-*'], baseContext)).toBe(false);
+      expect(
+        evaluateCondition('StringLike', 'aws:SourceArn', ['arn:aws:s3:::other-*'], baseContext)
+      ).toBe(false);
     });
   });
 
   describe('IpAddress', () => {
     it('matches IP in CIDR range', () => {
-      expect(evaluateCondition('IpAddress', 'aws:SourceIp', ['10.0.0.0/16'], baseContext)).toBe(true);
+      expect(evaluateCondition('IpAddress', 'aws:SourceIp', ['10.0.0.0/16'], baseContext)).toBe(
+        true
+      );
     });
 
     it('does not match IP outside CIDR range', () => {
-      expect(evaluateCondition('IpAddress', 'aws:SourceIp', ['192.168.0.0/16'], baseContext)).toBe(false);
+      expect(evaluateCondition('IpAddress', 'aws:SourceIp', ['192.168.0.0/16'], baseContext)).toBe(
+        false
+      );
     });
 
     it('matches exact IP', () => {
@@ -66,21 +82,29 @@ describe('evaluateCondition', () => {
 
   describe('NotIpAddress', () => {
     it('returns false when IP is in CIDR range', () => {
-      expect(evaluateCondition('NotIpAddress', 'aws:SourceIp', ['10.0.0.0/16'], baseContext)).toBe(false);
+      expect(evaluateCondition('NotIpAddress', 'aws:SourceIp', ['10.0.0.0/16'], baseContext)).toBe(
+        false
+      );
     });
 
     it('returns true when IP is outside CIDR range', () => {
-      expect(evaluateCondition('NotIpAddress', 'aws:SourceIp', ['192.168.0.0/16'], baseContext)).toBe(true);
+      expect(
+        evaluateCondition('NotIpAddress', 'aws:SourceIp', ['192.168.0.0/16'], baseContext)
+      ).toBe(true);
     });
   });
 
   describe('ArnEquals', () => {
     it('matches exact ARN', () => {
-      expect(evaluateCondition('ArnEquals', 'aws:SourceArn', ['arn:aws:s3:::my-bucket'], baseContext)).toBe(true);
+      expect(
+        evaluateCondition('ArnEquals', 'aws:SourceArn', ['arn:aws:s3:::my-bucket'], baseContext)
+      ).toBe(true);
     });
 
     it('does not match different ARN', () => {
-      expect(evaluateCondition('ArnEquals', 'aws:SourceArn', ['arn:aws:s3:::other'], baseContext)).toBe(false);
+      expect(
+        evaluateCondition('ArnEquals', 'aws:SourceArn', ['arn:aws:s3:::other'], baseContext)
+      ).toBe(false);
     });
   });
 
@@ -111,7 +135,9 @@ describe('evaluateCondition', () => {
 
   describe('Unknown operator', () => {
     it('returns conditional for unknown operators', () => {
-      expect(evaluateCondition('UnknownOp', 'aws:SourceVpc', ['vpc-12345'], baseContext)).toBe('conditional');
+      expect(evaluateCondition('UnknownOp', 'aws:SourceVpc', ['vpc-12345'], baseContext)).toBe(
+        'conditional'
+      );
     });
   });
 });

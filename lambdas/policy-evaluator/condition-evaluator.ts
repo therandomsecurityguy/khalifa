@@ -10,7 +10,7 @@ export function evaluateCondition(
   if (contextValue === undefined && operator !== 'Null') return 'conditional';
   const cv = contextValue ?? '';
 
-switch (operator) {
+  switch (operator) {
     case 'StringEquals':
     case 'string:eq':
       return values.some((v) => cv.toLowerCase() === v.toLowerCase());
@@ -49,7 +49,10 @@ switch (operator) {
     case 'Bool':
       return values.some((v) => {
         const boolCv = cv.toLowerCase();
-        return (v.toLowerCase() === 'true' && boolCv === 'true') || (v.toLowerCase() === 'false' && boolCv === 'false');
+        return (
+          (v.toLowerCase() === 'true' && boolCv === 'true') ||
+          (v.toLowerCase() === 'false' && boolCv === 'false')
+        );
       });
     case 'DateEquals':
       return values.some((v) => new Date(cv).getTime() === new Date(v).getTime());
@@ -92,18 +95,24 @@ function getContextValue(key: string, context: ConditionEvaluationContext): stri
     return context.tokenActions?.join(',');
   }
   if (keyLower === 's3:prefix' || keyLower === 's3_prefix') return context.s3Prefix;
-  if (keyLower.startsWith('kms:encryptioncontext:') || keyLower.startsWith('kms_encryptioncontext_')) {
+  if (
+    keyLower.startsWith('kms:encryptioncontext:') ||
+    keyLower.startsWith('kms_encryptioncontext_')
+  ) {
     const ctxKey = key.split(':').slice(2).join(':');
     return context.encryptionContext?.[ctxKey];
   }
   if (keyLower === 'kms:keyorigin' || keyLower === 'kms_keyorigin') return context.keyOrigin;
-  if (keyLower === 'kms:calleraccount' || keyLower === 'kms_calleraccount') return context.callerAccount;
+  if (keyLower === 'kms:calleraccount' || keyLower === 'kms_calleraccount')
+    return context.callerAccount;
   if (keyLower === 'kms:viaservice' || keyLower === 'kms_viaservice') return context.viaService;
   if (keyLower === 'aws:principalaccount' || keyLower === 'aws_principalaccount') {
     return context.principal?.split(':')[4];
   }
 
-  const keyWithoutPrefix = key.replace(/^(aws|s3|kms|ec2|lambda|dynamodb|rds|ssm):/i, '').toLowerCase();
+  const keyWithoutPrefix = key
+    .replace(/^(aws|s3|kms|ec2|lambda|dynamodb|rds|ssm):/i, '')
+    .toLowerCase();
   for (const [ctxKey, ctxVal] of Object.entries(context)) {
     if (ctxVal === undefined || ctxVal === null) continue;
     if (typeof ctxVal === 'object' && !Array.isArray(ctxVal)) continue;
@@ -147,12 +156,57 @@ function ipToInt(ip: string): number | null {
 }
 
 export const KNOWN_CONDITION_KEYS: Record<string, string[]> = {
-  aws: ['aws:SourceVpc', 'aws:SourceIp', 'aws:SourceArn', 'aws:SourceAccount', 'aws:UserAgent', 'aws:SecureTransport', 'aws:TokenActions', 'aws:PrincipalAccount', 'aws:PrincipalOrgID', 'aws:PrincipalTag', 'aws:PrincipalType'],
-  s3: ['s3:prefix', 's3:list-type', 's3:x-amz-content-sha256', 's3:authType', 's3:ResourceAccount', 's3:ExistingObjectTag'],
-  kms: ['kms:EncryptionContext', 'kms:GrantIsForAWSResource', 'kms:ViaService', 'kms:CallerAccount', 'kms:KeyOrigin', 'kms:EncryptionContextMatches', 'kms:ReEncryptOn'],
-  ec2: ['ec2:ResourceTag', 'ec2:AvailabilityZone', 'ec2:Region', 'ec2:InstanceType', 'ec2:RootDeviceType', 'ec2:Vpc'],
-  lambda: ['lambda:FunctionArn', 'lambda:FunctionAuthType', 'lambda:FunctionRequestAuthType', 'lambda:CodeSigningConfigArn'],
-  dynamodb: ['dynamodb:LeadingKeys', 'dynamodb:Select', 'dynamodb:Attributes', 'dynamodb:ReturnConsumedCapacity', 'dynamodb:ReturnValues'],
+  aws: [
+    'aws:SourceVpc',
+    'aws:SourceIp',
+    'aws:SourceArn',
+    'aws:SourceAccount',
+    'aws:UserAgent',
+    'aws:SecureTransport',
+    'aws:TokenActions',
+    'aws:PrincipalAccount',
+    'aws:PrincipalOrgID',
+    'aws:PrincipalTag',
+    'aws:PrincipalType',
+  ],
+  s3: [
+    's3:prefix',
+    's3:list-type',
+    's3:x-amz-content-sha256',
+    's3:authType',
+    's3:ResourceAccount',
+    's3:ExistingObjectTag',
+  ],
+  kms: [
+    'kms:EncryptionContext',
+    'kms:GrantIsForAWSResource',
+    'kms:ViaService',
+    'kms:CallerAccount',
+    'kms:KeyOrigin',
+    'kms:EncryptionContextMatches',
+    'kms:ReEncryptOn',
+  ],
+  ec2: [
+    'ec2:ResourceTag',
+    'ec2:AvailabilityZone',
+    'ec2:Region',
+    'ec2:InstanceType',
+    'ec2:RootDeviceType',
+    'ec2:Vpc',
+  ],
+  lambda: [
+    'lambda:FunctionArn',
+    'lambda:FunctionAuthType',
+    'lambda:FunctionRequestAuthType',
+    'lambda:CodeSigningConfigArn',
+  ],
+  dynamodb: [
+    'dynamodb:LeadingKeys',
+    'dynamodb:Select',
+    'dynamodb:Attributes',
+    'dynamodb:ReturnConsumedCapacity',
+    'dynamodb:ReturnValues',
+  ],
   rds: ['rds:db-tag', 'rds:DatabaseEngine', 'rds:DatabaseClass', 'rds:StorageType'],
   ssm: ['ssm:resourceTag', 'ssm:RunDocumentName'],
 };

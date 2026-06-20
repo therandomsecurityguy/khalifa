@@ -75,7 +75,9 @@ export const handler = async (
       escalationPaths++;
     }
 
-    logger.info(`Policy evaluation complete: ${permissionsEvaluated} principals, ${escalationPaths} escalation paths`);
+    logger.info(
+      `Policy evaluation complete: ${permissionsEvaluated} principals, ${escalationPaths} escalation paths`
+    );
     return { permissionsEvaluated, escalationPaths };
   } catch (error) {
     logger.error(`Policy evaluation failed: ${error}`);
@@ -131,7 +133,9 @@ async function fetchTrustEdges(gremlinClient: Gremlin.driver.Client): Promise<Tr
   }
 }
 
-async function fetchRolesWithPermissions(gremlinClient: Gremlin.driver.Client): Promise<RoleWithPermissions[]> {
+async function fetchRolesWithPermissions(
+  gremlinClient: Gremlin.driver.Client
+): Promise<RoleWithPermissions[]> {
   const query = `
     g.V().hasLabel('EffectivePermission')
       .project('arn', 'allowedActions', 'isAdmin')
@@ -160,24 +164,56 @@ async function writeEffectivePermission(
   const escapedPolicies = JSON.stringify(perm.policiesEvaluated).replace(/'/g, "\\'");
 
   const updateQuery =
-    "g.V().has('EffectivePermission', 'principal_arn', '" + perm.principalArn + "').fold()" +
-    ".coalesce(unfold()" +
-    ".property('allowed_actions', '" + escapedActions + "')" +
-    ".property('denied_actions', '" + escapedDenied + "')" +
-    ".property('is_admin', " + perm.isAdmin + ")" +
-    ".property('blast_radius', " + perm.blastRadius + ")" +
-    ".property('evaluated_at', '" + perm.evaluatedAt + "')" +
-    ".property('policies_evaluated', '" + escapedPolicies + "'), " +
+    "g.V().has('EffectivePermission', 'principal_arn', '" +
+    perm.principalArn +
+    "').fold()" +
+    '.coalesce(unfold()' +
+    ".property('allowed_actions', '" +
+    escapedActions +
+    "')" +
+    ".property('denied_actions', '" +
+    escapedDenied +
+    "')" +
+    ".property('is_admin', " +
+    perm.isAdmin +
+    ')' +
+    ".property('blast_radius', " +
+    perm.blastRadius +
+    ')' +
+    ".property('evaluated_at', '" +
+    perm.evaluatedAt +
+    "')" +
+    ".property('policies_evaluated', '" +
+    escapedPolicies +
+    "'), " +
     "addV('EffectivePermission')" +
-    ".property('id', '" + perm.id + "')" +
-    ".property('arn', '" + perm.id + "')" +
-    ".property('principal_arn', '" + perm.principalArn + "')" +
-    ".property('allowed_actions', '" + escapedActions + "')" +
-    ".property('denied_actions', '" + escapedDenied + "')" +
-    ".property('is_admin', " + perm.isAdmin + ")" +
-    ".property('blast_radius', " + perm.blastRadius + ")" +
-    ".property('evaluated_at', '" + perm.evaluatedAt + "')" +
-    ".property('policies_evaluated', '" + escapedPolicies + "')).next()";
+    ".property('id', '" +
+    perm.id +
+    "')" +
+    ".property('arn', '" +
+    perm.id +
+    "')" +
+    ".property('principal_arn', '" +
+    perm.principalArn +
+    "')" +
+    ".property('allowed_actions', '" +
+    escapedActions +
+    "')" +
+    ".property('denied_actions', '" +
+    escapedDenied +
+    "')" +
+    ".property('is_admin', " +
+    perm.isAdmin +
+    ')' +
+    ".property('blast_radius', " +
+    perm.blastRadius +
+    ')' +
+    ".property('evaluated_at', '" +
+    perm.evaluatedAt +
+    "')" +
+    ".property('policies_evaluated', '" +
+    escapedPolicies +
+    "')).next()";
 
   await gremlinClient.submit(updateQuery);
 }
@@ -189,25 +225,59 @@ async function writeEscalationPath(
   const conditionsJson = JSON.stringify(path.conditions).replace(/'/g, "\\'");
 
   const query =
-    "g.V().has('EscalationPath', 'id', '" + path.id + "').fold()" +
-    ".coalesce(unfold()" +
-    ".property('source_arn', '" + path.sourceArn + "')" +
-    ".property('target_arn', '" + path.targetArn + "')" +
-    ".property('path_length', " + path.pathLength + ")" +
-    ".property('risk_level', '" + path.riskLevel + "')" +
-    ".property('escalation_type', '" + path.escalationType + "')" +
-    ".property('conditions_json', '" + conditionsJson + "')" +
-    ".property('detected_at', '" + path.detectedAt + "'), " +
+    "g.V().has('EscalationPath', 'id', '" +
+    path.id +
+    "').fold()" +
+    '.coalesce(unfold()' +
+    ".property('source_arn', '" +
+    path.sourceArn +
+    "')" +
+    ".property('target_arn', '" +
+    path.targetArn +
+    "')" +
+    ".property('path_length', " +
+    path.pathLength +
+    ')' +
+    ".property('risk_level', '" +
+    path.riskLevel +
+    "')" +
+    ".property('escalation_type', '" +
+    path.escalationType +
+    "')" +
+    ".property('conditions_json', '" +
+    conditionsJson +
+    "')" +
+    ".property('detected_at', '" +
+    path.detectedAt +
+    "'), " +
     "addV('EscalationPath')" +
-    ".property('id', '" + path.id + "')" +
-    ".property('arn', '" + path.id + "')" +
-    ".property('source_arn', '" + path.sourceArn + "')" +
-    ".property('target_arn', '" + path.targetArn + "')" +
-    ".property('path_length', " + path.pathLength + ")" +
-    ".property('risk_level', '" + path.riskLevel + "')" +
-    ".property('escalation_type', '" + path.escalationType + "')" +
-    ".property('conditions_json', '" + conditionsJson + "')" +
-    ".property('detected_at', '" + path.detectedAt + "')).next()";
+    ".property('id', '" +
+    path.id +
+    "')" +
+    ".property('arn', '" +
+    path.id +
+    "')" +
+    ".property('source_arn', '" +
+    path.sourceArn +
+    "')" +
+    ".property('target_arn', '" +
+    path.targetArn +
+    "')" +
+    ".property('path_length', " +
+    path.pathLength +
+    ')' +
+    ".property('risk_level', '" +
+    path.riskLevel +
+    "')" +
+    ".property('escalation_type', '" +
+    path.escalationType +
+    "')" +
+    ".property('conditions_json', '" +
+    conditionsJson +
+    "')" +
+    ".property('detected_at', '" +
+    path.detectedAt +
+    "')).next()";
 
   await gremlinClient.submit(query);
 }

@@ -2,7 +2,14 @@ import { resolveEffectivePermissions, checkActionAllowed } from './effect-resolv
 import type { ResolveInput, PermissionBoundary } from './effect-resolver';
 import type { EffectivePermission } from './types';
 
-const makePolicy = (statements: { effect: 'Allow' | 'Deny'; action: string | string[]; resource?: string | string[]; condition?: any }[]) => {
+const makePolicy = (
+  statements: {
+    effect: 'Allow' | 'Deny';
+    action: string | string[];
+    resource?: string | string[];
+    condition?: any;
+  }[]
+) => {
   return JSON.stringify({
     Version: '2012-10-17',
     Statement: statements.map((s) => ({
@@ -38,7 +45,9 @@ describe('resolveEffectivePermissions', () => {
       identityPolicies: [
         {
           policyArn: 'policy-allow',
-          policyDocumentJson: makePolicy([{ effect: 'Allow', action: ['s3:GetObject', 's3:PutObject'] }]),
+          policyDocumentJson: makePolicy([
+            { effect: 'Allow', action: ['s3:GetObject', 's3:PutObject'] },
+          ]),
         },
         {
           policyArn: 'policy-deny',
@@ -74,11 +83,13 @@ describe('resolveEffectivePermissions', () => {
       identityPolicies: [
         {
           policyArn: 'policy-conditional',
-          policyDocumentJson: makePolicy([{
-            effect: 'Allow',
-            action: 's3:GetObject',
-            condition: { StringEquals: { 'aws:SourceVpc': 'vpc-12345' } },
-          }]),
+          policyDocumentJson: makePolicy([
+            {
+              effect: 'Allow',
+              action: 's3:GetObject',
+              condition: { StringEquals: { 'aws:SourceVpc': 'vpc-12345' } },
+            },
+          ]),
         },
       ],
     };
@@ -136,7 +147,9 @@ describe('resolveEffectivePermissions', () => {
       identityPolicies: [
         {
           policyArn: 'policy-multi',
-          policyDocumentJson: makePolicy([{ effect: 'Allow', action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'] }]),
+          policyDocumentJson: makePolicy([
+            { effect: 'Allow', action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'] },
+          ]),
         },
       ],
     };
@@ -168,11 +181,13 @@ describe('checkActionAllowed', () => {
     principalArn: 'arn:aws:iam::123456:role/TestRole',
     allowedActions: ['s3:GetObject', 's3:PutObject'],
     deniedActions: ['iam:*'],
-    conditionalGrants: [{
-      action: 'kms:Decrypt',
-      resource: '*',
-      conditions: { StringEquals: { 'aws:SourceVpc': ['vpc-12345'] } },
-    }],
+    conditionalGrants: [
+      {
+        action: 'kms:Decrypt',
+        resource: '*',
+        conditions: { StringEquals: { 'aws:SourceVpc': ['vpc-12345'] } },
+      },
+    ],
     policiesEvaluated: ['policy-1'],
     evaluatedAt: '2024-01-01T00:00:00Z',
     isAdmin: false,

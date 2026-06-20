@@ -133,7 +133,11 @@ export function detectLateralMovement(
     if (!targetRole) continue;
 
     const dataActions = targetRole.allowedActions.filter(
-      (a) => a.startsWith('s3:') || a.startsWith('dynamodb:') || a.startsWith('rds:') || a.startsWith('kms:')
+      (a) =>
+        a.startsWith('s3:') ||
+        a.startsWith('dynamodb:') ||
+        a.startsWith('rds:') ||
+        a.startsWith('kms:')
     );
     if (dataActions.length === 0) continue;
 

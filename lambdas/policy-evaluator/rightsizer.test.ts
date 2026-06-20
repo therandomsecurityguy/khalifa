@@ -1,7 +1,4 @@
-import {
-  computeUnusedPermissions,
-  generateRightsizingRecommendation,
-} from './rightsizer';
+import { computeUnusedPermissions, generateRightsizingRecommendation } from './rightsizer';
 import type { UsedActionEntry } from './rightsizer';
 
 describe('computeUnusedPermissions', () => {
@@ -10,8 +7,20 @@ describe('computeUnusedPermissions', () => {
   it('identifies unused actions', () => {
     const allowedActions = ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 'iam:CreateUser'];
     const usedActions: UsedActionEntry[] = [
-      { principalArn, eventSource: 's3.amazonaws.com', eventName: 'GetObject', lastUsed: '2024-01-15T00:00:00Z', eventCount: 50 },
-      { principalArn, eventSource: 's3.amazonaws.com', eventName: 'PutObject', lastUsed: '2024-01-14T00:00:00Z', eventCount: 30 },
+      {
+        principalArn,
+        eventSource: 's3.amazonaws.com',
+        eventName: 'GetObject',
+        lastUsed: '2024-01-15T00:00:00Z',
+        eventCount: 50,
+      },
+      {
+        principalArn,
+        eventSource: 's3.amazonaws.com',
+        eventName: 'PutObject',
+        lastUsed: '2024-01-14T00:00:00Z',
+        eventCount: 30,
+      },
     ];
 
     const result = computeUnusedPermissions(principalArn, allowedActions, usedActions);
@@ -31,7 +40,13 @@ describe('computeUnusedPermissions', () => {
   it('identifies used actions', () => {
     const allowedActions = ['s3:GetObject', 's3:PutObject'];
     const usedActions: UsedActionEntry[] = [
-      { principalArn, eventSource: 's3.amazonaws.com', eventName: 'GetObject', lastUsed: '2024-01-15T00:00:00Z', eventCount: 10 },
+      {
+        principalArn,
+        eventSource: 's3.amazonaws.com',
+        eventName: 'GetObject',
+        lastUsed: '2024-01-15T00:00:00Z',
+        eventCount: 10,
+      },
     ];
 
     const result = computeUnusedPermissions(principalArn, allowedActions, usedActions);
@@ -44,7 +59,13 @@ describe('computeUnusedPermissions', () => {
     const allowedActions = ['s3:GetObject'];
     const oldDate = new Date(Date.now() - 200 * 86400000).toISOString();
     const usedActions: UsedActionEntry[] = [
-      { principalArn, eventSource: 's3.amazonaws.com', eventName: 'GetObject', lastUsed: oldDate, eventCount: 1 },
+      {
+        principalArn,
+        eventSource: 's3.amazonaws.com',
+        eventName: 'GetObject',
+        lastUsed: oldDate,
+        eventCount: 1,
+      },
     ];
 
     const result = computeUnusedPermissions(principalArn, allowedActions, usedActions, 90);
@@ -54,7 +75,13 @@ describe('computeUnusedPermissions', () => {
   it('handles wildcard action patterns matching used actions', () => {
     const allowedActions = ['s3:*'];
     const usedActions: UsedActionEntry[] = [
-      { principalArn, eventSource: 's3.amazonaws.com', eventName: 'GetObject', lastUsed: '2024-01-15T00:00:00Z', eventCount: 5 },
+      {
+        principalArn,
+        eventSource: 's3.amazonaws.com',
+        eventName: 'GetObject',
+        lastUsed: '2024-01-15T00:00:00Z',
+        eventCount: 5,
+      },
     ];
 
     const result = computeUnusedPermissions(principalArn, allowedActions, usedActions);
@@ -75,7 +102,13 @@ describe('generateRightsizingRecommendation', () => {
   it('generates a recommendation removing unused actions', () => {
     const allowedActions = ['s3:GetObject', 's3:PutObject', 'iam:CreateUser', 'iam:DeleteUser'];
     const usedActions: UsedActionEntry[] = [
-      { principalArn, eventSource: 's3.amazonaws.com', eventName: 'GetObject', lastUsed: new Date().toISOString(), eventCount: 50 },
+      {
+        principalArn,
+        eventSource: 's3.amazonaws.com',
+        eventName: 'GetObject',
+        lastUsed: new Date().toISOString(),
+        eventCount: 50,
+      },
     ];
 
     const result = generateRightsizingRecommendation(principalArn, allowedActions, usedActions, []);
@@ -89,9 +122,15 @@ describe('generateRightsizingRecommendation', () => {
     const allowedActions = ['s3:GetObject', 'iam:CreateUser'];
     const usedActions: UsedActionEntry[] = [];
 
-    const result = generateRightsizingRecommendation(principalArn, allowedActions, usedActions, [], {
-      includeReadonlySafe: true,
-    });
+    const result = generateRightsizingRecommendation(
+      principalArn,
+      allowedActions,
+      usedActions,
+      [],
+      {
+        includeReadonlySafe: true,
+      }
+    );
 
     expect(result.keptActions).toContain('s3:GetObject');
     expect(result.removedActions).toContain('iam:CreateUser');
@@ -101,9 +140,15 @@ describe('generateRightsizingRecommendation', () => {
     const allowedActions = ['s3:GetObject', 'dynamodb:DescribeTable'];
     const usedActions: UsedActionEntry[] = [];
 
-    const result = generateRightsizingRecommendation(principalArn, allowedActions, usedActions, [], {
-      includeReadonlySafe: false,
-    });
+    const result = generateRightsizingRecommendation(
+      principalArn,
+      allowedActions,
+      usedActions,
+      [],
+      {
+        includeReadonlySafe: false,
+      }
+    );
 
     expect(result.removedActions).toContain('s3:GetObject');
     expect(result.removedActions).toContain('dynamodb:DescribeTable');
@@ -139,7 +184,13 @@ describe('generateRightsizingRecommendation', () => {
   it('produces a recommended policy', () => {
     const allowedActions = ['s3:GetObject', 's3:PutObject'];
     const usedActions: UsedActionEntry[] = [
-      { principalArn, eventSource: 's3.amazonaws.com', eventName: 'GetObject', lastUsed: new Date().toISOString(), eventCount: 10 },
+      {
+        principalArn,
+        eventSource: 's3.amazonaws.com',
+        eventName: 'GetObject',
+        lastUsed: new Date().toISOString(),
+        eventCount: 10,
+      },
     ];
 
     const result = generateRightsizingRecommendation(principalArn, allowedActions, usedActions, []);

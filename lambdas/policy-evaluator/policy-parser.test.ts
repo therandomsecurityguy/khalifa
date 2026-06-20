@@ -43,7 +43,10 @@ describe('parsePolicyDocument', () => {
 
     const result = parsePolicyDocument(doc);
     expect(result.Statement[0].actions).toEqual(['s3:GetObject', 's3:PutObject']);
-    expect(result.Statement[0].resources).toEqual(['arn:aws:s3:::bucket-a/*', 'arn:aws:s3:::bucket-b/*']);
+    expect(result.Statement[0].resources).toEqual([
+      'arn:aws:s3:::bucket-a/*',
+      'arn:aws:s3:::bucket-b/*',
+    ]);
   });
 
   it('parses a Deny statement', () => {
@@ -221,7 +224,9 @@ describe('isActionMatched', () => {
 
 describe('isResourceMatched', () => {
   it('matches exact resource', () => {
-    expect(isResourceMatched('arn:aws:s3:::my-bucket/key', 'arn:aws:s3:::my-bucket/key')).toBe(true);
+    expect(isResourceMatched('arn:aws:s3:::my-bucket/key', 'arn:aws:s3:::my-bucket/key')).toBe(
+      true
+    );
   });
 
   it('matches wildcard', () => {
@@ -229,7 +234,9 @@ describe('isResourceMatched', () => {
   });
 
   it('matches ARN wildcard', () => {
-    expect(isResourceMatched('arn:aws:s3:::my-bucket/*', 'arn:aws:s3:::my-bucket/file.txt')).toBe(true);
+    expect(isResourceMatched('arn:aws:s3:::my-bucket/*', 'arn:aws:s3:::my-bucket/file.txt')).toBe(
+      true
+    );
   });
 
   it('does not match different resource', () => {
@@ -249,7 +256,9 @@ describe('isActionInList', () => {
 
 describe('isResourceInList', () => {
   it('returns true when resource matches a pattern in the list', () => {
-    expect(isResourceInList('arn:aws:s3:::my-bucket/key', ['arn:aws:s3:::my-bucket/*', '*'])).toBe(true);
+    expect(isResourceInList('arn:aws:s3:::my-bucket/key', ['arn:aws:s3:::my-bucket/*', '*'])).toBe(
+      true
+    );
   });
 });
 

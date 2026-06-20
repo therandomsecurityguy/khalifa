@@ -4,10 +4,7 @@ import {
   GetQueryExecutionCommand,
   GetQueryResultsCommand,
 } from '@aws-sdk/client-athena';
-import {
-  DynamoDBClient,
-  BatchWriteItemCommand,
-} from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, BatchWriteItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { Logger } from '../shared/types';
 

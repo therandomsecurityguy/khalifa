@@ -1,4 +1,9 @@
-import type { ParsedStatement, EffectivePermission, ConditionalGrant, IamConditionBlock } from './types';
+import type {
+  ParsedStatement,
+  EffectivePermission,
+  ConditionalGrant,
+  IamConditionBlock,
+} from './types';
 import { parsePolicyDocument, isActionMatched, isResourceMatched } from './policy-parser';
 import { evaluateConditionBlock } from './condition-evaluator';
 import type { ConditionEvaluationContext } from './types';
@@ -89,7 +94,11 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
 
     const hasWildcard = statement.actions.some((a) => a === '*' || a === '*:*');
 
-    if (hasWildcard && (input.permissionBoundary || (input.serviceControlPolicies && input.serviceControlPolicies.length > 0))) {
+    if (
+      hasWildcard &&
+      (input.permissionBoundary ||
+        (input.serviceControlPolicies && input.serviceControlPolicies.length > 0))
+    ) {
       if (input.permissionBoundary) {
         try {
           const boundaryDoc = parsePolicyDocument(input.permissionBoundary.policyDocumentJson);
@@ -123,7 +132,12 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
             }
             if (!scpAllowedActions.has('*') && !scpAllowedActions.has('*:*')) {
               for (const aa of [...allowedActions]) {
-                if (aa !== '*' && aa !== '*:*' && !scpAllowedActions.has(aa) && ![...scpAllowedActions].some((sa) => isActionMatched(sa, aa))) {
+                if (
+                  aa !== '*' &&
+                  aa !== '*:*' &&
+                  !scpAllowedActions.has(aa) &&
+                  ![...scpAllowedActions].some((sa) => isActionMatched(sa, aa))
+                ) {
                   allowedActions.delete(aa);
                   deniedActions.add(aa);
                 }
@@ -141,7 +155,8 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
             try {
               const boundaryDoc = parsePolicyDocument(input.permissionBoundary.policyDocumentJson);
               const boundaryAllowsAction = boundaryDoc.Statement.some(
-                (bs) => bs.effect === 'Allow' && bs.actions.some((ba) => isActionMatched(ba, action))
+                (bs) =>
+                  bs.effect === 'Allow' && bs.actions.some((ba) => isActionMatched(ba, action))
               );
               if (!boundaryAllowsAction) blockedByBoundary = true;
             } catch (e) {}
@@ -152,7 +167,8 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
               try {
                 const scpDoc = parsePolicyDocument(scp.policyDocumentJson);
                 const scpAllows = scpDoc.Statement.some(
-                  (ss) => ss.effect === 'Allow' && ss.actions.some((sa) => isActionMatched(sa, action))
+                  (ss) =>
+                    ss.effect === 'Allow' && ss.actions.some((sa) => isActionMatched(sa, action))
                 );
                 if (!scpAllows) blockedByBoundary = true;
               } catch (e) {}
@@ -171,7 +187,11 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
 
   const allowedArray = [...allowedActions];
   const deniedArray = [...deniedActions];
-  const isAdmin = allowedActions.has('*') || allowedActions.has('*:*') || allowedActions.has('iam:*') || allowedActions.has('AdministratorAccess');
+  const isAdmin =
+    allowedActions.has('*') ||
+    allowedActions.has('*:*') ||
+    allowedActions.has('iam:*') ||
+    allowedActions.has('AdministratorAccess');
 
   return {
     id: `eff-perm:${input.principalArn}`,
@@ -198,7 +218,9 @@ export function checkActionAllowed(
 
   if (effectivePerm.allowedActions.some((aa) => isActionMatched(aa, action))) {
     if (resource) {
-      const hasMatchingAllow = effectivePerm.allowedActions.some((aa) => isActionMatched(aa, action));
+      const hasMatchingAllow = effectivePerm.allowedActions.some((aa) =>
+        isActionMatched(aa, action)
+      );
       if (!hasMatchingAllow) {
         return { allowed: false, reason: 'Resource not in allowed list' };
       }
@@ -210,8 +232,10 @@ export function checkActionAllowed(
     if (isActionMatched(grant.action, action)) {
       if (context) {
         const conditionResult = evaluateConditionBlock(grant.conditions, context);
-        if (conditionResult === true) return { allowed: true, reason: 'Conditional allow (conditions met)' };
-        if (conditionResult === false) return { allowed: false, reason: 'Conditional deny (conditions not met)' };
+        if (conditionResult === true)
+          return { allowed: true, reason: 'Conditional allow (conditions met)' };
+        if (conditionResult === false)
+          return { allowed: false, reason: 'Conditional deny (conditions not met)' };
       }
       return { allowed: false, reason: 'Conditional (no context provided)' };
     }

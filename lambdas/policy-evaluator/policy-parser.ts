@@ -8,11 +8,15 @@ export interface PolicyDocument {
 export function parsePolicyDocument(documentJson: string): PolicyDocument {
   const doc = JSON.parse(documentJson);
   const version = doc.Version || '2012-10-17';
-  const rawStatements = Array.isArray(doc.Statement) ? doc.Statement : doc.Statement ? [doc.Statement] : [];
+  const rawStatements = Array.isArray(doc.Statement)
+    ? doc.Statement
+    : doc.Statement
+      ? [doc.Statement]
+      : [];
 
   const statements: ParsedStatement[] = rawStatements.map((stmt: any, index: number) => ({
     sid: stmt.Sid || `stmt-${index}`,
-    effect: stmt.Effect === 'Allow' ? 'Allow' as const : 'Deny' as const,
+    effect: stmt.Effect === 'Allow' ? ('Allow' as const) : ('Deny' as const),
     actions: normalizeList(stmt.Action),
     resources: normalizeList(stmt.Resource),
     conditions: stmt.Condition ? normalizeConditions(stmt.Condition) : undefined,
@@ -23,10 +27,20 @@ export function parsePolicyDocument(documentJson: string): PolicyDocument {
   return { Version: version, Statement: statements };
 }
 
-export function parseTrustPolicyDocument(documentJson: string): { principalType: string; principalValue: string; conditions?: IamConditionBlock }[] {
+export function parseTrustPolicyDocument(
+  documentJson: string
+): { principalType: string; principalValue: string; conditions?: IamConditionBlock }[] {
   const doc = JSON.parse(documentJson);
-  const rawStatements = Array.isArray(doc.Statement) ? doc.Statement : doc.Statement ? [doc.Statement] : [];
-  const results: { principalType: string; principalValue: string; conditions?: IamConditionBlock }[] = [];
+  const rawStatements = Array.isArray(doc.Statement)
+    ? doc.Statement
+    : doc.Statement
+      ? [doc.Statement]
+      : [];
+  const results: {
+    principalType: string;
+    principalValue: string;
+    conditions?: IamConditionBlock;
+  }[] = [];
 
   for (const stmt of rawStatements) {
     if (stmt.Effect !== 'Allow') continue;
