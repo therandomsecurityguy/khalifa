@@ -439,11 +439,17 @@ async function collectIam(client: IAMClient, accountId: string) {
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: userArn, label: 'OWNS' });
 
     try {
-      const inlinePolicies = await client.send(new ListUserPoliciesCommand({ UserName: user.UserName! }));
+      const inlinePolicies = await client.send(
+        new ListUserPoliciesCommand({ UserName: user.UserName! })
+      );
       for (const policyName of inlinePolicies.PolicyNames || []) {
-        const policyDoc = await client.send(new GetUserPolicyCommand({ UserName: user.UserName!, PolicyName: policyName }));
+        const policyDoc = await client.send(
+          new GetUserPolicyCommand({ UserName: user.UserName!, PolicyName: policyName })
+        );
         const policyArn = `${userArn}/inline-policy/${policyName}`;
-        const documentJson = policyDoc.PolicyDocument ? decodeURIComponent(policyDoc.PolicyDocument) : '{}';
+        const documentJson = policyDoc.PolicyDocument
+          ? decodeURIComponent(policyDoc.PolicyDocument)
+          : '{}';
         nodes.push({
           id: policyArn,
           label: 'IamPolicyDocument',
@@ -463,18 +469,29 @@ async function collectIam(client: IAMClient, accountId: string) {
     } catch (e) {}
 
     try {
-      const attached = await client.send(new ListAttachedUserPoliciesCommand({ UserName: user.UserName! }));
+      const attached = await client.send(
+        new ListAttachedUserPoliciesCommand({ UserName: user.UserName! })
+      );
       for (const policy of attached.AttachedPolicies || []) {
         edges.push({ from: userArn, to: policy.PolicyArn!, label: 'ATTACHED_TO' });
         if (!policyDocumentCache.has(policy.PolicyArn!)) {
-          await cacheManagedPolicyDocument(client, policy.PolicyArn!, policyDocumentCache, nodes, edges, accountId);
+          await cacheManagedPolicyDocument(
+            client,
+            policy.PolicyArn!,
+            policyDocumentCache,
+            nodes,
+            edges,
+            accountId
+          );
         }
       }
     } catch (e) {}
 
     try {
       const groups = await client.send(
-        new (await import('@aws-sdk/client-iam')).ListGroupsForUserCommand({ UserName: user.UserName! })
+        new (await import('@aws-sdk/client-iam')).ListGroupsForUserCommand({
+          UserName: user.UserName!,
+        })
       );
       for (const group of groups.Groups || []) {
         const groupArn = `arn:aws:iam::${accountId}:group/${group.GroupName}`;
@@ -503,15 +520,27 @@ async function collectIam(client: IAMClient, accountId: string) {
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: roleArn, label: 'OWNS' });
 
     if (role.AssumeRolePolicyDocument) {
-      parseTrustPolicy(nodes, edges, roleArn, decodeURIComponent(role.AssumeRolePolicyDocument), accountId);
+      parseTrustPolicy(
+        nodes,
+        edges,
+        roleArn,
+        decodeURIComponent(role.AssumeRolePolicyDocument),
+        accountId
+      );
     }
 
     try {
-      const inlinePolicies = await client.send(new ListRolePoliciesCommand({ RoleName: role.RoleName! }));
+      const inlinePolicies = await client.send(
+        new ListRolePoliciesCommand({ RoleName: role.RoleName! })
+      );
       for (const policyName of inlinePolicies.PolicyNames || []) {
-        const policyDoc = await client.send(new GetRolePolicyCommand({ RoleName: role.RoleName!, PolicyName: policyName }));
+        const policyDoc = await client.send(
+          new GetRolePolicyCommand({ RoleName: role.RoleName!, PolicyName: policyName })
+        );
         const policyArn = `${roleArn}/inline-policy/${policyName}`;
-        const documentJson = policyDoc.PolicyDocument ? decodeURIComponent(policyDoc.PolicyDocument) : '{}';
+        const documentJson = policyDoc.PolicyDocument
+          ? decodeURIComponent(policyDoc.PolicyDocument)
+          : '{}';
         nodes.push({
           id: policyArn,
           label: 'IamPolicyDocument',
@@ -531,17 +560,30 @@ async function collectIam(client: IAMClient, accountId: string) {
     } catch (e) {}
 
     try {
-      const attached = await client.send(new ListAttachedRolePoliciesCommand({ RoleName: role.RoleName! }));
+      const attached = await client.send(
+        new ListAttachedRolePoliciesCommand({ RoleName: role.RoleName! })
+      );
       for (const policy of attached.AttachedPolicies || []) {
         edges.push({ from: roleArn, to: policy.PolicyArn!, label: 'ATTACHED_TO' });
         if (!policyDocumentCache.has(policy.PolicyArn!)) {
-          await cacheManagedPolicyDocument(client, policy.PolicyArn!, policyDocumentCache, nodes, edges, accountId);
+          await cacheManagedPolicyDocument(
+            client,
+            policy.PolicyArn!,
+            policyDocumentCache,
+            nodes,
+            edges,
+            accountId
+          );
         }
       }
     } catch (e) {}
 
     if (role.PermissionsBoundary?.PermissionsBoundaryArn) {
-      edges.push({ from: roleArn, to: role.PermissionsBoundary.PermissionsBoundaryArn, label: 'HAS_PERMISSION_BOUNDARY' });
+      edges.push({
+        from: roleArn,
+        to: role.PermissionsBoundary.PermissionsBoundaryArn,
+        label: 'HAS_PERMISSION_BOUNDARY',
+      });
     }
   }
 
@@ -562,11 +604,17 @@ async function collectIam(client: IAMClient, accountId: string) {
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: groupArn, label: 'OWNS' });
 
     try {
-      const inlinePolicies = await client.send(new ListGroupPoliciesCommand({ GroupName: group.GroupName! }));
+      const inlinePolicies = await client.send(
+        new ListGroupPoliciesCommand({ GroupName: group.GroupName! })
+      );
       for (const policyName of inlinePolicies.PolicyNames || []) {
-        const policyDoc = await client.send(new GetGroupPolicyCommand({ GroupName: group.GroupName!, PolicyName: policyName }));
+        const policyDoc = await client.send(
+          new GetGroupPolicyCommand({ GroupName: group.GroupName!, PolicyName: policyName })
+        );
         const policyArn = `${groupArn}/inline-policy/${policyName}`;
-        const documentJson = policyDoc.PolicyDocument ? decodeURIComponent(policyDoc.PolicyDocument) : '{}';
+        const documentJson = policyDoc.PolicyDocument
+          ? decodeURIComponent(policyDoc.PolicyDocument)
+          : '{}';
         nodes.push({
           id: policyArn,
           label: 'IamPolicyDocument',
@@ -586,11 +634,20 @@ async function collectIam(client: IAMClient, accountId: string) {
     } catch (e) {}
 
     try {
-      const attached = await client.send(new ListAttachedGroupPoliciesCommand({ GroupName: group.GroupName! }));
+      const attached = await client.send(
+        new ListAttachedGroupPoliciesCommand({ GroupName: group.GroupName! })
+      );
       for (const policy of attached.AttachedPolicies || []) {
         edges.push({ from: groupArn, to: policy.PolicyArn!, label: 'ATTACHED_TO' });
         if (!policyDocumentCache.has(policy.PolicyArn!)) {
-          await cacheManagedPolicyDocument(client, policy.PolicyArn!, policyDocumentCache, nodes, edges, accountId);
+          await cacheManagedPolicyDocument(
+            client,
+            policy.PolicyArn!,
+            policyDocumentCache,
+            nodes,
+            edges,
+            accountId
+          );
         }
       }
     } catch (e) {}
@@ -613,14 +670,30 @@ async function collectIam(client: IAMClient, accountId: string) {
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: policyArn, label: 'OWNS' });
 
     if (!policyDocumentCache.has(policyArn)) {
-      await cacheManagedPolicyDocument(client, policyArn, policyDocumentCache, nodes, edges, accountId);
+      await cacheManagedPolicyDocument(
+        client,
+        policyArn,
+        policyDocumentCache,
+        nodes,
+        edges,
+        accountId
+      );
     }
   }
 
-  const awsManagedPolicies = await client.send(new ListPoliciesCommand({ Scope: 'AWS', OnlyAttached: true }));
+  const awsManagedPolicies = await client.send(
+    new ListPoliciesCommand({ Scope: 'AWS', OnlyAttached: true })
+  );
   for (const policy of awsManagedPolicies.Policies || []) {
     if (!policyDocumentCache.has(policy.Arn!)) {
-      await cacheManagedPolicyDocument(client, policy.Arn!, policyDocumentCache, nodes, edges, accountId);
+      await cacheManagedPolicyDocument(
+        client,
+        policy.Arn!,
+        policyDocumentCache,
+        nodes,
+        edges,
+        accountId
+      );
     }
   }
 
@@ -714,10 +787,22 @@ function addStatementNodeAndEdges(
       const stmtId = stmt.Sid || `stmt-${index}`;
       const stmtArn = `${policyDocArn}/statement/${stmtId}`;
       const actions = Array.isArray(stmt.Action) ? stmt.Action : stmt.Action ? [stmt.Action] : [];
-      const resources = Array.isArray(stmt.Resource) ? stmt.Resource : stmt.Resource ? [stmt.Resource] : [];
+      const resources = Array.isArray(stmt.Resource)
+        ? stmt.Resource
+        : stmt.Resource
+          ? [stmt.Resource]
+          : [];
       const conditions = stmt.Condition || undefined;
-      const notActions = Array.isArray(stmt.NotAction) ? stmt.NotAction : stmt.NotAction ? [stmt.NotAction] : undefined;
-      const notResources = Array.isArray(stmt.NotResource) ? stmt.NotResource : stmt.NotResource ? [stmt.NotResource] : undefined;
+      const notActions = Array.isArray(stmt.NotAction)
+        ? stmt.NotAction
+        : stmt.NotAction
+          ? [stmt.NotAction]
+          : undefined;
+      const notResources = Array.isArray(stmt.NotResource)
+        ? stmt.NotResource
+        : stmt.NotResource
+          ? [stmt.NotResource]
+          : undefined;
 
       nodes.push({
         id: stmtArn,
@@ -772,7 +857,12 @@ function parseTrustPolicy(
             label: 'TRUSTS',
             properties: {
               trusted_principal: normalizedPrincipal,
-              principal_type: principalType === 'AWS' ? 'AWS' : principalType === 'Service' ? 'Service' : 'Federated',
+              principal_type:
+                principalType === 'AWS'
+                  ? 'AWS'
+                  : principalType === 'Service'
+                    ? 'Service'
+                    : 'Federated',
               is_cross_account: isCrossAccount,
               conditions_json: stmt.Condition ? JSON.stringify(stmt.Condition) : undefined,
               allows_assume_role: true,
