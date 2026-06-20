@@ -211,7 +211,12 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     cloudTrailAnalyzerFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['dynamodb:BatchWriteItem', 'dynamodb:Query', 'dynamodb:GetItem', 'dynamodb:PutItem'],
+        actions: [
+          'dynamodb:BatchWriteItem',
+          'dynamodb:Query',
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+        ],
         resources: [accessAnalyzerTable.tableArn, accessAnalyzerTable.tableArn + '/index/*'],
       })
     );
