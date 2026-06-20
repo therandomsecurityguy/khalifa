@@ -15,6 +15,6 @@
     "sourceMap": true,
     "moduleResolution": "node"
   },
-  "include": ["../collector/*.ts", "../shared/**/*"],
+  "include": ["../collector/*.ts", "../collector/src/**/*.ts", "../shared/**/*"],
   "exclude": ["node_modules", "dist"]
 }
