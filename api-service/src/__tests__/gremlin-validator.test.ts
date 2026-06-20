@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 import { validateGremlinSelectors } from '../middleware/gremlin-validator';
 
 function makeReq(query: Record<string, unknown>): Request {

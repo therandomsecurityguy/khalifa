@@ -151,7 +151,7 @@ export function calculatePathSummary(path: any[]): {
   return { segments };
 }
 
-export function getRemediationHint(ruleId: string, context: Record<string, any>): string {
+export function getRemediationHint(ruleId: string, _context: Record<string, any>): string {
   const hints: Record<string, string> = {
     'RULE-001':
       'Restrict IAM role permissions to specific S3 buckets, enable VPC endpoints for S3 access, or move sensitive data to private buckets.',

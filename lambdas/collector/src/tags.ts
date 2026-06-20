@@ -7,15 +7,6 @@ const TAGGING_PAGE_SIZE = 100;
 
 export type TagMap = Record<string, string>;
 
-const SUPPORTED_KEYS = [
-  'env',
-  'environment',
-  'data_classification',
-  'crown_jewel',
-  'owner',
-  'business_unit',
-];
-
 export const PROP_ALIASES: Record<string, string[]> = {
   env: ['env', 'environment'],
   data_classification: ['data_classification', 'data-classification'],

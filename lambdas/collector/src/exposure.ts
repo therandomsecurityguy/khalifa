@@ -23,7 +23,7 @@ export function buildExposureContext(nodes: GraphNode[]): ExposureContext {
       }
     }
     if (node.label === 'InternetGateway') {
-      const vpcId = (node.properties.vpc_id as string) || '';
+      const _vpcId = (node.properties.vpc_id as string) || '';
       const att = node.properties.attachments as any;
       if (Array.isArray(att)) {
         for (const a of att) {

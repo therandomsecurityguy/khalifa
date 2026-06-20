@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 import { SignJWT, generateKeyPair, exportJWK, type JWK, type KeyLike } from 'jose';
 
 const TEST_USER_POOL_ID = 'us-east-1_testpool';

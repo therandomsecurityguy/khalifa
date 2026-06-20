@@ -1,21 +1,16 @@
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
-import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
 import {
   EC2Client,
   paginateDescribeInstances,
-  DescribeSecurityGroupsCommand,
   DescribeVpcsCommand,
   DescribeVpcEndpointsCommand,
   DescribeNetworkAclsCommand,
   DescribeRouteTablesCommand,
   DescribeTransitGatewaysCommand,
-  DescribeInternetGatewaysCommand,
-  DescribeNatGatewaysCommand,
-  DescribeSubnetsCommand,
 } from '@aws-sdk/client-ec2';
 import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-tagging-api';
 import { ElasticLoadBalancingV2Client } from '@aws-sdk/client-elastic-load-balancing-v2';
-import { ECRClient, DescribeRepositoriesCommand, ListImagesCommand } from '@aws-sdk/client-ecr';
+import { ECRClient } from '@aws-sdk/client-ecr';
 import {
   S3Client,
   ListBucketsCommand,
@@ -31,18 +26,6 @@ import {
   ListRolesCommand,
   ListPoliciesCommand,
   GetAccountPasswordPolicyCommand,
-  GetCredentialReportCommand,
-  ListGroupsCommand,
-  ListGroupPoliciesCommand,
-  GetGroupPolicyCommand,
-  ListAttachedRolePoliciesCommand,
-  ListAttachedUserPoliciesCommand,
-  ListAttachedGroupPoliciesCommand,
-  GetPolicyVersionCommand,
-  ListRolePoliciesCommand,
-  GetRolePolicyCommand,
-  ListUserPoliciesCommand,
-  GetUserPolicyCommand,
 } from '@aws-sdk/client-iam';
 import { KMSClient, ListKeysCommand, DescribeKeyCommand } from '@aws-sdk/client-kms';
 import { RDSClient, DescribeDBInstancesCommand } from '@aws-sdk/client-rds';
@@ -56,7 +39,6 @@ import {
 import {
   ConfigServiceClient,
   DescribeConfigurationRecordersCommand,
-  DescribeDeliveryChannelsCommand,
   DescribeConfigRulesCommand,
 } from '@aws-sdk/client-config-service';
 import {
@@ -75,18 +57,9 @@ import {
   GetRestApisCommand,
   GetStagesCommand,
 } from '@aws-sdk/client-api-gateway';
-import {
-  LambdaClient,
-  ListFunctionsCommand,
-  ListAliasesCommand,
-  ListEventSourceMappingsCommand,
-} from '@aws-sdk/client-lambda';
+import { LambdaClient, ListFunctionsCommand, ListAliasesCommand } from '@aws-sdk/client-lambda';
 import { SFNClient, ListStateMachinesCommand } from '@aws-sdk/client-sfn';
-import {
-  EventBridgeClient,
-  ListEventBusesCommand,
-  ListRulesCommand,
-} from '@aws-sdk/client-eventbridge';
+import { EventBridgeClient, ListEventBusesCommand } from '@aws-sdk/client-eventbridge';
 import { DynamoDBClient, ListTablesCommand, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { ElastiCacheClient, DescribeCacheClustersCommand } from '@aws-sdk/client-elasticache';
 import {
@@ -531,7 +504,6 @@ async function collectIam(client: IAMClient, accountId: string) {
   const policyDocumentCache = new Map<string, string>();
 
   const users = await client.send(new ListUsersCommand({}));
-  const userPolicies = new Map<string, string[]>();
   for (const user of users.Users || []) {
     const userArn = `arn:aws:iam::${accountId}:user/${user.UserName}`;
     nodes.push({
@@ -949,7 +921,7 @@ function parseTrustPolicy(
   try {
     const doc = JSON.parse(trustPolicyJson);
     const statements = Array.isArray(doc.Statement) ? doc.Statement : [doc.Statement];
-    statements.forEach((stmt: any, index: number) => {
+    statements.forEach((stmt: any, _index: number) => {
       if (stmt.Effect !== 'Allow') return;
       const principals = stmt.Principal || {};
       const principalEntries = Object.entries(principals) as [string, string | string[]][];
@@ -1047,7 +1019,7 @@ async function collectRds(client: RDSClient, accountId: string, region: string) 
   return { nodes, edges };
 }
 
-async function collectEks(client: EKSClient, accountId: string, region: string) {
+async function collectEks(client: EKSClient, accountId: string, _region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -1077,7 +1049,7 @@ async function collectEks(client: EKSClient, accountId: string, region: string) 
   return { nodes, edges };
 }
 
-async function collectSecurityHub(client: SecurityHubClient, accountId: string, region: string) {
+async function collectSecurityHub(client: SecurityHubClient, accountId: string, _region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 

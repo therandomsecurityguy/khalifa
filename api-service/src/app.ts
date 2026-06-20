@@ -13,7 +13,7 @@ import {
 } from './routes/compliance';
 import { validateGremlinSelectors, validateArnParam } from './middleware/gremlin-validator';
 import { authenticate } from './middleware/auth';
-import { requireViewer, requireAdmin } from './middleware/rbac';
+import { requireViewer } from './middleware/rbac';
 import {
   getEffectivePermissions,
   getEscalationPaths,

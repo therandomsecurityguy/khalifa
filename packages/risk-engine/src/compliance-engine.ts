@@ -5,14 +5,7 @@ import type {
   ComplianceControlResult,
   ComplianceFrameworkSummary,
 } from './compliance-types';
-import { ComplianceControl, ComplianceControlStatus } from './compliance-types';
-import {
-  CIS_AWS_FOUNDATIONS_V3_CONTROLS,
-  SOC2_CONTROLS,
-  ISO27001_CONTROLS,
-  getControlsByFramework,
-  getAllControls,
-} from './compliance-types';
+import { getControlsByFramework } from './compliance-types';
 import { complianceRuleEvaluators } from './compliance-rules';
 import {
   DynamoDBClient,
@@ -162,7 +155,7 @@ export class ComplianceEngine {
 
   async getControlEvidence(
     controlId: string,
-    framework: ComplianceFramework
+    _framework: ComplianceFramework
   ): Promise<ComplianceEvidence[]> {
     return this.evidenceStore.getEvidence(controlId);
   }
@@ -173,7 +166,7 @@ export class ComplianceEngine {
   ): Promise<ComplianceControlResult | null> {
     const report = await this.getLatestReport(framework);
     if (!report) return null;
-    return report.controls.find((c) => c.control.id === controlId) || null;
+    return report.controls.find((c: ComplianceControlResult) => c.control.id === controlId) || null;
   }
 
   async getLatestReport(framework: ComplianceFramework): Promise<ComplianceReport | null> {

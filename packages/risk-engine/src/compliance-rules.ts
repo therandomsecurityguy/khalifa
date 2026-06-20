@@ -1,5 +1,4 @@
 import type { ComplianceControlStatus, ComplianceEvidence } from './compliance-types';
-import { ComplianceControl } from './compliance-types';
 
 export interface ComplianceRuleEvaluator {
   controlId: string;

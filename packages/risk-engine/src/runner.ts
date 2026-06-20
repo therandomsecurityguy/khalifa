@@ -8,7 +8,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { riskRules, getEnabledRules } from './rules';
+import { getEnabledRules } from './rules';
 import { computeRiskScore, getRemediationHint } from './scoring';
 import type {
   RiskRule,
@@ -323,7 +323,7 @@ export class RiskRuleRunner {
   private buildRiskInput(
     rule: RiskRule,
     path: GraphVertex[],
-    resources: { resourceId: string; resourceType: string }[]
+    _resources: { resourceId: string; resourceType: string }[]
   ): RiskScoreInput {
     let exposureLevel: 'internet' | 'cross-account' | 'internal' = 'internal';
     let dataClassification: 'public' | 'internal' | 'restricted' | 'secret' = 'public';
