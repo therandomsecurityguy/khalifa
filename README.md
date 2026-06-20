@@ -3,7 +3,7 @@ Agentless ingestion of AWS Org resources and Security Hub findings into a Neptun
 
 ## Architecture
 
-### Lambda-Based Ingestion (Original)
+### Lambda-Based Ingestion
 
 ```
 EventBridge Schedule (every 2 hours)
@@ -62,7 +62,7 @@ EventBridge Schedule -> RiskEngine Lambda -> Neptune (query)
 DynamoDB (Issues table)
 ```
 
-### EKS-Based Deployment (Recommended for Production)
+### EKS-Based Deployment
 
 ```
 User -> ALB (Cognito OIDC) -> api-service (EKS)
