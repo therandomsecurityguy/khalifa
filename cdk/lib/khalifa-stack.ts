@@ -297,7 +297,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     const riskEngineFn = new lambda.Function(this, 'RiskEngineFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset('../lambdas/risk-engine'),
+      code: lambda.Code.fromAsset('../packages/risk-engine'),
       role: lambdaExecutionRole,
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,

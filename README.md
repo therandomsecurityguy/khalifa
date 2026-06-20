@@ -95,7 +95,7 @@ docker build -t security-graph-api:latest .
 docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/security-graph-api:v1.0.0
 
 # Rule Runner (reuses risk-engine)
-cd ../lambdas/risk-engine
+cd ../packages/risk-engine
 npm install
 npm run build
 docker build -t security-graph-rule-runner:latest .
@@ -283,7 +283,8 @@ khalifa/
 │   ├── list-accounts/            # Lists org accounts
 │   ├── collector/                # Collects AWS resources (30 services)
 │   ├── graph-writer/             # Writes to Neptune
-│   ├── incremental-collector/    # Event-driven updates
+│   └── incremental-collector/    # Event-driven updates
+├── packages/
 │   └── risk-engine/              # Risk, attack-path, and compliance engine
 │       ├── types.ts              # Rule/Issue schemas
 │       ├── rules.ts              # Gremlin risk rules (10)
