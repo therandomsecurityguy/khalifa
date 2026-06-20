@@ -18,9 +18,7 @@ export async function collectLoadBalancers(
 
   let marker: string | undefined;
   do {
-    const response: any = await client.send(
-      new DescribeLoadBalancersCommand({ Marker: marker })
-    );
+    const response: any = await client.send(new DescribeLoadBalancersCommand({ Marker: marker }));
 
     for (const lb of response.LoadBalancers || []) {
       if (!lb.LoadBalancerArn) continue;

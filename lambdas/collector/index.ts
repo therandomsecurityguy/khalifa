@@ -15,11 +15,7 @@ import {
 } from '@aws-sdk/client-ec2';
 import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-tagging-api';
 import { ElasticLoadBalancingV2Client } from '@aws-sdk/client-elastic-load-balancing-v2';
-import {
-  ECRClient,
-  DescribeRepositoriesCommand,
-  ListImagesCommand,
-} from '@aws-sdk/client-ecr';
+import { ECRClient, DescribeRepositoriesCommand, ListImagesCommand } from '@aws-sdk/client-ecr';
 import {
   S3Client,
   ListBucketsCommand,
@@ -124,11 +120,7 @@ import {
 import { collectLoadBalancers } from './src/load-balancers';
 import { collectContainerImages } from './src/containers';
 import { collectCrossAccountTrust } from './src/cross-account';
-import {
-  buildExposureContext,
-  applyExposureToNodes,
-  type ExposureContext,
-} from './src/exposure';
+import { buildExposureContext, applyExposureToNodes, type ExposureContext } from './src/exposure';
 
 const logger = new Logger('collector');
 const stsClient = new STSClient({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -363,7 +355,12 @@ export const handler = async (
   const exposedNodes = applyExposureToNodes(nodes, exposureCtx);
 
   const tagArns = exposedNodes
-    .filter((n) => n.id && !n.id.startsWith(INTERNET_NODE_ID) && !n.id.startsWith('arn:aws:khalifa:external-account:'))
+    .filter(
+      (n) =>
+        n.id &&
+        !n.id.startsWith(INTERNET_NODE_ID) &&
+        !n.id.startsWith('arn:aws:khalifa:external-account:')
+    )
     .map((n) => n.id);
   let tagsByArn = new Map<string, TagMap>();
   try {
@@ -1243,7 +1240,11 @@ async function collectGuardDuty(client: GuardDutyClient, accountId: string, regi
   return { nodes, edges };
 }
 
-async function collectAccessAnalyzer(client: AccessAnalyzerClient, accountId: string, region: string) {
+async function collectAccessAnalyzer(
+  client: AccessAnalyzerClient,
+  accountId: string,
+  region: string
+) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -1299,7 +1300,7 @@ async function collectAccessAnalyzer(client: AccessAnalyzerClient, accountId: st
 }
 
 async function collectNetwork(
-    ec2Client: EC2Client,
+  ec2Client: EC2Client,
   route53Client: Route53Client,
   accountId: string,
   region: string
@@ -1442,7 +1443,7 @@ async function collectNetwork(
 }
 
 async function collectServerless(
-    apiGatewayClient: APIGatewayClient,
+  apiGatewayClient: APIGatewayClient,
   lambdaClient: LambdaClient,
   sfnClient: SFNClient,
   eventBridgeClient: EventBridgeClient,
@@ -1731,7 +1732,7 @@ async function collectDataStores(
 }
 
 async function collectSecrets(
-    secretsManagerClient: SecretsManagerClient,
+  secretsManagerClient: SecretsManagerClient,
   ssmClient: SSMClient,
   accountId: string,
   region: string

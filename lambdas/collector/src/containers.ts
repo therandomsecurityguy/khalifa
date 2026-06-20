@@ -1,8 +1,4 @@
-import {
-  ECRClient,
-  DescribeRepositoriesCommand,
-  ListImagesCommand,
-} from '@aws-sdk/client-ecr';
+import { ECRClient, DescribeRepositoriesCommand, ListImagesCommand } from '@aws-sdk/client-ecr';
 import type { GraphNode, GraphEdge } from '../../shared/types';
 import type { TagMap } from './tags';
 import { extractCommonProperties } from './tags';

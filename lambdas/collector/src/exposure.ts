@@ -62,10 +62,7 @@ export function deriveIsInternetExposed(
   return false;
 }
 
-export function applyExposureToNodes(
-  nodes: GraphNode[],
-  ctx: ExposureContext
-): GraphNode[] {
+export function applyExposureToNodes(nodes: GraphNode[], ctx: ExposureContext): GraphNode[] {
   const exposedLabels = new Set([
     'Ec2Instance',
     'LambdaFunction',

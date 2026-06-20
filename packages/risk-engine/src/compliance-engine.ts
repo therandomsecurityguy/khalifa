@@ -260,9 +260,7 @@ export class DynamoDBEvidenceStore implements EvidenceStore {
 
   async getAllEvidence(): Promise<ComplianceEvidence[]> {
     const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
-    const result = await client.send(
-      new ScanCommand({ TableName: this.tableName })
-    );
+    const result = await client.send(new ScanCommand({ TableName: this.tableName }));
     if (!result.Items) return [];
     return result.Items.map((item) => unmarshall(item) as ComplianceEvidence);
   }
@@ -311,10 +309,7 @@ export class DynamoDBReportStore implements ReportStore {
     return item.report as ComplianceReport;
   }
 
-  async listReports(
-    framework: ComplianceFramework,
-    limit?: number
-  ): Promise<ComplianceReport[]> {
+  async listReports(framework: ComplianceFramework, limit?: number): Promise<ComplianceReport[]> {
     const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
     const result = await client.send(
       new QueryCommand({

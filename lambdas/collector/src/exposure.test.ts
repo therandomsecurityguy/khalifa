@@ -44,21 +44,27 @@ describe('deriveIsInternetExposed', () => {
 
   it('does not expose private subnet without IGW', () => {
     expect(
-      deriveIsInternetExposed({ subnet_id: 'subnet-x' }, {
-        publicSubnetIds: new Set(['subnet-x']),
-        subnetVpcIds: new Map([['subnet-x', 'vpc-1']]),
-        vpcHasIgw: new Map(),
-      })
+      deriveIsInternetExposed(
+        { subnet_id: 'subnet-x' },
+        {
+          publicSubnetIds: new Set(['subnet-x']),
+          subnetVpcIds: new Map([['subnet-x', 'vpc-1']]),
+          vpcHasIgw: new Map(),
+        }
+      )
     ).toBe(false);
   });
 
   it('exposes resource on public subnet in VPC with IGW', () => {
     expect(
-      deriveIsInternetExposed({ subnet_id: 'subnet-x' }, {
-        publicSubnetIds: new Set(['subnet-x']),
-        subnetVpcIds: new Map([['subnet-x', 'vpc-1']]),
-        vpcHasIgw: new Map([['vpc-1', true]]),
-      })
+      deriveIsInternetExposed(
+        { subnet_id: 'subnet-x' },
+        {
+          publicSubnetIds: new Set(['subnet-x']),
+          subnetVpcIds: new Map([['subnet-x', 'vpc-1']]),
+          vpcHasIgw: new Map([['vpc-1', true]]),
+        }
+      )
     ).toBe(true);
   });
 });

@@ -1,10 +1,20 @@
-import { ResourceGroupsTaggingAPIClient, GetResourcesCommand } from '@aws-sdk/client-resource-groups-tagging-api';
+import {
+  ResourceGroupsTaggingAPIClient,
+  GetResourcesCommand,
+} from '@aws-sdk/client-resource-groups-tagging-api';
 
 const TAGGING_PAGE_SIZE = 100;
 
 export type TagMap = Record<string, string>;
 
-const SUPPORTED_KEYS = ['env', 'environment', 'data_classification', 'crown_jewel', 'owner', 'business_unit'];
+const SUPPORTED_KEYS = [
+  'env',
+  'environment',
+  'data_classification',
+  'crown_jewel',
+  'owner',
+  'business_unit',
+];
 
 export const PROP_ALIASES: Record<string, string[]> = {
   env: ['env', 'environment'],
@@ -60,7 +70,9 @@ export async function fetchAllTags(
   return result;
 }
 
-export function extractCommonProperties(tags: TagMap | undefined): Record<string, string | boolean> {
+export function extractCommonProperties(
+  tags: TagMap | undefined
+): Record<string, string | boolean> {
   const props: Record<string, string | boolean> = {};
   if (!tags) return props;
 

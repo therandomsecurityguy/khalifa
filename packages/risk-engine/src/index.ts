@@ -14,7 +14,13 @@ import {
 } from './compliance-engine';
 
 export * from './compliance-types';
-export { ComplianceEngine, DynamoDBEvidenceStore, DynamoDBReportStore, InMemoryReportStore, runScheduledComplianceAssessment };
+export {
+  ComplianceEngine,
+  DynamoDBEvidenceStore,
+  DynamoDBReportStore,
+  InMemoryReportStore,
+  runScheduledComplianceAssessment,
+};
 export type { GraphClient, ReportStore };
 
 const NEPTUNE_ENDPOINT =

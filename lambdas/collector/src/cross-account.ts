@@ -56,9 +56,7 @@ export async function collectCrossAccountTrust(
   const edges: GraphEdge[] = [];
   const seenAccounts = new Set<string>();
 
-  const rolesResponse = await client.send(
-    new ListRolesCommand({ MaxItems: 1000 })
-  );
+  const rolesResponse = await client.send(new ListRolesCommand({ MaxItems: 1000 }));
 
   for (const role of rolesResponse.Roles || []) {
     if (!role.RoleName || !role.Arn) continue;
@@ -114,9 +112,7 @@ export async function collectCrossAccountTrust(
 
 async function checkIsAdminRole(client: IAMClient, roleName: string): Promise<boolean> {
   try {
-    const policies = await client.send(
-      new ListAttachedRolePoliciesCommand({ RoleName: roleName })
-    );
+    const policies = await client.send(new ListAttachedRolePoliciesCommand({ RoleName: roleName }));
 
     for (const policy of policies.AttachedPolicies || []) {
       if (!policy.PolicyArn) continue;
@@ -124,15 +120,16 @@ async function checkIsAdminRole(client: IAMClient, roleName: string): Promise<bo
       if (policy.PolicyName?.toLowerCase().includes('admin')) return true;
     }
 
-    const inlinePolicies = await client.send(
-      new ListRolePoliciesCommand({ RoleName: roleName })
-    );
+    const inlinePolicies = await client.send(new ListRolePoliciesCommand({ RoleName: roleName }));
     for (const name of inlinePolicies.PolicyNames || []) {
       try {
         const policy = await client.send(
           new GetRolePolicyCommand({ RoleName: roleName, PolicyName: name })
         );
-        if (policy.PolicyDocument?.includes('"Action": "*"') || policy.PolicyDocument?.includes('"Action":"*"')) {
+        if (
+          policy.PolicyDocument?.includes('"Action": "*"') ||
+          policy.PolicyDocument?.includes('"Action":"*"')
+        ) {
           return true;
         }
       } catch (e) {}

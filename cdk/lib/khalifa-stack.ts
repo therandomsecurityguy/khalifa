@@ -433,7 +433,14 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     riskEngineFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query', 'dynamodb:Scan', 'dynamodb:BatchWriteItem'],
+        actions: [
+          'dynamodb:PutItem',
+          'dynamodb:GetItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+          'dynamodb:BatchWriteItem',
+        ],
         resources: [evidenceTable.tableArn, reportsTable.tableArn],
       })
     );
