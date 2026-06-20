@@ -12,6 +12,8 @@ import {
   getDriftReport,
 } from './routes/compliance';
 import { validateGremlinSelectors, validateArnParam } from './middleware/gremlin-validator';
+import { authenticate } from './middleware/auth';
+import { requireViewer, requireAdmin } from './middleware/rbac';
 
 const app = express();
 
@@ -24,24 +26,26 @@ app.get('/health', (_req: Request, res: Response) => {
 app.use(validateGremlinSelectors);
 app.use('/resources/:arn', validateArnParam);
 
-app.get('/issues', listIssues);
-app.get('/issues/counts', getIssueCounts);
-app.get('/issues/stats', getIssueStats);
-app.get('/issues/:id', getIssue);
+app.use(authenticate);
 
-app.get('/attack-paths', findAttackPath);
-app.get('/attack-paths/all', findAllAttackPaths);
+app.get('/issues', requireViewer, listIssues);
+app.get('/issues/counts', requireViewer, getIssueCounts);
+app.get('/issues/stats', requireViewer, getIssueStats);
+app.get('/issues/:id', requireViewer, getIssue);
 
-app.get('/resources/:arn', getResource);
-app.get('/resources/search', searchResources);
-app.get('/resources/graph', getResourceGraph);
+app.get('/attack-paths', requireViewer, findAttackPath);
+app.get('/attack-paths/all', requireViewer, findAllAttackPaths);
 
-app.get('/compliance/frameworks', listFrameworks);
-app.get('/compliance/frameworks/:framework', getFrameworkSummary);
-app.get('/compliance/frameworks/:framework/controls', getFrameworkControls);
-app.get('/compliance/frameworks/:framework/controls/:controlId', getControlDetails);
-app.get('/compliance/frameworks/:framework/report', getComplianceReport);
-app.get('/compliance/frameworks/:framework/drift', getDriftReport);
+app.get('/resources/:arn', requireViewer, getResource);
+app.get('/resources/search', requireViewer, searchResources);
+app.get('/resources/graph', requireViewer, getResourceGraph);
+
+app.get('/compliance/frameworks', requireViewer, listFrameworks);
+app.get('/compliance/frameworks/:framework', requireViewer, getFrameworkSummary);
+app.get('/compliance/frameworks/:framework/controls', requireViewer, getFrameworkControls);
+app.get('/compliance/frameworks/:framework/controls/:controlId', requireViewer, getControlDetails);
+app.get('/compliance/frameworks/:framework/report', requireViewer, getComplianceReport);
+app.get('/compliance/frameworks/:framework/drift', requireViewer, getDriftReport);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);
