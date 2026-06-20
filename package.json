@@ -18,7 +18,7 @@
     "build:api": "npm run build -w api-service",
     "build:cdk": "npm run build -w cdk",
     "build:ui": "npm run build -w ui",
-    "build:lambdas": "npm run build -w packages/risk-engine -w lambdas/collector -w lambdas/incremental-collector -w lambdas/list-accounts -w lambdas/graph-writer",
+    "build:lambdas": "npm run build -w packages/risk-engine -w lambdas/collector -w lambdas/incremental-collector -w lambdas/list-accounts -w lambdas/graph-writer -w lambdas/policy-evaluator -w lambdas/cloudtrail-analyzer",
     "lint:all": "npm run lint:all --workspaces --if-present || true",
     "format:all": "npm run format --workspaces --if-present",
     "ci:lint": "npm run format:check --workspaces --if-present && npm run lint --workspaces --if-present",

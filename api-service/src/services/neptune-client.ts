@@ -305,6 +305,75 @@ export class NeptuneClient {
     return { nodes, edges };
   }
 
+  async getEffectivePermissions(principalArn: string): Promise<Record<string, unknown> | null> {
+    const query = `g.V().hasLabel('EffectivePermission').has('principal_arn', '${principalArn}').valueMap(true)`;
+    const results = await this.executeQuery(query);
+    if (results.length === 0) return null;
+    return this.extractVertexFromResult(results[0] as NeptuneRawVertex).properties;
+  }
+
+  async getEscalationPaths(filters: {
+    sourceAccount?: string;
+    targetRole?: string;
+    escalationType?: string;
+    riskLevel?: string;
+  }): Promise<Record<string, unknown>[]> {
+    let query = `g.V().hasLabel('EscalationPath')`;
+    if (filters.escalationType) {
+      query += `.has('escalation_type', '${filters.escalationType}')`;
+    }
+    if (filters.riskLevel) {
+      query += `.has('risk_level', '${filters.riskLevel}')`;
+    }
+    if (filters.sourceAccount) {
+      query += `.has('source_arn', containing('${filters.sourceAccount}'))`;
+    }
+    if (filters.targetRole) {
+      query += `.has('target_arn', '${filters.targetRole}')`;
+    }
+    query += `.valueMap(true).limit(100)`;
+    const results = await this.executeQuery(query);
+    return results.map((r) => this.extractVertexFromResult(r as NeptuneRawVertex).properties);
+  }
+
+  async getTrustGraph(accountId?: string): Promise<{ nodes: GraphVertex[]; edges: GraphEdge[] }> {
+    let edgeQuery = `g.E().hasLabel('TRUSTS')`;
+    if (accountId) {
+      edgeQuery += `.limit(500)`;
+    } else {
+      edgeQuery += `.limit(500)`;
+    }
+
+    const edgeResults = await this.executeQuery(edgeQuery);
+    const edges: GraphEdge[] = [];
+    const nodeIds = new Set<string>();
+
+    for (const result of edgeResults) {
+      const extracted = this.extractVertexFromResult(result as NeptuneRawVertex);
+      edges.push({
+        id: extracted.id,
+        label: extracted.label,
+        from: (extracted.properties.from as string) || '',
+        to: (extracted.properties.to as string) || '',
+        properties: extracted.properties,
+      });
+      if (extracted.properties.from) nodeIds.add(extracted.properties.from as string);
+      if (extracted.properties.to) nodeIds.add(extracted.properties.to as string);
+    }
+
+    const nodes: GraphVertex[] = [];
+    for (const nodeId of nodeIds) {
+      const resource = await this.getResource(nodeId);
+      if (resource) nodes.push(resource);
+    }
+
+    return { nodes, edges };
+  }
+
+  async getUnusedPermissionsFromDynamo(_principalArn: string): Promise<Record<string, unknown>[]> {
+    return [];
+  }
+
   private extractEdgeFromResult(obj: NeptuneRawVertex, from: string, to: string): GraphEdge {
     const properties: Record<string, unknown> = {};
 

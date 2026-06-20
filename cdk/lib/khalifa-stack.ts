@@ -153,6 +153,91 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     logGroup(graphWriterFn, 'GraphWriter');
     logGroup(incrementalProcessorFn, 'IncrementalProcessor');
 
+    const accessAnalyzerTable = new dynamodb.Table(this, 'AccessAnalyzerCacheTable', {
+      tableName: 'AccessAnalyzerCache',
+      partitionKey: { name: 'principalArn', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'eventSourceEventName', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'ttl',
+    });
+    accessAnalyzerTable.addGlobalSecondaryIndex({
+      indexName: 'ActionIndex',
+      partitionKey: { name: 'eventSourceEventName', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'lastUsed', type: dynamodb.AttributeType.STRING },
+    });
+
+    const policyEvaluatorFn = new lambda.Function(this, 'PolicyEvaluatorFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset('../lambdas/policy-evaluator'),
+      role: lambdaExecutionRole,
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 1024,
+      environment: {
+        NEPTUNE_ENDPOINT: neptuneEndpoint,
+        NEPTUNE_AUTH_SECRET_ARN: neptuneSecret.secretArn,
+      },
+    });
+
+    logGroup(policyEvaluatorFn, 'PolicyEvaluator');
+
+    const cloudTrailAnalyzerFn = new lambda.Function(this, 'CloudTrailAnalyzerFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset('../lambdas/cloudtrail-analyzer'),
+      role: lambdaExecutionRole,
+      timeout: cdk.Duration.minutes(5),
+      memorySize: 512,
+      environment: {
+        ACCESS_ANALYZER_TABLE: accessAnalyzerTable.tableName,
+        ATHENA_WORKGROUP: 'khalifa-cloudtrail-analysis',
+        ATHENA_DATABASE: 'khalifa_cloudtrail_db',
+        CLOUDTRAIL_S3_LOCATION: 's3://cloudtrail-logs/AWSLogs/',
+        ANALYSIS_DAYS: '90',
+      },
+    });
+    cloudTrailAnalyzerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'athena:StartQueryExecution',
+          'athena:GetQueryExecution',
+          'athena:GetQueryResults',
+          'athena:StopQueryExecution',
+        ],
+        resources: ['*'],
+      })
+    );
+    cloudTrailAnalyzerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'dynamodb:BatchWriteItem',
+          'dynamodb:Query',
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+        ],
+        resources: [accessAnalyzerTable.tableArn, accessAnalyzerTable.tableArn + '/index/*'],
+      })
+    );
+    cloudTrailAnalyzerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['s3:GetObject'],
+        resources: ['arn:aws:s3:::cloudtrail-logs/*', 'arn:aws:s3:::cloudtrail-logs'],
+      })
+    );
+    cloudTrailAnalyzerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['glue:GetTable', 'glue:GetDatabase', 'glue:GetPartitions'],
+        resources: ['*'],
+      })
+    );
+
+    logGroup(cloudTrailAnalyzerFn, 'CloudTrailAnalyzer');
+
     const listAccounts = new tasks.LambdaInvoke(this, 'ListAccounts', {
       lambdaFunction: listAccountsFn,
       outputPath: '$.Payload',
@@ -197,7 +282,12 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       backoffRate: 2,
     });
 
-    const accountBranch = collectorWithRetry.next(graphWriterWithRetry);
+    const policyEvaluator = new tasks.LambdaInvoke(this, 'PolicyEvaluator', {
+      lambdaFunction: policyEvaluatorFn,
+      outputPath: '$.Payload',
+    });
+
+    const accountBranch = collectorWithRetry.next(graphWriterWithRetry).next(policyEvaluator);
     mapAccounts.itemProcessor(accountBranch);
 
     const definition = listAccounts.next(mapAccounts);
@@ -354,6 +444,18 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       ruleName: 'risk-engine-scheduled-trigger',
       schedule: events.Schedule.rate(cdk.Duration.hours(1)),
       targets: [new targets.LambdaFunction(riskEngineFn)],
+    });
+
+    new events.Rule(this, 'PolicyEvaluatorScheduledTrigger', {
+      ruleName: 'policy-evaluator-scheduled-trigger',
+      schedule: events.Schedule.rate(cdk.Duration.hours(6)),
+      targets: [new targets.LambdaFunction(policyEvaluatorFn)],
+    });
+
+    new events.Rule(this, 'CloudTrailAnalyzerScheduledTrigger', {
+      ruleName: 'cloudtrail-analyzer-scheduled-trigger',
+      schedule: events.Schedule.cron({ minute: '0', hour: '2' }),
+      targets: [new targets.LambdaFunction(cloudTrailAnalyzerFn)],
     });
   }
 }

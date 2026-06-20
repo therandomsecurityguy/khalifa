@@ -14,6 +14,13 @@ import {
 import { validateGremlinSelectors, validateArnParam } from './middleware/gremlin-validator';
 import { authenticate } from './middleware/auth';
 import { requireViewer, requireAdmin } from './middleware/rbac';
+import {
+  getEffectivePermissions,
+  getEscalationPaths,
+  getUnusedPermissions,
+  getRightsizingRecommendation,
+  getTrustGraph,
+} from './routes/identity';
 
 const app = express();
 
@@ -46,6 +53,12 @@ app.get('/compliance/frameworks/:framework/controls', requireViewer, getFramewor
 app.get('/compliance/frameworks/:framework/controls/:controlId', requireViewer, getControlDetails);
 app.get('/compliance/frameworks/:framework/report', requireViewer, getComplianceReport);
 app.get('/compliance/frameworks/:framework/drift', requireViewer, getDriftReport);
+
+app.get('/identity/effective-permissions/:principal', requireViewer, getEffectivePermissions);
+app.get('/identity/escalation-paths', requireViewer, getEscalationPaths);
+app.get('/identity/unused-permissions', requireViewer, getUnusedPermissions);
+app.get('/identity/rightsizing/:principal', requireViewer, getRightsizingRecommendation);
+app.get('/identity/trust-graph', requireViewer, getTrustGraph);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);
