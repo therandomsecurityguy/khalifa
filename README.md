@@ -1,7 +1,6 @@
 # Khalifa
 
-**Every AWS resource passes through a collector that decides what it means.**
-Org-wide ingestion, signed graph writes, deterministic. At resource-level.
+Agentless ingestion of AWS Org resources and Security Hub findings into a Neptune-backed security graph, with a risk and attack-path engine to identify security issues.
 
 [Docs](ARCHITECTURE.md) · [Operations](OPERATIONAL.md)
 
