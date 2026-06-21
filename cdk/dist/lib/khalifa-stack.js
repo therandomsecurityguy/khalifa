@@ -48,7 +48,7 @@ const dynamodb = __importStar(require("aws-cdk-lib/aws-dynamodb"));
 class SecurityGraphIngestionStack extends cdk.Stack {
     constructor(scope, id, props) {
         super(scope, id, props);
-        const { neptuneEndpoint, masterAccountId } = props;
+        const { neptuneEndpoint, masterAccountId, accountIds } = props;
         const neptuneSecret = new secretsmanager.Secret(this, 'NeptuneAuthSecret', {
             secretName: 'khalifa-neptune-auth',
             generateSecretString: {
@@ -161,14 +161,94 @@ class SecurityGraphIngestionStack extends cdk.Stack {
         logGroup(collectorFn, 'Collector');
         logGroup(graphWriterFn, 'GraphWriter');
         logGroup(incrementalProcessorFn, 'IncrementalProcessor');
+        const accessAnalyzerTable = new dynamodb.Table(this, 'AccessAnalyzerCacheTable', {
+            tableName: 'AccessAnalyzerCache',
+            partitionKey: { name: 'principalArn', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'eventSourceEventName', type: dynamodb.AttributeType.STRING },
+            billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+            removalPolicy: cdk.RemovalPolicy.RETAIN,
+            timeToLiveAttribute: 'ttl',
+        });
+        accessAnalyzerTable.addGlobalSecondaryIndex({
+            indexName: 'ActionIndex',
+            partitionKey: { name: 'eventSourceEventName', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'lastUsed', type: dynamodb.AttributeType.STRING },
+        });
+        const policyEvaluatorFn = new lambda.Function(this, 'PolicyEvaluatorFn', {
+            runtime: lambda.Runtime.NODEJS_20_X,
+            handler: 'index.handler',
+            code: lambda.Code.fromAsset('../lambdas/policy-evaluator'),
+            role: lambdaExecutionRole,
+            timeout: cdk.Duration.minutes(15),
+            memorySize: 1024,
+            environment: {
+                NEPTUNE_ENDPOINT: neptuneEndpoint,
+                NEPTUNE_AUTH_SECRET_ARN: neptuneSecret.secretArn,
+            },
+        });
+        logGroup(policyEvaluatorFn, 'PolicyEvaluator');
+        const cloudTrailAnalyzerFn = new lambda.Function(this, 'CloudTrailAnalyzerFn', {
+            runtime: lambda.Runtime.NODEJS_20_X,
+            handler: 'index.handler',
+            code: lambda.Code.fromAsset('../lambdas/cloudtrail-analyzer'),
+            role: lambdaExecutionRole,
+            timeout: cdk.Duration.minutes(5),
+            memorySize: 512,
+            environment: {
+                ACCESS_ANALYZER_TABLE: accessAnalyzerTable.tableName,
+                ATHENA_WORKGROUP: 'khalifa-cloudtrail-analysis',
+                ATHENA_DATABASE: 'khalifa_cloudtrail_db',
+                CLOUDTRAIL_S3_LOCATION: 's3://cloudtrail-logs/AWSLogs/',
+                ANALYSIS_DAYS: '90',
+            },
+        });
+        cloudTrailAnalyzerFn.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+                'athena:StartQueryExecution',
+                'athena:GetQueryExecution',
+                'athena:GetQueryResults',
+                'athena:StopQueryExecution',
+            ],
+            resources: ['*'],
+        }));
+        cloudTrailAnalyzerFn.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+                'dynamodb:BatchWriteItem',
+                'dynamodb:Query',
+                'dynamodb:GetItem',
+                'dynamodb:PutItem',
+            ],
+            resources: [accessAnalyzerTable.tableArn, accessAnalyzerTable.tableArn + '/index/*'],
+        }));
+        cloudTrailAnalyzerFn.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ['s3:GetObject'],
+            resources: ['arn:aws:s3:::cloudtrail-logs/*', 'arn:aws:s3:::cloudtrail-logs'],
+        }));
+        cloudTrailAnalyzerFn.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ['glue:GetTable', 'glue:GetDatabase', 'glue:GetPartitions'],
+            resources: ['*'],
+        }));
+        logGroup(cloudTrailAnalyzerFn, 'CloudTrailAnalyzer');
         const listAccounts = new tasks.LambdaInvoke(this, 'ListAccounts', {
             lambdaFunction: listAccountsFn,
             outputPath: '$.Payload',
         });
         const mapAccounts = new stepfunctions.Map(this, 'MapAccounts', {
-            itemsPath: '$.accounts',
+            itemsPath: stepfunctions.JsonPath.stringAt('$.accounts'),
+            parameters: {
+                'accountId.$': '$$.Map.Item.Value',
+            },
             maxConcurrency: 20,
             resultPath: stepfunctions.JsonPath.DISCARD,
+        });
+        new cdk.CfnOutput(this, 'AccountIds', {
+            value: cdk.Fn.join(',', accountIds),
+            description: 'AWS account IDs covered by the security graph',
+            exportName: 'SecurityGraphAccountIds',
         });
         const collector = new tasks.LambdaInvoke(this, 'Collector', {
             lambdaFunction: collectorFn,
@@ -190,7 +270,11 @@ class SecurityGraphIngestionStack extends cdk.Stack {
             interval: cdk.Duration.seconds(30),
             backoffRate: 2,
         });
-        const accountBranch = collectorWithRetry.next(graphWriterWithRetry);
+        const policyEvaluator = new tasks.LambdaInvoke(this, 'PolicyEvaluator', {
+            lambdaFunction: policyEvaluatorFn,
+            outputPath: '$.Payload',
+        });
+        const accountBranch = collectorWithRetry.next(graphWriterWithRetry).next(policyEvaluator);
         mapAccounts.itemProcessor(accountBranch);
         const definition = listAccounts.next(mapAccounts);
         const stateMachine = new stepfunctions.StateMachine(this, 'SecurityGraphIngestion', {
@@ -289,10 +373,24 @@ class SecurityGraphIngestionStack extends cdk.Stack {
             partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
             sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING },
         });
+        const evidenceTable = new dynamodb.Table(this, 'ComplianceEvidenceTable', {
+            tableName: 'ComplianceEvidence',
+            partitionKey: { name: 'controlId', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'resourceId', type: dynamodb.AttributeType.STRING },
+            billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+            removalPolicy: cdk.RemovalPolicy.RETAIN,
+        });
+        const reportsTable = new dynamodb.Table(this, 'ComplianceReportsTable', {
+            tableName: 'ComplianceReports',
+            partitionKey: { name: 'framework', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'generatedAt', type: dynamodb.AttributeType.STRING },
+            billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+            removalPolicy: cdk.RemovalPolicy.RETAIN,
+        });
         const riskEngineFn = new lambda.Function(this, 'RiskEngineFn', {
             runtime: lambda.Runtime.NODEJS_20_X,
             handler: 'index.handler',
-            code: lambda.Code.fromAsset('../lambdas/risk-engine'),
+            code: lambda.Code.fromAsset('../packages/risk-engine'),
             role: lambdaExecutionRole,
             timeout: cdk.Duration.minutes(15),
             memorySize: 512,
@@ -307,11 +405,33 @@ class SecurityGraphIngestionStack extends cdk.Stack {
             actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
             resources: [issuesTable.tableArn, issuesTable.tableArn + '/index/*'],
         }));
+        riskEngineFn.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+                'dynamodb:PutItem',
+                'dynamodb:GetItem',
+                'dynamodb:UpdateItem',
+                'dynamodb:Query',
+                'dynamodb:Scan',
+                'dynamodb:BatchWriteItem',
+            ],
+            resources: [evidenceTable.tableArn, reportsTable.tableArn],
+        }));
         logGroup(riskEngineFn, 'RiskEngine');
         new events.Rule(this, 'RiskEngineScheduledTrigger', {
             ruleName: 'risk-engine-scheduled-trigger',
             schedule: events.Schedule.rate(cdk.Duration.hours(1)),
             targets: [new targets.LambdaFunction(riskEngineFn)],
+        });
+        new events.Rule(this, 'PolicyEvaluatorScheduledTrigger', {
+            ruleName: 'policy-evaluator-scheduled-trigger',
+            schedule: events.Schedule.rate(cdk.Duration.hours(6)),
+            targets: [new targets.LambdaFunction(policyEvaluatorFn)],
+        });
+        new events.Rule(this, 'CloudTrailAnalyzerScheduledTrigger', {
+            ruleName: 'cloudtrail-analyzer-scheduled-trigger',
+            schedule: events.Schedule.cron({ minute: '0', hour: '2' }),
+            targets: [new targets.LambdaFunction(cloudTrailAnalyzerFn)],
         });
     }
 }
