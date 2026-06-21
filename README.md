@@ -1,5 +1,4 @@
-[![Khalifa](docs/khalifa-logo.png)](docs/khalifa-logo.png)
-[![Khalifa](docs/khalifa-subtitle.png)](docs/khalifa-subtitle.png)
+# Khalifa
 
 **Every AWS resource passes through a collector that decides what it means.**
 Org-wide ingestion, signed graph writes, deterministic. At resource-level.
@@ -8,7 +7,9 @@ Org-wide ingestion, signed graph writes, deterministic. At resource-level.
 
 [![CI](https://github.com/therandomsecurityguy/khalifa/actions/workflows/ci.yml/badge.svg)](https://github.com/therandomsecurityguy/khalifa/actions/workflows/ci.yml) [![License: BSD 3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![Built with TypeScript](https://img.shields.io/badge/Built_with-TypeScript-3178c6.svg)](https://www.typescriptlang.org) [![Built with Node.js](https://img.shields.io/badge/Built_with-Node.js-339933.svg)](https://nodejs.org)
 
-[![Khalifa diagram](docs/khalifa-diagram.svg)](docs/khalifa-diagram.svg)
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system diagram and design.
 
 ## 1. What is Khalifa?
 
