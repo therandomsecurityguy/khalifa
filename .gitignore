@@ -1,42 +1,54 @@
-
-!bin/**
-!jest.config.js
-!lib/**
-.DS_Store
-.env
-.env.*.local
-.env.local
-.idea/
-.next/
+# Dependencies
+node_modules/
 .pnp
 .pnp.js
-.vscode/
-*.js
-*.log
-*.swo
-*.swp
-*.tmp
-*.zip
-**/*.tsbuildinfo
+
 # Build outputs
-# CDK
-# CloudWatch
-# Dependencies
-# Environment files
-# IDE
-# Lambda deployment packages
-# OS
-# Temporary files
-# Test outputs
-api-service/tsconfig.tsbuildinfo
-awslogs/
-build/
-cdk.out/
-coverage/
 dist/
-node_modules/
+build/
+.next/
 out/
-temp/
+
+# Lambda deployment packages
+*.zip
+
+# CDK
+cdk.out/
+
+# Test outputs
+coverage/
+*.log
+
+# TypeScript build info
+**/*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
 Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Temporary files
 tmp/
-tsconfig.tsbuildinfo
+temp/
+*.tmp
+
+# CloudWatch
+awslogs/
+
+# Config files we want to track
+!jest.config.js
+!jest.setup.js
+!prettier.config.js
+!*.config.js
+!bin/**
+!lib/**
