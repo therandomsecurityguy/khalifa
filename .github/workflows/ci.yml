@@ -181,11 +181,7 @@ jobs:
       - name: Install all workspace deps
         run: npm ci --workspaces
 
-      - name: Build API service
-        working-directory: api-service
-        run: npm run build
-
-      - name: Build Risk Engine
+      - name: Build Risk Engine (must build first — other packages import it)
         working-directory: packages/risk-engine
         run: npm run build
 
@@ -203,6 +199,10 @@ jobs:
 
       - name: Build Graph Writer
         working-directory: lambdas/graph-writer
+        run: npm run build
+
+      - name: Build API service
+        working-directory: api-service
         run: npm run build
 
       - name: Build UI
