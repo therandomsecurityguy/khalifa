@@ -832,9 +832,7 @@ async function cacheManagedPolicyDocument(
   if (cache.has(policyArn)) return;
 
   try {
-    const versions = await client.send(
-      new ListPolicyVersionsCommand({ PolicyArn: policyArn })
-    );
+    const versions = await client.send(new ListPolicyVersionsCommand({ PolicyArn: policyArn }));
     const defaultVersion = versions.Versions?.find((v: any) => v.IsDefaultVersion);
     if (!defaultVersion?.VersionId) return;
 
