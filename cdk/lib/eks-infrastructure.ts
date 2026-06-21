@@ -10,6 +10,8 @@ export interface SecurityGraphEksStackProps extends cdk.StackProps {
   vpcId: string;
   neptuneEndpoint: string;
   issuesTableName: string;
+  evidenceTableName: string;
+  reportsTableName: string;
   certificateArn: string;
   cognitoUserPoolId: string;
   cognitoClientId: string;
@@ -70,6 +72,10 @@ export class SecurityGraphEksStack extends cdk.Stack {
         resources: [
           `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.issuesTableName}`,
           `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.issuesTableName}/index/*`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.evidenceTableName}`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.evidenceTableName}/index/*`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.reportsTableName}`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.reportsTableName}/index/*`,
         ],
       })
     );
@@ -115,10 +121,15 @@ export class SecurityGraphEksStack extends cdk.Stack {
           'dynamodb:Scan',
           'dynamodb:PutItem',
           'dynamodb:UpdateItem',
+          'dynamodb:BatchWriteItem',
         ],
         resources: [
           `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.issuesTableName}`,
           `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.issuesTableName}/index/*`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.evidenceTableName}`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.evidenceTableName}/index/*`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.reportsTableName}`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${props.reportsTableName}/index/*`,
         ],
       })
     );

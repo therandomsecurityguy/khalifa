@@ -6,6 +6,11 @@ metadata:
 data:
   NEPTUNE_ENDPOINT: "neptune-cluster.us-east-1.amazonaws.com"
   ISSUES_TABLE: "SecurityIssues"
+  EVIDENCE_TABLE: "ComplianceEvidence"
+  REPORTS_TABLE: "ComplianceReports"
+  COGNITO_USER_POOL_ID: ""
+  COGNITO_CLIENT_ID: ""
+  COGNITO_REGION: "us-east-1"
   LOG_LEVEL: "info"
   API_PORT: "8080"
   RULE_RUNNER_SCHEDULE: "0 */6 * * *"

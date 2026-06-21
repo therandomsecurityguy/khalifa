@@ -1,15 +1,16 @@
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
-import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
 import {
   EC2Client,
   paginateDescribeInstances,
-  DescribeSecurityGroupsCommand,
   DescribeVpcsCommand,
   DescribeVpcEndpointsCommand,
   DescribeNetworkAclsCommand,
   DescribeRouteTablesCommand,
   DescribeTransitGatewaysCommand,
 } from '@aws-sdk/client-ec2';
+import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-tagging-api';
+import { ElasticLoadBalancingV2Client } from '@aws-sdk/client-elastic-load-balancing-v2';
+import { ECRClient } from '@aws-sdk/client-ecr';
 import {
   S3Client,
   ListBucketsCommand,
@@ -25,18 +26,18 @@ import {
   ListRolesCommand,
   ListPoliciesCommand,
   GetAccountPasswordPolicyCommand,
-  GetCredentialReportCommand,
   ListGroupsCommand,
   ListGroupPoliciesCommand,
   GetGroupPolicyCommand,
   ListAttachedRolePoliciesCommand,
-  ListAttachedUserPoliciesCommand,
   ListAttachedGroupPoliciesCommand,
-  GetPolicyVersionCommand,
   ListRolePoliciesCommand,
   GetRolePolicyCommand,
+  ListPolicyVersionsCommand,
+  GetPolicyVersionCommand,
   ListUserPoliciesCommand,
   GetUserPolicyCommand,
+  ListAttachedUserPoliciesCommand,
 } from '@aws-sdk/client-iam';
 import { KMSClient, ListKeysCommand, DescribeKeyCommand } from '@aws-sdk/client-kms';
 import { RDSClient, DescribeDBInstancesCommand } from '@aws-sdk/client-rds';
@@ -50,7 +51,6 @@ import {
 import {
   ConfigServiceClient,
   DescribeConfigurationRecordersCommand,
-  DescribeDeliveryChannelsCommand,
   DescribeConfigRulesCommand,
 } from '@aws-sdk/client-config-service';
 import {
@@ -69,18 +69,9 @@ import {
   GetRestApisCommand,
   GetStagesCommand,
 } from '@aws-sdk/client-api-gateway';
-import {
-  LambdaClient,
-  ListFunctionsCommand,
-  ListAliasesCommand,
-  ListEventSourceMappingsCommand,
-} from '@aws-sdk/client-lambda';
+import { LambdaClient, ListFunctionsCommand, ListAliasesCommand } from '@aws-sdk/client-lambda';
 import { SFNClient, ListStateMachinesCommand } from '@aws-sdk/client-sfn';
-import {
-  EventBridgeClient,
-  ListEventBusesCommand,
-  ListRulesCommand,
-} from '@aws-sdk/client-eventbridge';
+import { EventBridgeClient, ListEventBusesCommand } from '@aws-sdk/client-eventbridge';
 import { DynamoDBClient, ListTablesCommand, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { ElastiCacheClient, DescribeCacheClustersCommand } from '@aws-sdk/client-elasticache';
 import {
@@ -102,16 +93,39 @@ import {
 } from '@aws-sdk/client-backup';
 import type { GraphNode, GraphEdge } from '../shared/types';
 import { Logger } from '../shared/types';
+import { fetchTagsForArns, extractCommonProperties, type TagMap } from './src/tags';
+import {
+  collectSecurityGroups,
+  collectInternetGateways,
+  collectNatGateways,
+  collectSubnets,
+  buildInternetNode,
+  INTERNET_NODE_ID,
+} from './src/network';
+import { collectLoadBalancers } from './src/load-balancers';
+import { collectContainerImages } from './src/containers';
+import { collectCrossAccountTrust } from './src/cross-account';
+import { buildExposureContext, applyExposureToNodes, type ExposureContext } from './src/exposure';
 
 const logger = new Logger('collector');
-const stsClient = new STSClient({ region: 'us-east-1' });
+const stsClient = new STSClient({ region: process.env.AWS_REGION || 'us-east-1' });
+
+const INTERNET_EXPOSED_LABELS = new Set([
+  'Ec2Instance',
+  'LambdaFunction',
+  'RdsInstance',
+  'RedshiftCluster',
+  'OpenSearchDomain',
+  'ApiGateway',
+  'LoadBalancer',
+]);
 
 interface CollectorEvent {
   accountId: string;
 }
 
-function createClients(credentials?: any) {
-  const baseConfig = { region: 'us-east-1' };
+function createClients(region: string, credentials?: any) {
+  const baseConfig = { region };
   const credConfig = credentials
     ? {
         credentials: {
@@ -147,6 +161,9 @@ function createClients(credentials?: any) {
     secretsManagerClient: new SecretsManagerClient({ ...baseConfig, ...credConfig }),
     ssmClient: new SSMClient({ ...baseConfig, ...credConfig }),
     backupClient: new BackupClient({ ...baseConfig, ...credConfig }),
+    elbV2Client: new ElasticLoadBalancingV2Client({ ...baseConfig, ...credConfig }),
+    ecrClient: new ECRClient({ ...baseConfig, ...credConfig }),
+    taggingClient: new ResourceGroupsTaggingAPIClient({ ...baseConfig, ...credConfig }),
   };
 }
 
@@ -158,11 +175,12 @@ export const handler = async (
 
   const mockMode = process.env.MOCK_MODE === 'true';
   const masterAccountId = process.env.MASTER_ACCOUNT_ID;
+  const region = process.env.AWS_REGION || 'us-east-1';
 
   let clients: ReturnType<typeof createClients>;
 
   if (mockMode || accountId === masterAccountId) {
-    clients = createClients();
+    clients = createClients(region);
   } else {
     const roleArn = `arn:aws:iam::${accountId}:role/SecurityGraphCollectorRole`;
     const assumedRole = await stsClient.send(
@@ -175,7 +193,7 @@ export const handler = async (
 
     if (!assumedRole.Credentials) throw new Error('Failed to assume role');
 
-    clients = createClients(assumedRole.Credentials);
+    clients = createClients(region, assumedRole.Credentials);
   }
 
   const {
@@ -202,12 +220,17 @@ export const handler = async (
     secretsManagerClient,
     ssmClient,
     backupClient,
+    elbV2Client,
+    ecrClient,
+    taggingClient,
   } = clients;
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
-  const ec2Data = await collectEc2(ec2Client, accountId);
+  nodes.push(buildInternetNode(accountId));
+
+  const ec2Data = await collectEc2(ec2Client, accountId, region);
   nodes.push(...ec2Data.nodes);
   edges.push(...ec2Data.edges);
 
@@ -223,35 +246,35 @@ export const handler = async (
   nodes.push(...kmsData.nodes);
   edges.push(...kmsData.edges);
 
-  const rdsData = await collectRds(rdsClient, accountId);
+  const rdsData = await collectRds(rdsClient, accountId, region);
   nodes.push(...rdsData.nodes);
   edges.push(...rdsData.edges);
 
-  const eksData = await collectEks(eksClient, accountId);
+  const eksData = await collectEks(eksClient, accountId, region);
   nodes.push(...eksData.nodes);
   edges.push(...eksData.edges);
 
-  const shData = await collectSecurityHub(securityHubClient, accountId);
+  const shData = await collectSecurityHub(securityHubClient, accountId, region);
   nodes.push(...shData.nodes);
   edges.push(...shData.edges);
 
-  const cloudTrailData = await collectCloudTrail(cloudTrailClient, accountId);
+  const cloudTrailData = await collectCloudTrail(cloudTrailClient, accountId, region);
   nodes.push(...cloudTrailData.nodes);
   edges.push(...cloudTrailData.edges);
 
-  const configData = await collectConfig(configClient, accountId);
+  const configData = await collectConfig(configClient, accountId, region);
   nodes.push(...configData.nodes);
   edges.push(...configData.edges);
 
-  const guardDutyData = await collectGuardDuty(guardDutyClient, accountId);
+  const guardDutyData = await collectGuardDuty(guardDutyClient, accountId, region);
   nodes.push(...guardDutyData.nodes);
   edges.push(...guardDutyData.edges);
 
-  const accessAnalyzerData = await collectAccessAnalyzer(accessAnalyzerClient, accountId);
+  const accessAnalyzerData = await collectAccessAnalyzer(accessAnalyzerClient, accountId, region);
   nodes.push(...accessAnalyzerData.nodes);
   edges.push(...accessAnalyzerData.edges);
 
-  const networkData = await collectNetwork(ec2Client, route53Client, accountId);
+  const networkData = await collectNetwork(ec2Client, route53Client, accountId, region);
   nodes.push(...networkData.nodes);
   edges.push(...networkData.edges);
 
@@ -260,7 +283,8 @@ export const handler = async (
     lambdaClient,
     sfnClient,
     eventBridgeClient,
-    accountId
+    accountId,
+    region
   );
   nodes.push(...serverlessData.nodes);
   edges.push(...serverlessData.edges);
@@ -270,24 +294,95 @@ export const handler = async (
     elasticacheClient,
     opensearchClient,
     redshiftClient,
-    accountId
+    accountId,
+    region
   );
   nodes.push(...datastoreData.nodes);
   edges.push(...datastoreData.edges);
 
-  const secretsData = await collectSecrets(secretsManagerClient, ssmClient, accountId);
+  const secretsData = await collectSecrets(secretsManagerClient, ssmClient, accountId, region);
   nodes.push(...secretsData.nodes);
   edges.push(...secretsData.edges);
 
-  const backupData = await collectBackup(backupClient, accountId);
+  const backupData = await collectBackup(backupClient, accountId, region);
   nodes.push(...backupData.nodes);
   edges.push(...backupData.edges);
 
-  logger.info(`Collection complete: ${nodes.length} nodes, ${edges.length} edges`);
-  return { nodes, edges };
+  const subnetData = await collectSubnets(ec2Client, accountId, region);
+  nodes.push(...subnetData.nodes);
+  edges.push(...subnetData.edges);
+
+  const sgData = await collectSecurityGroups(ec2Client, accountId, region, new Map());
+  nodes.push(...sgData.nodes);
+  edges.push(...sgData.edges);
+
+  const igwData = await collectInternetGateways(ec2Client, accountId, region, new Map());
+  nodes.push(...igwData.nodes);
+  edges.push(...igwData.edges);
+
+  const natData = await collectNatGateways(ec2Client, accountId, region, new Map());
+  nodes.push(...natData.nodes);
+  edges.push(...natData.edges);
+
+  const lbData = await collectLoadBalancers(elbV2Client, accountId, region, new Map());
+  nodes.push(...lbData.nodes);
+  edges.push(...lbData.edges);
+
+  const ecrData = await collectContainerImages(ecrClient, accountId, region, new Map());
+  nodes.push(...ecrData.nodes);
+  edges.push(...ecrData.edges);
+
+  const crossAcctData = await collectCrossAccountTrust(iamClient, accountId, new Map());
+  nodes.push(...crossAcctData.nodes);
+  edges.push(...crossAcctData.edges);
+
+  const exposureCtx: ExposureContext = buildExposureContext(nodes);
+  const exposedNodes = applyExposureToNodes(nodes, exposureCtx);
+
+  const tagArns = exposedNodes
+    .filter(
+      (n) =>
+        n.id &&
+        !n.id.startsWith(INTERNET_NODE_ID) &&
+        !n.id.startsWith('arn:aws:khalifa:external-account:')
+    )
+    .map((n) => n.id);
+  let tagsByArn = new Map<string, TagMap>();
+  try {
+    tagsByArn = await fetchTagsForArns(taggingClient, tagArns);
+  } catch (e) {
+    logger.warn(`Tag fetch failed, continuing without tags: ${e}`);
+  }
+
+  const finalNodes: GraphNode[] = exposedNodes.map((node) => {
+    if (!INTERNET_EXPOSED_LABELS.has(node.label) && node.label !== 'Ec2Instance') {
+      const tags = tagsByArn.get(node.id);
+      if (!tags) return node;
+      const tagProps = extractCommonProperties(tags);
+      return {
+        ...node,
+        properties: {
+          ...node.properties,
+          ...tagProps,
+        },
+      };
+    }
+    const tags = tagsByArn.get(node.id);
+    const tagProps = extractCommonProperties(tags);
+    return {
+      ...node,
+      properties: {
+        ...node.properties,
+        ...tagProps,
+      },
+    };
+  });
+
+  logger.info(`Collection complete: ${finalNodes.length} nodes, ${edges.length} edges`);
+  return { nodes: finalNodes, edges };
 };
 
-async function collectEc2(client: EC2Client, accountId: string) {
+async function collectEc2(client: EC2Client, accountId: string, region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -295,7 +390,6 @@ async function collectEc2(client: EC2Client, accountId: string) {
   for await (const page of paginator) {
     for (const reservation of page.Reservations || []) {
       for (const instance of reservation.Instances || []) {
-        const region = instance.Placement?.AvailabilityZone?.slice(0, -1) || 'us-east-1';
         const instanceArn = `arn:aws:ec2:${region}:${accountId}:instance/${instance.InstanceId}`;
 
         nodes.push({
@@ -422,7 +516,6 @@ async function collectIam(client: IAMClient, accountId: string) {
   const policyDocumentCache = new Map<string, string>();
 
   const users = await client.send(new ListUsersCommand({}));
-  const userPolicies = new Map<string, string[]>();
   for (const user of users.Users || []) {
     const userArn = `arn:aws:iam::${accountId}:user/${user.UserName}`;
     nodes.push({
@@ -739,10 +832,8 @@ async function cacheManagedPolicyDocument(
   if (cache.has(policyArn)) return;
 
   try {
-    const versions = await client.send(
-      new (await import('@aws-sdk/client-iam')).ListPolicyVersionsCommand({ PolicyArn: policyArn })
-    );
-    const defaultVersion = versions.Versions?.find((v) => v.IsDefaultVersion);
+    const versions = await client.send(new ListPolicyVersionsCommand({ PolicyArn: policyArn }));
+    const defaultVersion = versions.Versions?.find((v: any) => v.IsDefaultVersion);
     if (!defaultVersion?.VersionId) return;
 
     const versionDoc = await client.send(
@@ -840,7 +931,7 @@ function parseTrustPolicy(
   try {
     const doc = JSON.parse(trustPolicyJson);
     const statements = Array.isArray(doc.Statement) ? doc.Statement : [doc.Statement];
-    statements.forEach((stmt: any, index: number) => {
+    statements.forEach((stmt: any, _index: number) => {
       if (stmt.Effect !== 'Allow') return;
       const principals = stmt.Principal || {};
       const principalEntries = Object.entries(principals) as [string, string | string[]][];
@@ -910,13 +1001,13 @@ async function collectKms(client: KMSClient, accountId: string) {
   return { nodes, edges };
 }
 
-async function collectRds(client: RDSClient, accountId: string) {
+async function collectRds(client: RDSClient, accountId: string, region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
   const dbs = await client.send(new DescribeDBInstancesCommand({}));
   for (const db of dbs.DBInstances || []) {
-    const dbArn = `arn:aws:rds:${db.AvailabilityZone?.slice(0, -1) || 'us-east-1'}:${accountId}:db:${db.DBInstanceIdentifier}`;
+    const dbArn = `arn:aws:rds:${region}:${accountId}:db:${db.DBInstanceIdentifier}`;
     nodes.push({
       id: dbArn,
       label: 'RdsInstance',
@@ -938,7 +1029,7 @@ async function collectRds(client: RDSClient, accountId: string) {
   return { nodes, edges };
 }
 
-async function collectEks(client: EKSClient, accountId: string) {
+async function collectEks(client: EKSClient, accountId: string, _region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -968,7 +1059,7 @@ async function collectEks(client: EKSClient, accountId: string) {
   return { nodes, edges };
 }
 
-async function collectSecurityHub(client: SecurityHubClient, accountId: string) {
+async function collectSecurityHub(client: SecurityHubClient, accountId: string, _region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -1002,7 +1093,7 @@ async function collectSecurityHub(client: SecurityHubClient, accountId: string) 
   return { nodes, edges };
 }
 
-async function collectCloudTrail(client: CloudTrailClient, accountId: string) {
+async function collectCloudTrail(client: CloudTrailClient, accountId: string, region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -1010,7 +1101,7 @@ async function collectCloudTrail(client: CloudTrailClient, accountId: string) {
     const trails = await client.send(new DescribeTrailsCommand({}));
     for (const trail of trails.trailList || []) {
       const trailArn =
-        trail.TrailARN || `arn:aws:cloudtrail:us-east-1:${accountId}:trail/${trail.Name}`;
+        trail.TrailARN || `arn:aws:cloudtrail:${region}:${accountId}:trail/${trail.Name}`;
       nodes.push({
         id: trailArn,
         label: 'CloudTrail',
@@ -1052,14 +1143,14 @@ async function collectCloudTrail(client: CloudTrailClient, accountId: string) {
   return { nodes, edges };
 }
 
-async function collectConfig(client: ConfigServiceClient, accountId: string) {
+async function collectConfig(client: ConfigServiceClient, accountId: string, region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
   try {
     const recorders = await client.send(new DescribeConfigurationRecordersCommand({}));
     for (const recorder of recorders.ConfigurationRecorders || []) {
-      const recorderArn = `arn:aws:config:us-east-1:${accountId}:config-recorder/${recorder.name}`;
+      const recorderArn = `arn:aws:config:${region}:${accountId}:config-recorder/${recorder.name}`;
       nodes.push({
         id: recorderArn,
         label: 'ConfigRecorder',
@@ -1079,7 +1170,7 @@ async function collectConfig(client: ConfigServiceClient, accountId: string) {
     for (const rule of rules.ConfigRules || []) {
       const ruleArn =
         rule.ConfigRuleArn ||
-        `arn:aws:config:us-east-1:${accountId}:config-rule/${rule.ConfigRuleName}`;
+        `arn:aws:config:${region}:${accountId}:config-rule/${rule.ConfigRuleName}`;
       nodes.push({
         id: ruleArn,
         label: 'ConfigRule',
@@ -1102,7 +1193,7 @@ async function collectConfig(client: ConfigServiceClient, accountId: string) {
   return { nodes, edges };
 }
 
-async function collectGuardDuty(client: GuardDutyClient, accountId: string) {
+async function collectGuardDuty(client: GuardDutyClient, accountId: string, region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -1110,7 +1201,7 @@ async function collectGuardDuty(client: GuardDutyClient, accountId: string) {
     const detectors = await client.send(new ListDetectorsCommand({}));
     for (const detectorId of detectors.DetectorIds || []) {
       const detector = await client.send(new GetDetectorCommand({ DetectorId: detectorId }));
-      const detectorArn = `arn:aws:guardduty:us-east-1:${accountId}:detector/${detectorId}`;
+      const detectorArn = `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}`;
       nodes.push({
         id: detectorArn,
         label: 'GuardDutyDetector',
@@ -1131,7 +1222,11 @@ async function collectGuardDuty(client: GuardDutyClient, accountId: string) {
   return { nodes, edges };
 }
 
-async function collectAccessAnalyzer(client: AccessAnalyzerClient, accountId: string) {
+async function collectAccessAnalyzer(
+  client: AccessAnalyzerClient,
+  accountId: string,
+  region: string
+) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -1139,7 +1234,7 @@ async function collectAccessAnalyzer(client: AccessAnalyzerClient, accountId: st
     const analyzers = await client.send(new ListAnalyzersCommand({ type: 'ACCOUNT' }));
     for (const analyzer of analyzers.analyzers || []) {
       const analyzerArn =
-        analyzer.arn || `arn:aws:access-analyzer:us-east-1:${accountId}:analyzer/${analyzer.name}`;
+        analyzer.arn || `arn:aws:access-analyzer:${region}:${accountId}:analyzer/${analyzer.name}`;
       nodes.push({
         id: analyzerArn,
         label: 'AccessAnalyzer',
@@ -1160,7 +1255,7 @@ async function collectAccessAnalyzer(client: AccessAnalyzerClient, accountId: st
         );
         for (const finding of findings.findings || []) {
           const findingArn = finding.id
-            ? `arn:aws:access-analyzer:us-east-1:${accountId}:finding/${finding.id}`
+            ? `arn:aws:access-analyzer:${region}:${accountId}:finding/${finding.id}`
             : `${analyzerArn}/finding/${Date.now()}`;
           nodes.push({
             id: findingArn,
@@ -1189,7 +1284,8 @@ async function collectAccessAnalyzer(client: AccessAnalyzerClient, accountId: st
 async function collectNetwork(
   ec2Client: EC2Client,
   route53Client: Route53Client,
-  accountId: string
+  accountId: string,
+  region: string
 ) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -1197,7 +1293,7 @@ async function collectNetwork(
   try {
     const vpcs = await ec2Client.send(new DescribeVpcsCommand({}));
     for (const vpc of vpcs.Vpcs || []) {
-      const vpcArn = `arn:aws:ec2:us-east-1:${accountId}:vpc/${vpc.VpcId}`;
+      const vpcArn = `arn:aws:ec2:${region}:${accountId}:vpc/${vpc.VpcId}`;
       nodes.push({
         id: vpcArn,
         label: 'Vpc',
@@ -1220,7 +1316,7 @@ async function collectNetwork(
           })
         );
         for (const ep of endpoints.VpcEndpoints || []) {
-          const epArn = `arn:aws:ec2:us-east-1:${accountId}:vpc-endpoint/${ep.VpcEndpointId}`;
+          const epArn = `arn:aws:ec2:${region}:${accountId}:vpc-endpoint/${ep.VpcEndpointId}`;
           nodes.push({
             id: epArn,
             label: 'VpcEndpoint',
@@ -1245,7 +1341,7 @@ async function collectNetwork(
           })
         );
         for (const acl of acls.NetworkAcls || []) {
-          const aclArn = `arn:aws:ec2:us-east-1:${accountId}:network-acl/${acl.NetworkAclId}`;
+          const aclArn = `arn:aws:ec2:${region}:${accountId}:network-acl/${acl.NetworkAclId}`;
           nodes.push({
             id: aclArn,
             label: 'NetworkAcl',
@@ -1269,7 +1365,7 @@ async function collectNetwork(
           })
         );
         for (const rtb of rtbs.RouteTables || []) {
-          const rtbArn = `arn:aws:ec2:us-east-1:${accountId}:route-table/${rtb.RouteTableId}`;
+          const rtbArn = `arn:aws:ec2:${region}:${accountId}:route-table/${rtb.RouteTableId}`;
           nodes.push({
             id: rtbArn,
             label: 'RouteTable',
@@ -1289,7 +1385,7 @@ async function collectNetwork(
 
     const tgws = await ec2Client.send(new DescribeTransitGatewaysCommand({}));
     for (const tgw of tgws.TransitGateways || []) {
-      const tgwArn = `arn:aws:ec2:us-east-1:${accountId}:transit-gateway/${tgw.TransitGatewayId}`;
+      const tgwArn = `arn:aws:ec2:${region}:${accountId}:transit-gateway/${tgw.TransitGatewayId}`;
       nodes.push({
         id: tgwArn,
         label: 'TransitGateway',
@@ -1333,7 +1429,8 @@ async function collectServerless(
   lambdaClient: LambdaClient,
   sfnClient: SFNClient,
   eventBridgeClient: EventBridgeClient,
-  accountId: string
+  accountId: string,
+  region: string
 ) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -1341,7 +1438,7 @@ async function collectServerless(
   try {
     const apis = await apiGatewayClient.send(new GetRestApisCommand({}));
     for (const api of apis.items || []) {
-      const apiArn = `arn:aws:apigateway:us-east-1::/restapis/${api.id}`;
+      const apiArn = `arn:aws:apigateway:${region}::/restapis/${api.id}`;
       nodes.push({
         id: apiArn,
         label: 'ApiGateway',
@@ -1384,7 +1481,7 @@ async function collectServerless(
     const functions = await lambdaClient.send(new ListFunctionsCommand({}));
     for (const fn of functions.Functions || []) {
       const fnArn =
-        fn.FunctionArn || `arn:aws:lambda:us-east-1:${accountId}:function:${fn.FunctionName}`;
+        fn.FunctionArn || `arn:aws:lambda:${region}:${accountId}:function:${fn.FunctionName}`;
       nodes.push({
         id: fnArn,
         label: 'LambdaFunction',
@@ -1435,7 +1532,7 @@ async function collectServerless(
     const stateMachines = await sfnClient.send(new ListStateMachinesCommand({}));
     for (const sm of stateMachines.stateMachines || []) {
       const smArn =
-        sm.stateMachineArn || `arn:aws:states:us-east-1:${accountId}:stateMachine:${sm.name}`;
+        sm.stateMachineArn || `arn:aws:states:${region}:${accountId}:stateMachine:${sm.name}`;
       nodes.push({
         id: smArn,
         label: 'StateMachine',
@@ -1457,7 +1554,7 @@ async function collectServerless(
   try {
     const buses = await eventBridgeClient.send(new ListEventBusesCommand({}));
     for (const bus of buses.EventBuses || []) {
-      const busArn = bus.Arn || `arn:aws:events:us-east-1:${accountId}:event-bus/${bus.Name}`;
+      const busArn = bus.Arn || `arn:aws:events:${region}:${accountId}:event-bus/${bus.Name}`;
       nodes.push({
         id: busArn,
         label: 'EventBus',
@@ -1482,7 +1579,8 @@ async function collectDataStores(
   elasticacheClient: ElastiCacheClient,
   opensearchClient: OpenSearchClient,
   redshiftClient: RedshiftClient,
-  accountId: string
+  accountId: string,
+  region: string
 ) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -1494,7 +1592,7 @@ async function collectDataStores(
         const table = await dynamoDBClient.send(new DescribeTableCommand({ TableName: tableName }));
         if (table.Table) {
           const t = table.Table;
-          const tableArn = `arn:aws:dynamodb:us-east-1:${accountId}:table/${t.TableName}`;
+          const tableArn = `arn:aws:dynamodb:${region}:${accountId}:table/${t.TableName}`;
           nodes.push({
             id: tableArn,
             label: 'DynamoDBTable',
@@ -1526,7 +1624,7 @@ async function collectDataStores(
       new DescribeCacheClustersCommand({ ShowCacheNodeInfo: true })
     );
     for (const cluster of clusters.CacheClusters || []) {
-      const clusterArn = `arn:aws:elasticache:us-east-1:${accountId}:cluster:${cluster.CacheClusterId}`;
+      const clusterArn = `arn:aws:elasticache:${region}:${accountId}:cluster:${cluster.CacheClusterId}`;
       nodes.push({
         id: clusterArn,
         label: 'ElastiCacheCluster',
@@ -1558,7 +1656,7 @@ async function collectDataStores(
         );
         if (desc.DomainStatus) {
           const d = desc.DomainStatus;
-          const domainArn = d.ARN || `arn:aws:es:us-east-1:${accountId}:domain/${d.DomainName}`;
+          const domainArn = d.ARN || `arn:aws:es:${region}:${accountId}:domain/${d.DomainName}`;
           nodes.push({
             id: domainArn,
             label: 'OpenSearchDomain',
@@ -1588,7 +1686,7 @@ async function collectDataStores(
     const clusters = await redshiftClient.send(new DescribeClustersCommand({}));
     for (const cluster of clusters.Clusters || []) {
       const clusterArn = cluster.ClusterIdentifier
-        ? `arn:aws:redshift:us-east-1:${accountId}:cluster:${cluster.ClusterIdentifier}`
+        ? `arn:aws:redshift:${region}:${accountId}:cluster:${cluster.ClusterIdentifier}`
         : '';
       nodes.push({
         id: clusterArn,
@@ -1618,7 +1716,8 @@ async function collectDataStores(
 async function collectSecrets(
   secretsManagerClient: SecretsManagerClient,
   ssmClient: SSMClient,
-  accountId: string
+  accountId: string,
+  region: string
 ) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -1631,7 +1730,7 @@ async function collectSecrets(
           new DescribeSecretCommand({ SecretId: secret.ARN || secret.Name })
         );
         const secretArn =
-          desc.ARN || `arn:aws:secretsmanager:us-east-1:${accountId}:secret:${secret.Name}`;
+          desc.ARN || `arn:aws:secretsmanager:${region}:${accountId}:secret:${secret.Name}`;
         nodes.push({
           id: secretArn,
           label: 'Secret',
@@ -1658,7 +1757,7 @@ async function collectSecrets(
   try {
     const params = await ssmClient.send(new DescribeParametersCommand({}));
     for (const param of params.Parameters || []) {
-      const paramArn = `arn:aws:ssm:us-east-1:${accountId}:parameter${param.Name}`;
+      const paramArn = `arn:aws:ssm:${region}:${accountId}:parameter${param.Name}`;
       nodes.push({
         id: paramArn,
         label: 'Parameter',
@@ -1682,7 +1781,7 @@ async function collectSecrets(
   return { nodes, edges };
 }
 
-async function collectBackup(backupClient: BackupClient, accountId: string) {
+async function collectBackup(backupClient: BackupClient, accountId: string, region: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -1691,7 +1790,7 @@ async function collectBackup(backupClient: BackupClient, accountId: string) {
     for (const vault of vaults.BackupVaultList || []) {
       const vaultArn =
         vault.BackupVaultArn ||
-        `arn:aws:backup:us-east-1:${accountId}:backup-vault:${vault.BackupVaultName}`;
+        `arn:aws:backup:${region}:${accountId}:backup-vault:${vault.BackupVaultName}`;
       nodes.push({
         id: vaultArn,
         label: 'BackupVault',
@@ -1715,7 +1814,7 @@ async function collectBackup(backupClient: BackupClient, accountId: string) {
     for (const plan of plans.BackupPlansList || []) {
       const planArn =
         plan.BackupPlanArn ||
-        `arn:aws:backup:us-east-1:${accountId}:backup-plan:${plan.BackupPlanId}`;
+        `arn:aws:backup:${region}:${accountId}:backup-plan:${plan.BackupPlanId}`;
       nodes.push({
         id: planArn,
         label: 'BackupPlan',

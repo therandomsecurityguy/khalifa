@@ -51,11 +51,11 @@ export async function findAllAttackPaths(req: Request, res: Response): Promise<v
     await neptuneClient.connect();
 
     const query = `
-      g.V().has('isInternetExposed', true)
+      g.V().has('is_internet_exposed', true)
         .as('start')
         .repeat(
           out().simplePath()
-        ).times(${maxLen})
+        ).times(P.maxLen)
         .until(
           has('crown_jewel', true)
         )
@@ -65,7 +65,7 @@ export async function findAllAttackPaths(req: Request, res: Response): Promise<v
           .by(valueMap(true))
     `;
 
-    const results = await neptuneClient.executeQuery(query);
+    const results = await neptuneClient.executeQuery(query, { maxLen });
 
     const paths = (results as NeptunePathResult[]).map((result) => {
       const nodes: GraphVertex[] = [];

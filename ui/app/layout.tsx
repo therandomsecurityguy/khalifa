@@ -1,14 +1,18 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
+import ErrorBoundary from './error-boundary';
 
 export const metadata: Metadata = {
-  title: 'Security Graph',
-  description: 'Wiz-like internal security graph and risk engine',
+  title: 'Khalifa - Security Graph',
+  description: 'AWS security graph and risk engine',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </body>
     </html>
   );
 }

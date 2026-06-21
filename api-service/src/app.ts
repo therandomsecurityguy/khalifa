@@ -11,6 +11,9 @@ import {
   getComplianceReport,
   getDriftReport,
 } from './routes/compliance';
+import { validateGremlinSelectors, validateArnParam } from './middleware/gremlin-validator';
+import { authenticate } from './middleware/auth';
+import { requireViewer } from './middleware/rbac';
 import {
   getEffectivePermissions,
   getEscalationPaths,
@@ -27,30 +30,35 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-app.get('/issues', listIssues);
-app.get('/issues/counts', getIssueCounts);
-app.get('/issues/stats', getIssueStats);
-app.get('/issues/:id', getIssue);
+app.use(validateGremlinSelectors);
+app.use('/resources/:arn', validateArnParam);
 
-app.get('/attack-paths', findAttackPath);
-app.get('/attack-paths/all', findAllAttackPaths);
+app.use(authenticate);
 
-app.get('/resources/:arn', getResource);
-app.get('/resources/search', searchResources);
-app.get('/resources/graph', getResourceGraph);
+app.get('/issues', requireViewer, listIssues);
+app.get('/issues/counts', requireViewer, getIssueCounts);
+app.get('/issues/stats', requireViewer, getIssueStats);
+app.get('/issues/:id', requireViewer, getIssue);
 
-app.get('/compliance/frameworks', listFrameworks);
-app.get('/compliance/frameworks/:framework', getFrameworkSummary);
-app.get('/compliance/frameworks/:framework/controls', getFrameworkControls);
-app.get('/compliance/frameworks/:framework/controls/:controlId', getControlDetails);
-app.get('/compliance/frameworks/:framework/report', getComplianceReport);
-app.get('/compliance/frameworks/:framework/drift', getDriftReport);
+app.get('/attack-paths', requireViewer, findAttackPath);
+app.get('/attack-paths/all', requireViewer, findAllAttackPaths);
 
-app.get('/identity/effective-permissions/:principal', getEffectivePermissions);
-app.get('/identity/escalation-paths', getEscalationPaths);
-app.get('/identity/unused-permissions', getUnusedPermissions);
-app.get('/identity/rightsizing/:principal', getRightsizingRecommendation);
-app.get('/identity/trust-graph', getTrustGraph);
+app.get('/resources/:arn', requireViewer, getResource);
+app.get('/resources/search', requireViewer, searchResources);
+app.get('/resources/graph', requireViewer, getResourceGraph);
+
+app.get('/compliance/frameworks', requireViewer, listFrameworks);
+app.get('/compliance/frameworks/:framework', requireViewer, getFrameworkSummary);
+app.get('/compliance/frameworks/:framework/controls', requireViewer, getFrameworkControls);
+app.get('/compliance/frameworks/:framework/controls/:controlId', requireViewer, getControlDetails);
+app.get('/compliance/frameworks/:framework/report', requireViewer, getComplianceReport);
+app.get('/compliance/frameworks/:framework/drift', requireViewer, getDriftReport);
+
+app.get('/identity/effective-permissions/:principal', requireViewer, getEffectivePermissions);
+app.get('/identity/escalation-paths', requireViewer, getEscalationPaths);
+app.get('/identity/unused-permissions', requireViewer, getUnusedPermissions);
+app.get('/identity/rightsizing/:principal', requireViewer, getRightsizingRecommendation);
+app.get('/identity/trust-graph', requireViewer, getTrustGraph);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);

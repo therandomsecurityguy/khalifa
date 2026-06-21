@@ -8,16 +8,20 @@ dist/
 build/
 .next/
 out/
+cdk/dist/
 
 # Lambda deployment packages
 *.zip
 
 # CDK
 cdk.out/
-*.js
-!jest.config.js
-!bin/**
-!lib/**
+
+# Test outputs
+coverage/
+*.log
+
+# TypeScript build info
+**/*.tsbuildinfo
 
 # IDE
 .vscode/
@@ -34,10 +38,6 @@ Thumbs.db
 .env.local
 .env.*.local
 
-# Test outputs
-coverage/
-*.log
-
 # Temporary files
 tmp/
 temp/
@@ -45,3 +45,13 @@ temp/
 
 # CloudWatch
 awslogs/
+
+# Compiled JS — keep source .ts, ignore .js (but allow config)
+*.js
+!jest.config.js
+!jest.setup.js
+!prettier.config.js
+!.eslintrc.js
+!*.config.js
+!bin/**
+!lib/**

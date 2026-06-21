@@ -114,7 +114,7 @@ docker build -t security-graph-api:latest .
 docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/security-graph-api:v1.0.0
 
 # Rule Runner (reuses risk-engine)
-cd ../lambdas/risk-engine
+cd ../packages/risk-engine
 npm install
 npm run build
 docker build -t security-graph-rule-runner:latest .
@@ -175,25 +175,27 @@ curl https://<alb-hostname>/compliance/frameworks
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health` | Health check |
-| `GET /issues` | List issues with filters |
-| `GET /issues/:id` | Get issue details with attack path |
-| `GET /issues/counts` | Get issue counts by severity |
-| `GET /issues/stats` | Get detailed statistics |
-| `GET /attack-paths?fromSelector=X&toSelector=Y` | Find attack paths |
-| `GET /resources/:arn` | Get resource with neighbors and issues |
-| `GET /resources/search?label=EC2Instance` | Search resources |
+| `GET /health` | Health check (unauthenticated) |
+| `GET /issues` | List issues with filters (Viewer+) |
+| `GET /issues/:id` | Get issue details with attack path (Viewer+) |
+| `GET /issues/counts` | Get issue counts by severity (Viewer+) |
+| `GET /issues/stats` | Get detailed statistics (Viewer+) |
+| `GET /attack-paths?fromSelector=X&toSelector=Y` | Find attack paths (Viewer+) |
+| `GET /resources/:arn` | Get resource with neighbors and issues (Viewer+) |
+| `GET /resources/search?label=EC2Instance` | Search resources (Viewer+) |
 
 ### Compliance
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /compliance/frameworks` | List available compliance frameworks |
-| `GET /compliance/:framework` | Get framework overview with control summaries |
-| `GET /compliance/:framework/controls` | List all controls for a framework |
-| `GET /compliance/:framework/controls/:controlId` | Get control details with evidence |
-| `GET /compliance/:framework/report` | Generate compliance report |
-| `GET /compliance/:framework/drift` | Detect configuration drift since last evaluation |
+| `GET /compliance/frameworks` | List available compliance frameworks (Viewer+) |
+| `GET /compliance/frameworks/:framework` | Get framework overview with control summaries (Viewer+) |
+| `GET /compliance/frameworks/:framework/controls` | List all controls for a framework (Viewer+) |
+| `GET /compliance/frameworks/:framework/controls/:controlId` | Get control details with evidence (Viewer+) |
+| `GET /compliance/frameworks/:framework/report` | Generate compliance report (Viewer+) |
+| `GET /compliance/frameworks/:framework/drift` | Detect configuration drift since last evaluation (Viewer+) |
+
+> All routes (except `/health`) require a valid Cognito bearer JWT. RBAC roles are mapped from Cognito groups: `khalifa-admin` → Admin, `khalifa-analyst` → Analyst, `khalifa-viewer` → Viewer.
 
 ### CIEM / Identity
 
@@ -348,6 +350,7 @@ khalifa/
 │   │   └── index.ts              # Lambda handler (Neptune read/write)
 │   ├── cloudtrail-analyzer/      # CloudTrail log analysis via Athena
 │   │   └── index.ts              # Athena queries → DynamoDB cache
+├── packages/
 │   └── risk-engine/              # Risk, attack-path, and compliance engine
 │       ├── types.ts              # Rule/Issue schemas
 │       ├── rules.ts              # Gremlin risk rules (10)

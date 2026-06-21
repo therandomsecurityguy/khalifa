@@ -1,11 +1,7 @@
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { EC2Client, DescribeSecurityGroupsCommand } from '@aws-sdk/client-ec2';
-import { S3Client, GetBucketPolicyCommand } from '@aws-sdk/client-s3';
-import { IAMClient, GetUserCommand, GetRoleCommand, GetPolicyCommand } from '@aws-sdk/client-iam';
-import { KMSClient, DescribeKeyCommand } from '@aws-sdk/client-kms';
-import { RDSClient, DescribeDBInstancesCommand } from '@aws-sdk/client-rds';
-import { EKSClient, DescribeClusterCommand } from '@aws-sdk/client-eks';
+import { IAMClient, GetUserCommand } from '@aws-sdk/client-iam';
 import type { GraphNode, GraphEdge } from '../shared/types';
 import { Logger } from '../shared/types';
 import { getSecret } from '../shared/secrets-client';
@@ -63,7 +59,7 @@ async function processEvent(
   masterAccountId: string
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
   const detail = event.detail || event;
-  const eventName = detail.eventName || '';
+  const _eventName = detail.eventName || '';
   const eventSource = detail.eventSource || '';
   const requestParameters = detail.requestParameters || {};
   const userIdentity = detail.userIdentity || {};

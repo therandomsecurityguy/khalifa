@@ -72,15 +72,20 @@ export async function searchResources(req: Request, res: Response): Promise<void
 
     await neptuneClient.connect();
 
-    let query = `g.V().has('label', '${label}')`;
+    const limitNum = limit ? parseInt(limit as string, 10) : 100;
+
+    let query = `g.V().has('label', P.label)`;
+    const bindings: Record<string, unknown> = { label, limit: limitNum };
 
     if (property && value) {
-      query += `.has('${property}', '${value}')`;
+      query += `.has(P.property, P.value)`;
+      bindings.property = property;
+      bindings.value = value;
     }
 
-    query += `.limit(${limit ? parseInt(limit as string, 10) : 100})`;
+    query += `.limit(P.limit)`;
 
-    const results = await neptuneClient.executeQuery(query);
+    const results = await neptuneClient.executeQuery(query, bindings);
 
     const resources: GraphVertex[] = (results as NeptuneRawVertex[]).map((result) => ({
       id: typeof result.id === 'object' ? result.id.value : result.id,
