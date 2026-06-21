@@ -14,9 +14,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system diagram and design.
 
 [](#1-what-is-khalifa)
 
-Khalifa is an agentless ingestion pipeline that sits between your AWS Organization and a Neptune-backed security graph. Every account, resource, and finding gets collected on a schedule, normalized into a graph model you own, and evaluated locally against risk rules, attack-path traversals, and CIEM effective-permission logic — with no model on the hot path.
+Khalifa is an agentless ingestion pipeline that sits between your AWS Organization and a Neptune-backed security graph. Every account, resource, and finding gets collected on a schedule, normalized into a graph model you own, and evaluated locally against risk rules, attack-path traversals, and CIEM effective-permission logic.
 
-**Why we built it:** Cloud estates grow faster than any team can review them. A misconfigured S3 bucket, an over-privileged IAM role, or a publicly exposed RDS instance turns into a real finding before anyone notices. Khalifa gives those resources a graph: collected, scored, joined to attack paths, and rendered as issues you can act on.
+**Why it was built:** Cloud estates grow faster than any team can review them. A misconfigured S3 bucket, an over-privileged IAM role, or a publicly exposed RDS instance turns into a real finding before anyone notices. Khalifa gives those resources a graph: collected, scored, joined to attack paths, and rendered as issues you can act on.
 
 **How it works:** Collectors run on an EventBridge schedule (or as Kubernetes CronJobs) and assume into every account in the AWS Organization via a cross-account role. They inventory 30+ AWS services, decompose IAM into policy statements + effective permissions, pull Security Hub and GuardDuty findings, and stream everything into Neptune. The Risk Engine then runs Gremlin traversals against the live graph to produce prioritized issues, attack paths, and compliance evaluations against CIS, SOC 2, and ISO 27001 — without ever moving data out of your AWS account.
 
