@@ -269,7 +269,7 @@ The compliance engine runs Gremlin evaluators that query the live graph, produce
 
 [](#3-architecture)
 
-[![Khalifa flow diagram](docs/khalifa-architecture.svg)](docs/khalifa-architecture.svg)
+[![Khalifa flow diagram](docs/khalifa-architecture.svg)](ARCHITECTURE.md) 
 
 **[Collector](lambdas/collector):** runs in a delegated admin account, assumes into every member account via the cross-account role, and inventories 30+ AWS services per pass. Writes raw resource nodes to Neptune.
 
