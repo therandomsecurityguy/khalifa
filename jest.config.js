@@ -1,4 +1,5 @@
 module.exports = {
+  globalSetup: '<rootDir>/jest.setup.js',
   projects: [
     {
       displayName: 'risk-engine',
