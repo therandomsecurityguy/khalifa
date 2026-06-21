@@ -4,7 +4,7 @@
   "description": "Security Graph API Service",
   "main": "dist/app.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -b ../packages/risk-engine && tsc",
     "start": "node dist/app.js",
     "dev": "ts-node src/app.ts",
     "lint": "eslint src --ext .ts",

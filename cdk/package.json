@@ -2,7 +2,7 @@
   "name": "khalifa-cdk",
   "version": "1.0.0",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -b ../packages/risk-engine && tsc",
     "watch": "tsc -w",
     "cdk": "cdk",
     "lint": "eslint lib bin --ext .ts",
