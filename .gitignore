@@ -1,47 +1,42 @@
-# Dependencies
-node_modules/
+
+!bin/**
+!jest.config.js
+!lib/**
+.DS_Store
+.env
+.env.*.local
+.env.local
+.idea/
+.next/
 .pnp
 .pnp.js
-
-# Build outputs
-dist/
-build/
-.next/
-out/
-
-# Lambda deployment packages
-*.zip
-
-# CDK
-cdk.out/
-*.js
-!jest.config.js
-!bin/**
-!lib/**
-
-# IDE
 .vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Environment files
-.env
-.env.local
-.env.*.local
-
-# Test outputs
-coverage/
+*.js
 *.log
-
-# Temporary files
-tmp/
-temp/
+*.swo
+*.swp
 *.tmp
-
+*.zip
+**/*.tsbuildinfo
+# Build outputs
+# CDK
 # CloudWatch
+# Dependencies
+# Environment files
+# IDE
+# Lambda deployment packages
+# OS
+# Temporary files
+# Test outputs
+api-service/tsconfig.tsbuildinfo
 awslogs/
+build/
+cdk.out/
+coverage/
+dist/
+node_modules/
+out/
+temp/
+Thumbs.db
+tmp/
+tsconfig.tsbuildinfo
