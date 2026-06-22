@@ -83,6 +83,8 @@ export async function collectSecurityGroups(
             account_id: accountId,
             direction: 'ingress',
             protocol: perm.IpProtocol,
+            port_from: perm.FromPort ?? 0,
+            port_to: perm.ToPort ?? 0,
             port_range: `${perm.FromPort || 0}-${perm.ToPort || 0}`,
             cidr_block: range.CidrIp,
           },

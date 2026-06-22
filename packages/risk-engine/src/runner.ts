@@ -332,7 +332,7 @@ export class RiskRuleRunner {
     const attackPathLength = path.length;
 
     for (const v of path) {
-      if (v.properties?.isInternetExposed === true) {
+      if (v.properties?.is_internet_exposed === true) {
         exposureLevel = 'internet';
       }
       if (

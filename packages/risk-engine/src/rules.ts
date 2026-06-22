@@ -17,13 +17,14 @@ export const riskRules: RiskRule[] = [
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
-      g.V().has('label', 'EC2Instance')
-        .has('isInternetExposed', true)
+      g.V().has('label', 'Ec2Instance')
+        .has('is_internet_exposed', true)
         .as('ec2')
         .out('HAS_IAM_ROLE')
         .as('iamRole')
-        .out('ALLOWS_ACCESS_TO')
-        .has('label', 'S3Bucket')
+        .out('ATTACHED_TO').has('label', 'IamPolicyDocument')
+        .out('CONTAINS').has('label', 'IamPolicyStatement')
+        .out('GRANTS').has('label', 'S3Bucket')
         .has('data_classification', 'restricted')
         .as('s3Bucket')
         .path()
@@ -41,19 +42,18 @@ export const riskRules: RiskRule[] = [
     id: 'RULE-002',
     name: 'Security Groups with 0.0.0.0/0 on SSH/RDP',
     description:
-      'Detects security groups that allow unrestricted SSH (port 22) or RDP (port 3389) access',
+      'Detects security group rules that allow unrestricted SSH (port 22) or RDP (port 3389) access to EC2 instances',
     severityHint: 'high',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
-      g.V().has('label', 'SecurityGroup')
-        .as('sg')
-        .out('ALLOWS_INGRESS')
-        .has('protocol', within('tcp', 'all'))
-        .has('portRange', within(22, 3389))
-        .has('cidrBlock', '0.0.0.0/0')
-        .in_('ATTACHED_TO')
-        .has('label', 'EC2Instance')
-        .as('ec2')
+      g.V().has('label', 'SecurityGroupRule')
+        .has('cidr_block', '0.0.0.0/0')
+        .has('protocol', within('tcp', '-1'))
+        .or(has('port_from', 22), has('port_from', 3389), has('port_from', 0))
+        .as('rule')
+        .out('PART_OF').has('label', 'SecurityGroup').as('sg')
+        .out('PROTECTS')
+        .out('ATTACHED_TO').has('label', 'Ec2Instance').as('ec2')
         .path()
           .by(valueMap(true))
     `,
@@ -69,7 +69,7 @@ export const riskRules: RiskRule[] = [
     id: 'RULE-003',
     name: 'Container Images with Critical CVEs on Internet-Exposed Workloads',
     description:
-      'Detects container images with critical severity CVEs running on pods or instances exposed to the internet',
+      'Detects container images with critical severity CVEs running on pods or instances exposed to the internet. Disabled until vulnerability scanning is implemented.',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -77,17 +77,17 @@ export const riskRules: RiskRule[] = [
         .as('image')
         .out('HAS_CVE')
         .has('severity', 'CRITICAL')
-        .has('cvssBaseScore', gte(9.0))
+        .has('cvss_base_score', gte(9.0))
         .as('cve')
         .in_('RUNS_ON')
-        .has('label', within('EC2Instance', 'KubernetesPod'))
-        .has('isInternetExposed', true)
+        .has('label', within('Ec2Instance', 'KubernetesPod'))
+        .has('is_internet_exposed', true)
         .as('workload')
         .path()
           .by(valueMap(true))
     `,
     ownerTeam: 'container-security',
-    enabled: true,
+    enabled: false,
     autoTicketConfig: {
       enabled: true,
       projectKey: 'SEC',
@@ -98,20 +98,16 @@ export const riskRules: RiskRule[] = [
     id: 'RULE-004',
     name: 'Over-Privileged IAM Roles with Internet-Reachable Workloads',
     description:
-      'Detects IAM roles with excessive permissions (many ALLOWS_ACCESS_TO edges) attached to internet-reachable EC2 or Lambda',
+      'Detects IAM roles with excessive attached policies connected to internet-reachable EC2 or Lambda',
     severityHint: 'high',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
-      g.V().has('label', 'IAMRole')
-        .as('role')
-        .out('ALLOWS_ACCESS_TO')
-        .count()
-        .as('permissionCount')
-        .filter(gt(50))
-        .in_('HAS_IAM_ROLE')
-        .has('label', within('EC2Instance', 'Lambda'))
-        .has('isInternetExposed', true)
+      g.V().has('label', within('Ec2Instance', 'LambdaFunction'))
+        .has('is_internet_exposed', true)
         .as('workload')
+        .out('HAS_IAM_ROLE')
+        .as('role')
+        .where(out('ATTACHED_TO').count().is(gt(5)))
         .path()
           .by(valueMap(true))
     `,
@@ -152,24 +148,20 @@ export const riskRules: RiskRule[] = [
   },
   {
     id: 'RULE-006',
-    name: 'Cross-Account IAM Trust with Admin Privileges',
+    name: 'Cross-Account IAM Trust with Wildcard Resource Access',
     description:
-      'Detects IAM roles with cross-account trust relationships that grant administrative privileges',
+      'Detects IAM roles with cross-account trust relationships that have policy statements granting access to all resources (Resource: *)',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
-      g.V().has('label', 'IAMRole')
+      g.V().has('label', 'IamRole')
         .as('role')
-        .out('TRUSTS')
-        .has('label', 'AWSAccount')
-        .where(neq(__.in('BELONGS_TO')))
-        .as('trustedAccount')
-        .in_('HAS_IAM_ROLE')
-        .out('ALLOWS_ACCESS_TO')
-        .out('CONTAINS')
-        .has('label', 'IAMPolicy')
-        .has('isAdminPolicy', true)
-        .as('policy')
+        .where(out('TRUSTS'))
+        .out('ATTACHED_TO').has('label', 'IamPolicyDocument')
+        .out('CONTAINS').has('label', 'IamPolicyStatement')
+        .has('effect', 'Allow')
+        .has('has_wildcard_resource', true)
+        .as('statement')
         .path()
           .by(valueMap(true))
     `,
@@ -185,16 +177,14 @@ export const riskRules: RiskRule[] = [
     id: 'RULE-007',
     name: 'Public S3 Buckets with Sensitive Data',
     description:
-      'Detects S3 buckets with public access that contain data_classification=restricted or secret',
+      'Detects S3 buckets with public access that are tagged data_classification=restricted or secret',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
       g.V().has('label', 'S3Bucket')
-        .has('isPubliclyAccessible', true)
-        .as('bucket')
-        .out('STORES')
+        .has('is_publicly_accessible', true)
         .has('data_classification', within('restricted', 'secret'))
-        .as('data')
+        .as('bucket')
         .path()
           .by(valueMap(true))
     `,
@@ -210,17 +200,14 @@ export const riskRules: RiskRule[] = [
     id: 'RULE-008',
     name: 'RDS with Public Access and Sensitive Data',
     description:
-      'Detects RDS instances exposed to the internet containing databases tagged with sensitive data',
+      'Detects RDS instances with public access that are tagged with sensitive data classification',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
-      g.V().has('label', 'RDSInstance')
-        .has('isPubliclyAccessible', true)
-        .as('rds')
-        .out('CONTAINS')
-        .has('label', 'Database')
+      g.V().has('label', 'RdsInstance')
+        .has('is_publicly_accessible', true)
         .has('data_classification', within('restricted', 'secret'))
-        .as('db')
+        .as('rds')
         .path()
           .by(valueMap(true))
     `,
@@ -234,18 +221,20 @@ export const riskRules: RiskRule[] = [
   },
   {
     id: 'RULE-009',
-    name: 'Lambda with VPC and Internet Gateway to Sensitive Resources',
+    name: 'Lambda with VPC and Internet Access to Sensitive Resources',
     description:
-      'Detects Lambda functions in VPCs with internet access that can reach sensitive S3 or DynamoDB',
+      'Detects Lambda functions in VPCs with internet access whose IAM role grants access to sensitive S3 or DynamoDB',
     severityHint: 'medium',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
-      g.V().has('label', 'Lambda')
-        .has('isInVpc', true)
-        .has('hasInternetAccess', true)
+      g.V().has('label', 'LambdaFunction')
+        .has('is_in_vpc', true)
+        .has('has_internet_access', true)
         .as('lambda')
-        .out('ALLOWS_ACCESS_TO')
-        .has('label', within('S3Bucket', 'DynamoDBTable'))
+        .out('HAS_IAM_ROLE').as('role')
+        .out('ATTACHED_TO').has('label', 'IamPolicyDocument')
+        .out('CONTAINS').has('label', 'IamPolicyStatement')
+        .out('GRANTS').has('label', within('S3Bucket', 'DynamoDBTable'))
         .has('data_classification', within('internal', 'restricted', 'secret'))
         .as('resource')
         .path()
@@ -260,21 +249,20 @@ export const riskRules: RiskRule[] = [
   {
     id: 'RULE-010',
     name: 'Secrets Manager Secrets with Overly Permissive IAM',
-    description: 'Detects AWS Secrets Manager secrets accessible by broad IAM policies',
+    description:
+      'Detects AWS Secrets Manager secrets accessible by IAM policy statements that grant access to all resources (Resource: *)',
     severityHint: 'high',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
       g.V().has('label', 'Secret')
-        .has('secretType', 'database')
+        .has('secret_type', 'database')
         .as('secret')
-        .in_('ALLOWS_ACCESS_TO')
-        .has('label', 'IAMPolicy')
-        .as('policy')
-        .out('CONTAINS')
-        .has('label', 'IAMStatement')
+        .in_('GRANTS').has('label', 'IamPolicyStatement')
         .has('effect', 'Allow')
-        .has('resource', contains('*'))
+        .has('has_wildcard_resource', true)
         .as('statement')
+        .in_('CONTAINS').has('label', 'IamPolicyDocument').as('policy')
+        .in_('ATTACHED_TO').has('label', 'IamRole').as('role')
         .path()
           .by(valueMap(true))
     `,

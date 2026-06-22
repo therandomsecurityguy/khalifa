@@ -1,4 +1,5 @@
 import Gremlin from 'gremlin';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import type { GraphVertex, GraphEdge } from '../types';
 
 const DEFAULT_TIMEOUT = 30000;
@@ -26,6 +27,7 @@ export interface NeptuneConfig {
   port?: number;
   timeout?: number;
   maxConcurrentQueries?: number;
+  authSecretArn?: string;
 }
 
 export class NeptuneClient {
@@ -38,6 +40,7 @@ export class NeptuneClient {
       port: 8182,
       timeout: DEFAULT_TIMEOUT,
       maxConcurrentQueries: 10,
+      authSecretArn: process.env.NEPTUNE_AUTH_SECRET_ARN || undefined,
       ...config,
     };
   }
@@ -47,7 +50,15 @@ export class NeptuneClient {
       return;
     }
 
-    const { endpoint, port, timeout } = this.config;
+    const { endpoint, port, timeout, authSecretArn } = this.config;
+
+    let credentials: { username?: string; password?: string } = {};
+    if (authSecretArn) {
+      const smClient = new SecretsManagerClient({ region: process.env.AWS_REGION || 'us-east-1' });
+      const response = await smClient.send(new GetSecretValueCommand({ SecretId: authSecretArn }));
+      const secret = JSON.parse(response.SecretString || '{}');
+      credentials = { username: secret.username, password: secret.password };
+    }
 
     this.client = new Gremlin.driver.Client(`wss://${endpoint}:${port}/gremlin`, {
       traversalSource: 'g',
@@ -55,6 +66,7 @@ export class NeptuneClient {
       messageMaxChunkSize: 65536,
       poolSize: this.config.maxConcurrentQueries,
       rejectionDecade: 100,
+      ...credentials,
     });
 
     await this.client.open();
@@ -306,8 +318,8 @@ export class NeptuneClient {
   }
 
   async getEffectivePermissions(principalArn: string): Promise<Record<string, unknown> | null> {
-    const query = `g.V().hasLabel('EffectivePermission').has('principal_arn', '${principalArn}').valueMap(true)`;
-    const results = await this.executeQuery(query);
+    const query = `g.V().hasLabel('EffectivePermission').has('principal_arn', principalArn).valueMap(true)`;
+    const results = await this.executeQuery(query, { principalArn });
     if (results.length === 0) return null;
     return this.extractVertexFromResult(results[0] as NeptuneRawVertex).properties;
   }
@@ -318,21 +330,29 @@ export class NeptuneClient {
     escalationType?: string;
     riskLevel?: string;
   }): Promise<Record<string, unknown>[]> {
-    let query = `g.V().hasLabel('EscalationPath')`;
+    const bindings: Record<string, unknown> = {};
+    const parts: string[] = [`g.V().hasLabel('EscalationPath')`];
+
     if (filters.escalationType) {
-      query += `.has('escalation_type', '${filters.escalationType}')`;
+      bindings.escalationType = filters.escalationType;
+      parts.push(`.has('escalation_type', escalationType)`);
     }
     if (filters.riskLevel) {
-      query += `.has('risk_level', '${filters.riskLevel}')`;
+      bindings.riskLevel = filters.riskLevel;
+      parts.push(`.has('risk_level', riskLevel)`);
     }
     if (filters.sourceAccount) {
-      query += `.has('source_arn', containing('${filters.sourceAccount}'))`;
+      bindings.sourceAccount = filters.sourceAccount;
+      parts.push(`.has('source_arn', containing(sourceAccount))`);
     }
     if (filters.targetRole) {
-      query += `.has('target_arn', '${filters.targetRole}')`;
+      bindings.targetRole = filters.targetRole;
+      parts.push(`.has('target_arn', targetRole)`);
     }
-    query += `.valueMap(true).limit(100)`;
-    const results = await this.executeQuery(query);
+    parts.push(`.valueMap(true).limit(100)`);
+
+    const query = parts.join('');
+    const results = await this.executeQuery(query, bindings);
     return results.map((r) => this.extractVertexFromResult(r as NeptuneRawVertex).properties);
   }
 

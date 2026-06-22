@@ -55,7 +55,3 @@ export interface SecretsClient {
   username: string;
   password: string;
 }
-
-export async function getSecret(secretArn: string): Promise<SecretsClient> {
-  return { username: 'user', password: 'pass' };
-}

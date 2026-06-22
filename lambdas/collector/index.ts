@@ -7,6 +7,7 @@ import {
   DescribeNetworkAclsCommand,
   DescribeRouteTablesCommand,
   DescribeTransitGatewaysCommand,
+  DescribeFlowLogsCommand,
 } from '@aws-sdk/client-ec2';
 import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-tagging-api';
 import { ElasticLoadBalancingV2Client } from '@aws-sdk/client-elastic-load-balancing-v2';
@@ -188,6 +189,7 @@ export const handler = async (
         RoleArn: roleArn,
         RoleSessionName: `SecurityGraphIngestion-${Date.now()}`,
         DurationSeconds: 3600,
+        ExternalId: process.env.EXTERNAL_ID || 'khalifa-collector',
       })
     );
 
@@ -419,6 +421,14 @@ async function collectEc2(client: EC2Client, accountId: string, region: string) 
           });
         }
 
+        if (instance.IamInstanceProfile?.Arn) {
+          edges.push({
+            from: instanceArn,
+            to: instance.IamInstanceProfile.Arn,
+            label: 'HAS_IAM_ROLE',
+          });
+        }
+
         for (const ni of instance.NetworkInterfaces || []) {
           const niArn = `arn:aws:ec2:${region}:${accountId}:network-interface/${ni.NetworkInterfaceId}`;
           nodes.push({
@@ -441,7 +451,7 @@ async function collectEc2(client: EC2Client, accountId: string, region: string) 
 
           for (const sg of ni.Groups || []) {
             edges.push({
-              from: `arn:aws:ec2:${sg.GroupId}:${sg.GroupId}`,
+              from: `arn:aws:ec2:${region}:${accountId}:security-group/${sg.GroupId}`,
               to: niArn,
               label: 'PROTECTS',
             });
@@ -559,7 +569,7 @@ async function collectIam(client: IAMClient, accountId: string) {
         edges.push({ from: userArn, to: policyArn, label: 'ATTACHED_TO' });
         addStatementNodeAndEdges(nodes, edges, policyArn, documentJson, accountId);
       }
-    } catch (e) {}
+    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 
     try {
       const attached = await client.send(
@@ -578,7 +588,7 @@ async function collectIam(client: IAMClient, accountId: string) {
           );
         }
       }
-    } catch (e) {}
+    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 
     try {
       const groups = await client.send(
@@ -590,7 +600,7 @@ async function collectIam(client: IAMClient, accountId: string) {
         const groupArn = `arn:aws:iam::${accountId}:group/${group.GroupName}`;
         edges.push({ from: userArn, to: groupArn, label: 'MEMBER_OF' });
       }
-    } catch (e) {}
+    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
   }
 
   const roles = await client.send(new ListRolesCommand({}));
@@ -650,7 +660,7 @@ async function collectIam(client: IAMClient, accountId: string) {
         edges.push({ from: roleArn, to: policyArn, label: 'ATTACHED_TO' });
         addStatementNodeAndEdges(nodes, edges, policyArn, documentJson, accountId);
       }
-    } catch (e) {}
+    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 
     try {
       const attached = await client.send(
@@ -669,7 +679,7 @@ async function collectIam(client: IAMClient, accountId: string) {
           );
         }
       }
-    } catch (e) {}
+    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 
     if (role.PermissionsBoundary?.PermissionsBoundaryArn) {
       edges.push({
@@ -724,7 +734,7 @@ async function collectIam(client: IAMClient, accountId: string) {
         edges.push({ from: groupArn, to: policyArn, label: 'ATTACHED_TO' });
         addStatementNodeAndEdges(nodes, edges, policyArn, documentJson, accountId);
       }
-    } catch (e) {}
+    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 
     try {
       const attached = await client.send(
@@ -743,7 +753,7 @@ async function collectIam(client: IAMClient, accountId: string) {
           );
         }
       }
-    } catch (e) {}
+    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
   }
 
   const policies = await client.send(new ListPoliciesCommand({ Scope: 'Local' }));
@@ -816,7 +826,7 @@ async function collectIam(client: IAMClient, accountId: string) {
         label: 'HAS_POLICY',
       });
     }
-  } catch (e) {}
+  } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 
   return { nodes, edges };
 }
@@ -861,7 +871,7 @@ async function cacheManagedPolicyDocument(
 
     addStatementNodeAndEdges(nodes, edges, docNodeArn, documentJson, accountId);
     cache.set(policyArn, documentJson);
-  } catch (e) {}
+  } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 }
 
 function addStatementNodeAndEdges(
@@ -895,6 +905,9 @@ function addStatementNodeAndEdges(
           ? [stmt.NotResource]
           : undefined;
 
+      const hasWildcardResource = resources.includes('*');
+      const hasWildcardAction = actions.some((a: any) => a === '*' || a === '*:*');
+
       nodes.push({
         id: stmtArn,
         label: 'IamPolicyStatement',
@@ -907,6 +920,8 @@ function addStatementNodeAndEdges(
           conditions_json: conditions ? JSON.stringify(conditions) : undefined,
           not_actions: notActions,
           not_resources: notResources,
+          has_wildcard_resource: hasWildcardResource,
+          has_wildcard_action: hasWildcardAction,
           account_id: accountId,
         },
       });
@@ -918,7 +933,7 @@ function addStatementNodeAndEdges(
         }
       }
     });
-  } catch (e) {}
+  } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 }
 
 function parseTrustPolicy(
@@ -962,12 +977,12 @@ function parseTrustPolicy(
         }
       }
     });
-  } catch (e) {}
+  } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 }
 
 function isCrossAccountPrincipal(principal: string, accountId: string): boolean {
   if (principal === '*') return true;
-  const match = principal.match(/^arn:aws:iam::(\d+)/);
+  const match = principal.match(/^arn:aws(?:-us-gov|-cn)?:iam::(\d+)/);
   if (match) return match[1] !== accountId;
   return false;
 }
@@ -995,7 +1010,7 @@ async function collectKms(client: KMSClient, accountId: string) {
         });
         edges.push({ from: `arn:aws:iam::${accountId}:root`, to: kmd.Arn!, label: 'OWNS' });
       }
-    } catch (e) {}
+    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
   }
 
   return { nodes, edges };
@@ -1018,6 +1033,7 @@ async function collectRds(client: RDSClient, accountId: string, region: string) 
         engine: db.Engine,
         instance_class: db.DBInstanceClass,
         publicly_accessible: db.PubliclyAccessible,
+          is_publicly_accessible: db.PubliclyAccessible,
         storage_encrypted: db.StorageEncrypted,
         backup_retention_period: db.BackupRetentionPeriod,
         deletion_protection: db.DeletionProtection,
@@ -1053,7 +1069,7 @@ async function collectEks(client: EKSClient, accountId: string, _region: string)
         });
         edges.push({ from: `arn:aws:iam::${accountId}:root`, to: clusterArn, label: 'OWNS' });
       }
-    } catch (e) {}
+    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
   }
 
   return { nodes, edges };
@@ -1064,28 +1080,33 @@ async function collectSecurityHub(client: SecurityHubClient, accountId: string, 
   const edges: GraphEdge[] = [];
 
   try {
-    const findings = await client.send(
-      new GetFindingsCommand({
-        Filters: { RecordState: [{ Value: 'ACTIVE', Comparison: 'EQUALS' }] },
-        MaxResults: 100,
-      })
-    );
-    for (const f of findings.Findings || []) {
-      const findingArn = `arn:aws:securityhub:${f.Region || 'us-east-1'}:${accountId}:finding/${f.Id}`;
-      nodes.push({
-        id: findingArn,
-        label: 'Finding',
-        properties: {
-          id: f.Id,
-          arn: findingArn,
-          account_id: accountId,
-          title: f.Title,
-          severity: f.Severity?.Label,
-          status: f.RecordState,
-        },
-      });
-      edges.push({ from: `arn:aws:iam::${accountId}:root`, to: findingArn, label: 'HAS_FINDING' });
-    }
+    let nextToken: string | undefined;
+    do {
+      const findings = await client.send(
+        new GetFindingsCommand({
+          Filters: { RecordState: [{ Value: 'ACTIVE', Comparison: 'EQUALS' }] },
+          MaxResults: 100,
+          NextToken: nextToken,
+        })
+      );
+      for (const f of findings.Findings || []) {
+        const findingArn = `arn:aws:securityhub:${f.Region || 'us-east-1'}:${accountId}:finding/${f.Id}`;
+        nodes.push({
+          id: findingArn,
+          label: 'Finding',
+          properties: {
+            id: f.Id,
+            arn: findingArn,
+            account_id: accountId,
+            title: f.Title,
+            severity: f.Severity?.Label,
+            status: f.RecordState,
+          },
+        });
+        edges.push({ from: `arn:aws:iam::${accountId}:root`, to: findingArn, label: 'HAS_FINDING' });
+      }
+      nextToken = findings.NextToken;
+    } while (nextToken);
   } catch (e) {
     console.error('SecurityHub collection error:', e);
   }
@@ -1134,7 +1155,7 @@ async function collectCloudTrail(client: CloudTrailClient, accountId: string, re
           },
         });
         edges.push({ from: trailArn, to: `${trailArn}/status`, label: 'HAS_STATUS' });
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
     }
   } catch (e) {
     console.error('CloudTrail collection error:', e);
@@ -1272,7 +1293,7 @@ async function collectAccessAnalyzer(
           });
           edges.push({ from: analyzerArn, to: findingArn, label: 'HAS_FINDING' });
         }
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
     }
   } catch (e) {
     console.error('Access Analyzer collection error:', e);
@@ -1294,6 +1315,19 @@ async function collectNetwork(
     const vpcs = await ec2Client.send(new DescribeVpcsCommand({}));
     for (const vpc of vpcs.Vpcs || []) {
       const vpcArn = `arn:aws:ec2:${region}:${accountId}:vpc/${vpc.VpcId}`;
+
+      let flowLogsEnabled = false;
+      try {
+        const flowLogs = await ec2Client.send(
+          new DescribeFlowLogsCommand({
+            Filter: [{ Name: 'vpc-id', Values: [vpc.VpcId!] }],
+          })
+        );
+        flowLogsEnabled = (flowLogs.FlowLogs || []).length > 0;
+      } catch (e) {
+        logger.warn('Failed to query flow logs', { vpcId: vpc.VpcId, error: String(e) });
+      }
+
       nodes.push({
         id: vpcArn,
         label: 'Vpc',
@@ -1304,7 +1338,7 @@ async function collectNetwork(
           cidr_block: vpc.CidrBlock,
           state: vpc.State,
           is_default: vpc.IsDefault,
-          flow_logs_enabled: false,
+          flow_logs_enabled: flowLogsEnabled,
         },
       });
       edges.push({ from: `arn:aws:iam::${accountId}:root`, to: vpcArn, label: 'OWNS' });
@@ -1332,7 +1366,7 @@ async function collectNetwork(
           });
           edges.push({ from: vpcArn, to: epArn, label: 'HAS_ENDPOINT' });
         }
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 
       try {
         const acls = await ec2Client.send(
@@ -1356,7 +1390,7 @@ async function collectNetwork(
           });
           edges.push({ from: vpcArn, to: aclArn, label: 'HAS_NACL' });
         }
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
 
       try {
         const rtbs = await ec2Client.send(
@@ -1380,7 +1414,7 @@ async function collectNetwork(
           });
           edges.push({ from: vpcArn, to: rtbArn, label: 'HAS_ROUTE_TABLE' });
         }
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
     }
 
     const tgws = await ec2Client.send(new DescribeTransitGatewaysCommand({}));
@@ -1471,7 +1505,7 @@ async function collectServerless(
           });
           edges.push({ from: apiArn, to: stageArn, label: 'HAS_STAGE' });
         }
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
     }
   } catch (e) {
     console.error('API Gateway collection error:', e);
@@ -1497,10 +1531,16 @@ async function collectServerless(
           timeout: fn.Timeout,
           memory_size: fn.MemorySize,
           vpc_config: fn.VpcConfig,
+          is_in_vpc: !!(fn.VpcConfig?.SubnetIds && fn.VpcConfig.SubnetIds.length > 0),
+          has_internet_access: !(fn.VpcConfig?.SubnetIds && fn.VpcConfig.SubnetIds.length > 0),
           last_modified: fn.LastModified,
         },
       });
       edges.push({ from: `arn:aws:iam::${accountId}:root`, to: fnArn, label: 'OWNS' });
+
+      if (fn.Role) {
+        edges.push({ from: fnArn, to: fn.Role, label: 'HAS_IAM_ROLE' });
+      }
 
       try {
         const aliases = await lambdaClient.send(
@@ -1522,7 +1562,7 @@ async function collectServerless(
           });
           edges.push({ from: fnArn, to: aliasArn, label: 'HAS_ALIAS' });
         }
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
     }
   } catch (e) {
     console.error('Lambda collection error:', e);
@@ -1613,7 +1653,7 @@ async function collectDataStores(
           });
           edges.push({ from: `arn:aws:iam::${accountId}:root`, to: tableArn, label: 'OWNS' });
         }
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
     }
   } catch (e) {
     console.error('DynamoDB collection error:', e);
@@ -1676,7 +1716,7 @@ async function collectDataStores(
           });
           edges.push({ from: `arn:aws:iam::${accountId}:root`, to: domainArn, label: 'OWNS' });
         }
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
     }
   } catch (e) {
     console.error('OpenSearch collection error:', e);
@@ -1748,7 +1788,7 @@ async function collectSecrets(
           },
         });
         edges.push({ from: `arn:aws:iam::${accountId}:root`, to: secretArn, label: 'OWNS' });
-      } catch (e) {}
+      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
     }
   } catch (e) {
     console.error('Secrets Manager collection error:', e);

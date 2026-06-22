@@ -18,6 +18,10 @@ export interface SecurityGraphIngestionStackProps extends cdk.StackProps {
 }
 
 export class SecurityGraphIngestionStack extends cdk.Stack {
+  public readonly issuesTable!: dynamodb.Table;
+  public readonly evidenceTable!: dynamodb.Table;
+  public readonly reportsTable!: dynamodb.Table;
+
   constructor(scope: Construct, id: string, props: SecurityGraphIngestionStackProps) {
     super(scope, id, props);
 
@@ -376,25 +380,25 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       targets: [new targets.LambdaFunction(incrementalProcessorFn)],
     });
 
-    const issuesTable = new dynamodb.Table(this, 'SecurityIssuesTable', {
+    this.issuesTable = new dynamodb.Table(this, 'SecurityIssuesTable', {
       tableName: 'SecurityIssues',
       partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'ruleId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
-    issuesTable.addGlobalSecondaryIndex({
+    this.issuesTable.addGlobalSecondaryIndex({
       indexName: 'RuleIdIndex',
       partitionKey: { name: 'ruleId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING },
     });
-    issuesTable.addGlobalSecondaryIndex({
+    this.issuesTable.addGlobalSecondaryIndex({
       indexName: 'StatusIndex',
       partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING },
     });
 
-    const evidenceTable = new dynamodb.Table(this, 'ComplianceEvidenceTable', {
+    this.evidenceTable = new dynamodb.Table(this, 'ComplianceEvidenceTable', {
       tableName: 'ComplianceEvidence',
       partitionKey: { name: 'controlId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'resourceId', type: dynamodb.AttributeType.STRING },
@@ -402,7 +406,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    const reportsTable = new dynamodb.Table(this, 'ComplianceReportsTable', {
+    this.reportsTable = new dynamodb.Table(this, 'ComplianceReportsTable', {
       tableName: 'ComplianceReports',
       partitionKey: { name: 'framework', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'generatedAt', type: dynamodb.AttributeType.STRING },
@@ -419,7 +423,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       memorySize: 512,
       environment: {
         NEPTUNE_ENDPOINT: neptuneEndpoint,
-        ISSUES_TABLE: issuesTable.tableName,
+        ISSUES_TABLE: this.issuesTable.tableName,
         NEPTUNE_AUTH_SECRET_ARN: neptuneSecret.secretArn,
       },
     });
@@ -427,7 +431,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['dynamodb:PutItem', 'dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
-        resources: [issuesTable.tableArn, issuesTable.tableArn + '/index/*'],
+        resources: [this.issuesTable.tableArn, this.issuesTable.tableArn + '/index/*'],
       })
     );
     riskEngineFn.addToRolePolicy(
@@ -441,7 +445,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
           'dynamodb:Scan',
           'dynamodb:BatchWriteItem',
         ],
-        resources: [evidenceTable.tableArn, reportsTable.tableArn],
+        resources: [this.evidenceTable.tableArn, this.reportsTable.tableArn],
       })
     );
 

@@ -65,36 +65,58 @@ export const handler = async (
 
 async function writeNodesBatch(client: Gremlin.driver.Client, nodes: GraphNode[]): Promise<void> {
   const statements: string[] = [];
+  const bindings: Record<string, any> = {};
+  let idx = 0;
 
   for (const node of nodes) {
-    const props = Object.entries(node.properties)
-      .filter(([_, v]) => v !== undefined && v !== null)
-      .map(([k, v]) => {
-        const val = typeof v === 'string' ? `'${v.replace(/'/g, "\\'")}'` : JSON.stringify(v);
-        return `${k}: ${val}`;
-      })
-      .join(', ');
+    const lblKey = `lbl_${idx}`;
+    const arnKey = `arn_${idx}`;
+    bindings[lblKey] = node.label;
+    bindings[arnKey] = node.id;
 
+    const propParts: string[] = [];
+    let propIdx = 0;
+    for (const [k, v] of Object.entries(node.properties)) {
+      if (v === undefined || v === null) continue;
+      const pk = `pk_${idx}_${propIdx}`;
+      const pv = `pv_${idx}_${propIdx}`;
+      bindings[pk] = k;
+      bindings[pv] = v;
+      propParts.push(`property(${pk}, ${pv})`);
+      propIdx++;
+    }
+
+    const propsClause = propParts.length > 0 ? '.' + propParts.join('.') : '';
     statements.push(
-      `g.V().has('${node.label}', 'arn', '${node.id}').fold().coalesce(` +
-        `unfold(), addV('${node.label}').property('arn', '${node.id}').property(${props})).next()`
+      `g.V().has(${lblKey}, 'arn', ${arnKey}).fold().coalesce(unfold(), addV(${lblKey}).property('arn', ${arnKey})${propsClause}).next()`
     );
+    idx++;
   }
 
   const script = statements.join('\n');
-  await client.submit(script);
+  await client.submit(script, bindings);
 }
 
 async function writeEdgesBatch(client: Gremlin.driver.Client, edges: GraphEdge[]): Promise<void> {
   const statements: string[] = [];
+  const bindings: Record<string, any> = {};
+  let idx = 0;
 
   for (const edge of edges) {
+    const fromKey = `ef_${idx}`;
+    const toKey = `et_${idx}`;
+    const lblKey = `el_${idx}`;
+    bindings[fromKey] = edge.from;
+    bindings[toKey] = edge.to;
+    bindings[lblKey] = edge.label;
+
     statements.push(
-      `g.V().has('arn', '${edge.from}').as('from').V().has('arn', '${edge.to}').as('to').coalesce(` +
-        `__.has('from').out('${edge.label}').has('to'), __.addE('${edge.label}').from('from').to('to')).next()`
+      `g.V().has('arn', ${fromKey}).as('from').V().has('arn', ${toKey}).as('to').coalesce(` +
+        `__.select('from').out(${lblKey}).where(__.as('to')), __.addE(${lblKey}).from('from').to('to')).next()`
     );
+    idx++;
   }
 
   const script = statements.join('\n');
-  await client.submit(script);
+  await client.submit(script, bindings);
 }
