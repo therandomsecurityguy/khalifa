@@ -569,7 +569,9 @@ async function collectIam(client: IAMClient, accountId: string) {
         edges.push({ from: userArn, to: policyArn, label: 'ATTACHED_TO' });
         addStatementNodeAndEdges(nodes, edges, policyArn, documentJson, accountId);
       }
-    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+    } catch (e) {
+      logger.warn('Operation failed', { error: String(e) });
+    }
 
     try {
       const attached = await client.send(
@@ -588,7 +590,9 @@ async function collectIam(client: IAMClient, accountId: string) {
           );
         }
       }
-    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+    } catch (e) {
+      logger.warn('Operation failed', { error: String(e) });
+    }
 
     try {
       const groups = await client.send(
@@ -600,7 +604,9 @@ async function collectIam(client: IAMClient, accountId: string) {
         const groupArn = `arn:aws:iam::${accountId}:group/${group.GroupName}`;
         edges.push({ from: userArn, to: groupArn, label: 'MEMBER_OF' });
       }
-    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+    } catch (e) {
+      logger.warn('Operation failed', { error: String(e) });
+    }
   }
 
   const roles = await client.send(new ListRolesCommand({}));
@@ -660,7 +666,9 @@ async function collectIam(client: IAMClient, accountId: string) {
         edges.push({ from: roleArn, to: policyArn, label: 'ATTACHED_TO' });
         addStatementNodeAndEdges(nodes, edges, policyArn, documentJson, accountId);
       }
-    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+    } catch (e) {
+      logger.warn('Operation failed', { error: String(e) });
+    }
 
     try {
       const attached = await client.send(
@@ -679,7 +687,9 @@ async function collectIam(client: IAMClient, accountId: string) {
           );
         }
       }
-    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+    } catch (e) {
+      logger.warn('Operation failed', { error: String(e) });
+    }
 
     if (role.PermissionsBoundary?.PermissionsBoundaryArn) {
       edges.push({
@@ -734,7 +744,9 @@ async function collectIam(client: IAMClient, accountId: string) {
         edges.push({ from: groupArn, to: policyArn, label: 'ATTACHED_TO' });
         addStatementNodeAndEdges(nodes, edges, policyArn, documentJson, accountId);
       }
-    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+    } catch (e) {
+      logger.warn('Operation failed', { error: String(e) });
+    }
 
     try {
       const attached = await client.send(
@@ -753,7 +765,9 @@ async function collectIam(client: IAMClient, accountId: string) {
           );
         }
       }
-    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+    } catch (e) {
+      logger.warn('Operation failed', { error: String(e) });
+    }
   }
 
   const policies = await client.send(new ListPoliciesCommand({ Scope: 'Local' }));
@@ -826,7 +840,9 @@ async function collectIam(client: IAMClient, accountId: string) {
         label: 'HAS_POLICY',
       });
     }
-  } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+  } catch (e) {
+    logger.warn('Operation failed', { error: String(e) });
+  }
 
   return { nodes, edges };
 }
@@ -871,7 +887,9 @@ async function cacheManagedPolicyDocument(
 
     addStatementNodeAndEdges(nodes, edges, docNodeArn, documentJson, accountId);
     cache.set(policyArn, documentJson);
-  } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+  } catch (e) {
+    logger.warn('Operation failed', { error: String(e) });
+  }
 }
 
 function addStatementNodeAndEdges(
@@ -933,7 +951,9 @@ function addStatementNodeAndEdges(
         }
       }
     });
-  } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+  } catch (e) {
+    logger.warn('Operation failed', { error: String(e) });
+  }
 }
 
 function parseTrustPolicy(
@@ -977,7 +997,9 @@ function parseTrustPolicy(
         }
       }
     });
-  } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+  } catch (e) {
+    logger.warn('Operation failed', { error: String(e) });
+  }
 }
 
 function isCrossAccountPrincipal(principal: string, accountId: string): boolean {
@@ -1010,7 +1032,9 @@ async function collectKms(client: KMSClient, accountId: string) {
         });
         edges.push({ from: `arn:aws:iam::${accountId}:root`, to: kmd.Arn!, label: 'OWNS' });
       }
-    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+    } catch (e) {
+      logger.warn('Operation failed', { error: String(e) });
+    }
   }
 
   return { nodes, edges };
@@ -1033,7 +1057,7 @@ async function collectRds(client: RDSClient, accountId: string, region: string) 
         engine: db.Engine,
         instance_class: db.DBInstanceClass,
         publicly_accessible: db.PubliclyAccessible,
-          is_publicly_accessible: db.PubliclyAccessible,
+        is_publicly_accessible: db.PubliclyAccessible,
         storage_encrypted: db.StorageEncrypted,
         backup_retention_period: db.BackupRetentionPeriod,
         deletion_protection: db.DeletionProtection,
@@ -1069,7 +1093,9 @@ async function collectEks(client: EKSClient, accountId: string, _region: string)
         });
         edges.push({ from: `arn:aws:iam::${accountId}:root`, to: clusterArn, label: 'OWNS' });
       }
-    } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+    } catch (e) {
+      logger.warn('Operation failed', { error: String(e) });
+    }
   }
 
   return { nodes, edges };
@@ -1103,7 +1129,11 @@ async function collectSecurityHub(client: SecurityHubClient, accountId: string, 
             status: f.RecordState,
           },
         });
-        edges.push({ from: `arn:aws:iam::${accountId}:root`, to: findingArn, label: 'HAS_FINDING' });
+        edges.push({
+          from: `arn:aws:iam::${accountId}:root`,
+          to: findingArn,
+          label: 'HAS_FINDING',
+        });
       }
       nextToken = findings.NextToken;
     } while (nextToken);
@@ -1155,7 +1185,9 @@ async function collectCloudTrail(client: CloudTrailClient, accountId: string, re
           },
         });
         edges.push({ from: trailArn, to: `${trailArn}/status`, label: 'HAS_STATUS' });
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
     }
   } catch (e) {
     console.error('CloudTrail collection error:', e);
@@ -1293,7 +1325,9 @@ async function collectAccessAnalyzer(
           });
           edges.push({ from: analyzerArn, to: findingArn, label: 'HAS_FINDING' });
         }
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
     }
   } catch (e) {
     console.error('Access Analyzer collection error:', e);
@@ -1366,7 +1400,9 @@ async function collectNetwork(
           });
           edges.push({ from: vpcArn, to: epArn, label: 'HAS_ENDPOINT' });
         }
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
 
       try {
         const acls = await ec2Client.send(
@@ -1390,7 +1426,9 @@ async function collectNetwork(
           });
           edges.push({ from: vpcArn, to: aclArn, label: 'HAS_NACL' });
         }
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
 
       try {
         const rtbs = await ec2Client.send(
@@ -1414,7 +1452,9 @@ async function collectNetwork(
           });
           edges.push({ from: vpcArn, to: rtbArn, label: 'HAS_ROUTE_TABLE' });
         }
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
     }
 
     const tgws = await ec2Client.send(new DescribeTransitGatewaysCommand({}));
@@ -1505,7 +1545,9 @@ async function collectServerless(
           });
           edges.push({ from: apiArn, to: stageArn, label: 'HAS_STAGE' });
         }
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
     }
   } catch (e) {
     console.error('API Gateway collection error:', e);
@@ -1562,7 +1604,9 @@ async function collectServerless(
           });
           edges.push({ from: fnArn, to: aliasArn, label: 'HAS_ALIAS' });
         }
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
     }
   } catch (e) {
     console.error('Lambda collection error:', e);
@@ -1653,7 +1697,9 @@ async function collectDataStores(
           });
           edges.push({ from: `arn:aws:iam::${accountId}:root`, to: tableArn, label: 'OWNS' });
         }
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
     }
   } catch (e) {
     console.error('DynamoDB collection error:', e);
@@ -1716,7 +1762,9 @@ async function collectDataStores(
           });
           edges.push({ from: `arn:aws:iam::${accountId}:root`, to: domainArn, label: 'OWNS' });
         }
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
     }
   } catch (e) {
     console.error('OpenSearch collection error:', e);
@@ -1788,7 +1836,9 @@ async function collectSecrets(
           },
         });
         edges.push({ from: `arn:aws:iam::${accountId}:root`, to: secretArn, label: 'OWNS' });
-      } catch (e) { logger.warn("Operation failed", { error: String(e) }); }
+      } catch (e) {
+        logger.warn('Operation failed', { error: String(e) });
+      }
     }
   } catch (e) {
     console.error('Secrets Manager collection error:', e);

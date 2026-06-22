@@ -27,7 +27,10 @@ const app = express();
 app.use(express.json());
 
 app.use((_req: Request, res: Response, next: NextFunction) => {
-  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const origin = _req.headers.origin;
   if (origin && (allowedOrigins.length === 0 || allowedOrigins.includes(origin))) {
     res.setHeader('Access-Control-Allow-Origin', origin);

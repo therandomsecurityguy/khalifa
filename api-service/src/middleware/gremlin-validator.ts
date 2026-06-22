@@ -3,7 +3,14 @@ import type { Request, Response, NextFunction } from 'express';
 const LABEL_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
 const ARN_PATTERN = /^arn:aws[a-z-]*:[a-z]+:[a-z0-9-]+:\d{12}:.+$|^\d{12}$|^\*$/;
 
-const LABEL_PARAMS = ['fromSelector', 'toSelector', 'label', 'property', 'escalationType', 'riskLevel'];
+const LABEL_PARAMS = [
+  'fromSelector',
+  'toSelector',
+  'label',
+  'property',
+  'escalationType',
+  'riskLevel',
+];
 const ARN_PARAMS = ['principal', 'sourceAccount', 'targetRole'];
 
 export function validateGremlinSelectors(req: Request, res: Response, next: NextFunction): void {

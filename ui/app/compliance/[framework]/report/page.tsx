@@ -56,11 +56,14 @@ export default function ComplianceReportPage() {
   async function downloadReport() {
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const response = await fetch(`${baseUrl}/compliance/frameworks/${framework}/report?format=csv`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('id_token')}`,
-        },
-      });
+      const response = await fetch(
+        `${baseUrl}/compliance/frameworks/${framework}/report?format=csv`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('id_token')}`,
+          },
+        }
+      );
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
