@@ -46,8 +46,14 @@ temp/
 # CloudWatch
 awslogs/
 
+# Local planning
+plan.md
+
 # Compiled JS — keep source .ts, ignore .js (but allow config)
 *.js
+*.d.ts
+*.d.ts.map
+*.js.map
 !jest.config.js
 !jest.setup.js
 !prettier.config.js

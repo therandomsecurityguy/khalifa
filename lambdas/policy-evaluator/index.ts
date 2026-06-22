@@ -96,13 +96,13 @@ async function fetchPoliciesForPrincipal(
   principalArn: string
 ): Promise<{ policyArn: string; documentJson: string }[]> {
   const query = `
-    g.V().has('arn', '${principalArn}')
+    g.V().has('arn', principalArn)
       .out('ATTACHED_TO').hasLabel('IamPolicyDocument')
       .project('policyArn', 'documentJson')
         .by('policy_arn')
         .by('document_json')
   `;
-  const results = await gremlinClient.submit(query);
+  const results = await gremlinClient.submit(query, { principalArn });
   return results.toArray().map((item: any) => ({
     policyArn: item.get('policyArn') || '',
     documentJson: item.get('documentJson') || '{}',
@@ -159,125 +159,83 @@ async function writeEffectivePermission(
   gremlinClient: Gremlin.driver.Client,
   perm: EffectivePermission
 ): Promise<void> {
-  const escapedActions = JSON.stringify(perm.allowedActions).replace(/'/g, "\\'");
-  const escapedDenied = JSON.stringify(perm.deniedActions).replace(/'/g, "\\'");
-  const escapedPolicies = JSON.stringify(perm.policiesEvaluated).replace(/'/g, "\\'");
+  const actionsJson = JSON.stringify(perm.allowedActions);
+  const deniedJson = JSON.stringify(perm.deniedActions);
+  const policiesJson = JSON.stringify(perm.policiesEvaluated);
 
-  const updateQuery =
-    "g.V().has('EffectivePermission', 'principal_arn', '" +
-    perm.principalArn +
-    "').fold()" +
+  const bindings = {
+    id: perm.id,
+    arn: perm.id,
+    principal_arn: perm.principalArn,
+    allowed_actions: actionsJson,
+    denied_actions: deniedJson,
+    is_admin: perm.isAdmin,
+    blast_radius: perm.blastRadius,
+    evaluated_at: perm.evaluatedAt,
+    policies_evaluated: policiesJson,
+  };
+
+  const query =
+    "g.V().has('EffectivePermission', 'principal_arn', principal_arn).fold()" +
     '.coalesce(unfold()' +
-    ".property('allowed_actions', '" +
-    escapedActions +
-    "')" +
-    ".property('denied_actions', '" +
-    escapedDenied +
-    "')" +
-    ".property('is_admin', " +
-    perm.isAdmin +
-    ')' +
-    ".property('blast_radius', " +
-    perm.blastRadius +
-    ')' +
-    ".property('evaluated_at', '" +
-    perm.evaluatedAt +
-    "')" +
-    ".property('policies_evaluated', '" +
-    escapedPolicies +
-    "'), " +
-    "addV('EffectivePermission')" +
-    ".property('id', '" +
-    perm.id +
-    "')" +
-    ".property('arn', '" +
-    perm.id +
-    "')" +
-    ".property('principal_arn', '" +
-    perm.principalArn +
-    "')" +
-    ".property('allowed_actions', '" +
-    escapedActions +
-    "')" +
-    ".property('denied_actions', '" +
-    escapedDenied +
-    "')" +
-    ".property('is_admin', " +
-    perm.isAdmin +
-    ')' +
-    ".property('blast_radius', " +
-    perm.blastRadius +
-    ')' +
-    ".property('evaluated_at', '" +
-    perm.evaluatedAt +
-    "')" +
-    ".property('policies_evaluated', '" +
-    escapedPolicies +
-    "')).next()";
+    ".property('allowed_actions', allowed_actions)" +
+    ".property('denied_actions', denied_actions)" +
+    ".property('is_admin', is_admin)" +
+    ".property('blast_radius', blast_radius)" +
+    ".property('evaluated_at', evaluated_at)" +
+    ".property('policies_evaluated', policies_evaluated)" +
+    ", addV('EffectivePermission')" +
+    ".property('id', id)" +
+    ".property('arn', arn)" +
+    ".property('principal_arn', principal_arn)" +
+    ".property('allowed_actions', allowed_actions)" +
+    ".property('denied_actions', denied_actions)" +
+    ".property('is_admin', is_admin)" +
+    ".property('blast_radius', blast_radius)" +
+    ".property('evaluated_at', evaluated_at)" +
+    ".property('policies_evaluated', policies_evaluated)).next()";
 
-  await gremlinClient.submit(updateQuery);
+  await gremlinClient.submit(query, bindings);
 }
 
 async function writeEscalationPath(
   gremlinClient: Gremlin.driver.Client,
   path: EscalationPath
 ): Promise<void> {
-  const conditionsJson = JSON.stringify(path.conditions).replace(/'/g, "\\'");
+  const conditionsJson = JSON.stringify(path.conditions);
+
+  const bindings = {
+    id: path.id,
+    arn: path.id,
+    source_arn: path.sourceArn,
+    target_arn: path.targetArn,
+    path_length: path.pathLength,
+    risk_level: path.riskLevel,
+    escalation_type: path.escalationType,
+    conditions_json: conditionsJson,
+    detected_at: path.detectedAt,
+  };
 
   const query =
-    "g.V().has('EscalationPath', 'id', '" +
-    path.id +
-    "').fold()" +
+    "g.V().has('EscalationPath', 'id', id).fold()" +
     '.coalesce(unfold()' +
-    ".property('source_arn', '" +
-    path.sourceArn +
-    "')" +
-    ".property('target_arn', '" +
-    path.targetArn +
-    "')" +
-    ".property('path_length', " +
-    path.pathLength +
-    ')' +
-    ".property('risk_level', '" +
-    path.riskLevel +
-    "')" +
-    ".property('escalation_type', '" +
-    path.escalationType +
-    "')" +
-    ".property('conditions_json', '" +
-    conditionsJson +
-    "')" +
-    ".property('detected_at', '" +
-    path.detectedAt +
-    "'), " +
-    "addV('EscalationPath')" +
-    ".property('id', '" +
-    path.id +
-    "')" +
-    ".property('arn', '" +
-    path.id +
-    "')" +
-    ".property('source_arn', '" +
-    path.sourceArn +
-    "')" +
-    ".property('target_arn', '" +
-    path.targetArn +
-    "')" +
-    ".property('path_length', " +
-    path.pathLength +
-    ')' +
-    ".property('risk_level', '" +
-    path.riskLevel +
-    "')" +
-    ".property('escalation_type', '" +
-    path.escalationType +
-    "')" +
-    ".property('conditions_json', '" +
-    conditionsJson +
-    "')" +
-    ".property('detected_at', '" +
-    path.detectedAt +
-    "')).next()";
+    ".property('source_arn', source_arn)" +
+    ".property('target_arn', target_arn)" +
+    ".property('path_length', path_length)" +
+    ".property('risk_level', risk_level)" +
+    ".property('escalation_type', escalation_type)" +
+    ".property('conditions_json', conditions_json)" +
+    ".property('detected_at', detected_at)" +
+    ", addV('EscalationPath')" +
+    ".property('id', id)" +
+    ".property('arn', arn)" +
+    ".property('source_arn', source_arn)" +
+    ".property('target_arn', target_arn)" +
+    ".property('path_length', path_length)" +
+    ".property('risk_level', risk_level)" +
+    ".property('escalation_type', escalation_type)" +
+    ".property('conditions_json', conditions_json)" +
+    ".property('detected_at', detected_at)).next()";
 
-  await gremlinClient.submit(query);
+  await gremlinClient.submit(query, bindings);
 }

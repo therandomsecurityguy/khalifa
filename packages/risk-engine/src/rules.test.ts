@@ -44,9 +44,14 @@ describe('getEnabledRules', () => {
     }
   });
 
-  test('should return all rules when all enabled', () => {
+  test('RULE-003 should be disabled (vulnerability scanning not yet built)', () => {
+    const rule = getRuleById('RULE-003');
+    expect(rule?.enabled).toBe(false);
+  });
+
+  test('should return 9 enabled rules (RULE-003 disabled)', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(riskRules.length);
+    expect(enabledRules.length).toBe(9);
   });
 });
 
@@ -65,7 +70,7 @@ describe('getRuleById', () => {
   test('should find internet-exposed EC2 rule', () => {
     const rule = getRuleById('RULE-001');
     expect(rule?.name).toContain('Internet-Exposed EC2');
-    expect(rule?.gremlinQueryTemplate).toContain('EC2Instance');
+    expect(rule?.gremlinQueryTemplate).toContain('Ec2Instance');
     expect(rule?.gremlinQueryTemplate).toContain('data_classification');
   });
 
@@ -85,7 +90,7 @@ describe('getRuleById', () => {
   test('should find over-privileged IAM rule', () => {
     const rule = getRuleById('RULE-004');
     expect(rule?.name).toContain('IAM');
-    expect(rule?.gremlinQueryTemplate).toContain('ALLOWS_ACCESS_TO');
+    expect(rule?.gremlinQueryTemplate).toContain('HAS_IAM_ROLE');
   });
 
   test('should find crown jewel attack path rule', () => {
@@ -103,19 +108,19 @@ describe('getRuleById', () => {
   test('should find public S3 bucket rule', () => {
     const rule = getRuleById('RULE-007');
     expect(rule?.name).toContain('S3');
-    expect(rule?.gremlinQueryTemplate).toContain('isPubliclyAccessible');
+    expect(rule?.gremlinQueryTemplate).toContain('is_publicly_accessible');
   });
 
   test('should find RDS public access rule', () => {
     const rule = getRuleById('RULE-008');
     expect(rule?.name).toContain('RDS');
-    expect(rule?.gremlinQueryTemplate).toContain('RDSInstance');
+    expect(rule?.gremlinQueryTemplate).toContain('RdsInstance');
   });
 
   test('should find Lambda VPC rule', () => {
     const rule = getRuleById('RULE-009');
     expect(rule?.name).toContain('Lambda');
-    expect(rule?.gremlinQueryTemplate).toContain('Lambda');
+    expect(rule?.gremlinQueryTemplate).toContain('LambdaFunction');
   });
 
   test('should find Secrets Manager rule', () => {
@@ -140,11 +145,30 @@ describe('Rule gremlin queries', () => {
   test('RULE-003 should query for CRITICAL CVEs', () => {
     const rule = getRuleById('RULE-003');
     expect(rule?.gremlinQueryTemplate).toContain('CRITICAL');
-    expect(rule?.gremlinQueryTemplate).toContain('9.0');
+    expect(rule?.gremlinQueryTemplate).toContain('cvss_base_score');
   });
 
   test('RULE-004 should have threshold for permission count', () => {
     const rule = getRuleById('RULE-004');
-    expect(rule?.gremlinQueryTemplate).toContain('gt(50)');
+    expect(rule?.gremlinQueryTemplate).toContain('gt(5)');
+  });
+
+  test('rules should use snake_case property names', () => {
+    for (const rule of riskRules) {
+      expect(rule.gremlinQueryTemplate).not.toContain('isInternetExposed');
+      expect(rule.gremlinQueryTemplate).not.toContain('isPubliclyAccessible');
+      expect(rule.gremlinQueryTemplate).not.toContain('cidrBlock');
+      expect(rule.gremlinQueryTemplate).not.toContain('portRange');
+      expect(rule.gremlinQueryTemplate).not.toContain('isInVpc');
+      expect(rule.gremlinQueryTemplate).not.toContain('hasInternetAccess');
+    }
+  });
+
+  test('rules should not reference non-existent edges', () => {
+    for (const rule of riskRules) {
+      expect(rule.gremlinQueryTemplate).not.toContain('ALLOWS_ACCESS_TO');
+      expect(rule.gremlinQueryTemplate).not.toContain('ALLOWS_INGRESS');
+      expect(rule.gremlinQueryTemplate).not.toContain('STORES');
+    }
   });
 });

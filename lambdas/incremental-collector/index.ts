@@ -7,8 +7,8 @@ import { Logger } from '../shared/types';
 import { getSecret } from '../shared/secrets-client';
 
 const logger = new Logger('incremental-processor');
-const sqsClient = new SQSClient({ region: 'us-east-1' });
-const stsClient = new STSClient({ region: 'us-east-1' });
+const sqsClient = new SQSClient({ region: process.env.AWS_REGION || 'us-east-1' });
+const stsClient = new STSClient({ region: process.env.AWS_REGION || 'us-east-1' });
 
 export const handler = async (): Promise<{ processed: number }> => {
   const queueUrl = process.env.SQS_QUEUE_URL || '';
@@ -72,7 +72,7 @@ async function processEvent(
     return { nodes, edges };
   }
 
-  const region = 'us-east-1';
+  const region = detail.awsRegion || process.env.AWS_REGION || 'us-east-1';
   const isMaster = accountId === masterAccountId;
 
   let credentials: any;
@@ -83,6 +83,7 @@ async function processEvent(
           RoleArn: `arn:aws:iam::${accountId}:role/SecurityGraphCollectorRole`,
           RoleSessionName: `SecurityGraphInc-${Date.now()}`,
           DurationSeconds: 900,
+          ExternalId: process.env.EXTERNAL_ID || 'khalifa-collector',
         })
       )
       .then((res) => res.Credentials);
@@ -155,19 +156,27 @@ async function writeToNeptune(data: { nodes: GraphNode[]; edges: GraphEdge[] }):
 
   try {
     for (const node of data.nodes) {
-      const props = Object.entries(node.properties)
-        .filter(([_, v]) => v !== undefined)
-        .map(([k, v]) => `${k}: ${typeof v === 'string' ? `'${v}'` : JSON.stringify(v)}`)
-        .join(', ');
-
+      const bindings: Record<string, any> = { lbl: node.label, arn: node.id };
+      const propParts: string[] = [];
+      let pi = 0;
+      for (const [k, v] of Object.entries(node.properties)) {
+        if (v === undefined) continue;
+        bindings[`pk_${pi}`] = k;
+        bindings[`pv_${pi}`] = v;
+        propParts.push(`property(pk_${pi}, pv_${pi})`);
+        pi++;
+      }
+      const propsClause = propParts.length > 0 ? '.' + propParts.join('.') : '';
       await client.submit(
-        `g.V().has('${node.label}', 'arn', '${node.id}').fold().coalesce(unfold(), addV('${node.label}').property('arn', '${node.id}').property(${props})).next()`
+        `g.V().has(lbl, 'arn', arn).fold().coalesce(unfold(), addV(lbl).property('arn', arn)${propsClause}).next()`,
+        bindings
       );
     }
 
     for (const edge of data.edges) {
       await client.submit(
-        `g.V().has('arn', '${edge.from}').as('from').V().has('arn', '${edge.to}').as('to').coalesce(__.has('from').out('${edge.label}').has('to'), __.addE('${edge.label}').from('from').to('to')).next()`
+        `g.V().has('arn', ef).as('from').V().has('arn', et).as('to').coalesce(__.select('from').out(el).where(__.as('to')), __.addE(el).from('from').to('to')).next()`,
+        { ef: edge.from, et: edge.to, el: edge.label }
       );
     }
   } finally {

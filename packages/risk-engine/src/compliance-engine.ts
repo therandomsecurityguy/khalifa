@@ -215,7 +215,6 @@ export class DynamoDBEvidenceStore implements EvidenceStore {
 
   async saveEvidence(evidence: ComplianceEvidence[]): Promise<void> {
     if (evidence.length === 0) return;
-    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
     const items = evidence.map((e) => ({
       PutRequest: {
         Item: marshall({
@@ -226,7 +225,7 @@ export class DynamoDBEvidenceStore implements EvidenceStore {
     }));
 
     for (let i = 0; i < items.length; i += 25) {
-      await client.send(
+      await this.docClient.send(
         new BatchWriteItemCommand({
           RequestItems: {
             [this.tableName]: items.slice(i, i + 25),
@@ -237,8 +236,7 @@ export class DynamoDBEvidenceStore implements EvidenceStore {
   }
 
   async getEvidence(controlId: string): Promise<ComplianceEvidence[]> {
-    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
-    const result = await client.send(
+    const result = await this.docClient.send(
       new QueryCommand({
         TableName: this.tableName,
         KeyConditionExpression: 'controlId = :controlId',
@@ -252,8 +250,7 @@ export class DynamoDBEvidenceStore implements EvidenceStore {
   }
 
   async getAllEvidence(): Promise<ComplianceEvidence[]> {
-    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
-    const result = await client.send(new ScanCommand({ TableName: this.tableName }));
+    const result = await this.docClient.send(new ScanCommand({ TableName: this.tableName }));
     if (!result.Items) return [];
     return result.Items.map((item) => unmarshall(item) as ComplianceEvidence);
   }
@@ -285,8 +282,7 @@ export class DynamoDBReportStore implements ReportStore {
   }
 
   async getLatestReport(framework: ComplianceFramework): Promise<ComplianceReport | null> {
-    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
-    const result = await client.send(
+    const result = await this.docClient.send(
       new QueryCommand({
         TableName: this.tableName,
         KeyConditionExpression: 'framework = :framework',
@@ -303,8 +299,7 @@ export class DynamoDBReportStore implements ReportStore {
   }
 
   async listReports(framework: ComplianceFramework, limit?: number): Promise<ComplianceReport[]> {
-    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
-    const result = await client.send(
+    const result = await this.docClient.send(
       new QueryCommand({
         TableName: this.tableName,
         KeyConditionExpression: 'framework = :framework',

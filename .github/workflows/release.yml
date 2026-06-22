@@ -43,7 +43,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: |
             api-service/package-lock.json
-            lambdas/risk-engine/package-lock.json
+            packages/risk-engine/package-lock.json
             lambdas/collector/package-lock.json
             lambdas/incremental-collector/package-lock.json
             lambdas/list-accounts/package-lock.json
@@ -56,7 +56,7 @@ jobs:
         run: npm ci
 
       - name: Install risk-engine deps
-        working-directory: lambdas/risk-engine
+        working-directory: packages/risk-engine
         run: npm ci
 
       - name: Install collector deps
@@ -98,7 +98,7 @@ jobs:
         run: npm run build
 
       - name: Build Risk Engine
-        working-directory: lambdas/risk-engine
+        working-directory: packages/risk-engine
         run: npm run build
 
       - name: Build Collector
@@ -142,10 +142,10 @@ jobs:
           tar -C dist -czf "dist/api-service_${version}.tar.gz" api-service
 
           # Risk Engine Lambda
-          mkdir -p dist/lambdas/risk-engine
-          cp -r lambdas/risk-engine/dist dist/lambdas/risk-engine/
-          cp lambdas/risk-engine/package.json lambdas/risk-engine/package-lock.json dist/lambdas/risk-engine/
-          tar -C dist -czf "dist/risk-engine_${version}.tar.gz" lambdas/risk-engine
+          mkdir -p dist/packages/risk-engine
+          cp -r packages/risk-engine/dist dist/packages/risk-engine/
+          cp packages/risk-engine/package.json packages/risk-engine/package-lock.json dist/packages/risk-engine/
+          tar -C dist -czf "dist/risk-engine_${version}.tar.gz" packages/risk-engine
 
           # Collector Lambda
           mkdir -p dist/lambdas/collector
