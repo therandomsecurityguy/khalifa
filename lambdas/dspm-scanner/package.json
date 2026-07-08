@@ -1,28 +1,25 @@
 {
-  "name": "@khalifa/risk-engine",
+  "name": "dspm-scanner",
   "version": "1.0.0",
-  "description": "Risk, attack-path, and compliance engine for the Khalifa security graph",
+  "description": "Data Security Posture Management scanner for S3/RDS/DynamoDB data discovery",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "lint": "eslint src --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\"",
-    "test": "jest --passWithNoTests",
-    "test:watch": "jest --watch",
-    "prepare": "tsc"
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"**/*.ts\"",
+    "format:check": "prettier --check \"**/*.ts\"",
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.450.0",
+    "@aws-sdk/client-macie2": "^3.450.0",
     "@aws-sdk/client-dynamodb": "^3.400.0",
-    "@aws-sdk/lib-dynamodb": "^3.400.0",
+    "@aws-sdk/lib-dynamodb": "^3.450.0",
     "@aws-sdk/util-dynamodb": "^3.996.2",
-    "gremlin": "^3.7.0",
-    "@khalifa/integrations": "*"
+    "gremlin": "^3.7.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.131",
-    "@types/gremlin": "^3.6.7",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
     "jest": "^29.5.0",

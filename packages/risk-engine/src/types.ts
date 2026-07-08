@@ -44,6 +44,13 @@ export interface PathSegment {
   label?: string;
 }
 
+export interface ExternalRef {
+  system: string;
+  id: string;
+  url?: string;
+  emittedAt: string;
+}
+
 export interface Issue {
   id: string;
   ruleId: string;
@@ -57,6 +64,7 @@ export interface Issue {
   owningTeam: string;
   remediationHint: string;
   metadata: Record<string, any>;
+  externalRefs?: ExternalRef[];
 }
 
 export interface RuleExecutionResult {

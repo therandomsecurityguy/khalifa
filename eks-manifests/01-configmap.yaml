@@ -8,12 +8,19 @@ data:
   ISSUES_TABLE: "SecurityIssues"
   EVIDENCE_TABLE: "ComplianceEvidence"
   REPORTS_TABLE: "ComplianceReports"
+  POSTURE_TRENDS_TABLE: "PostureTrends"
+  ISSUES_TOPIC_ARN: ""
+  ISSUE_SINKS: "sns"
+  SLACK_MIN_SEVERITY: "high"
+  UI_BASE_URL: ""
   COGNITO_USER_POOL_ID: ""
   COGNITO_CLIENT_ID: ""
   COGNITO_REGION: "us-east-1"
   LOG_LEVEL: "info"
   API_PORT: "8080"
   RULE_RUNNER_SCHEDULE: "0 */6 * * *"
+  DSPM_SCAN_MODE: "tagged-only"
+  MACIE_ENABLED: "false"
 ---
 apiVersion: v1
 kind: Secret

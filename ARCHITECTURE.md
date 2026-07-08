@@ -115,6 +115,9 @@
 | `BackupVault` | AWS Backup | `arn` |
 | `BackupPlan` | AWS Backup | `arn` |
 | `HostedZone` | Route53 | `arn` |
+| `DataClassificationFinding` | DSPM Scanner | `arn`, `pii_types`, `secret_count`, `data_classification`, `data_class_source`, `confidence`, `classifier` |
+| `EffectivePermission` | Policy Evaluator | `principal_arn`, `allowed_actions`, `denied_actions`, `is_admin`, `blast_radius` |
+| `EscalationPath` | Policy Evaluator | `source_arn`, `target_arn`, `risk_level`, `escalation_type` |
 
 ### Edge Labels
 
@@ -139,6 +142,7 @@
 | `RUNS_ON` | ContainerImage → workload (not yet created) |
 | `HAS_CVE` | ContainerImage → Vulnerability (not yet created) |
 | `HAS_ALIAS` / `HAS_STAGE` | Function → Alias/Stage |
+| `CLASSIFIES` | DataClassificationFinding → S3Bucket/RdsInstance |
 
 ### Risk Rule Properties (queried by Gremlin rules)
 

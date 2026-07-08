@@ -6,7 +6,7 @@ describe('riskRules', () => {
   });
 
   test('should have exactly 10 rules', () => {
-    expect(riskRules.length).toBe(10);
+    expect(riskRules.length).toBe(12);
   });
 
   test('each rule should have required fields', () => {
@@ -49,9 +49,9 @@ describe('getEnabledRules', () => {
     expect(rule?.enabled).toBe(false);
   });
 
-  test('should return 9 enabled rules (RULE-003 disabled)', () => {
+  test('should return 11 enabled rules (RULE-003 disabled)', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(9);
+    expect(enabledRules.length).toBe(11);
   });
 });
 
@@ -127,6 +127,20 @@ describe('getRuleById', () => {
     const rule = getRuleById('RULE-010');
     expect(rule?.name).toContain('Secrets');
     expect(rule?.gremlinQueryTemplate).toContain('Secret');
+  });
+
+  test('should find public datastore PII rule', () => {
+    const rule = getRuleById('RULE-011');
+    expect(rule?.name).toContain('Public Datastore');
+    expect(rule?.gremlinQueryTemplate).toContain('DataClassificationFinding');
+    expect(rule?.gremlinQueryTemplate).toContain('is_publicly_accessible');
+  });
+
+  test('should find secret in S3 rule', () => {
+    const rule = getRuleById('RULE-012');
+    expect(rule?.name).toContain('Secret Committed');
+    expect(rule?.gremlinQueryTemplate).toContain('secret_count');
+    expect(rule?.gremlinQueryTemplate).toContain('CLASSIFIES');
   });
 });
 
