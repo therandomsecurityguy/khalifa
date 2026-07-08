@@ -10,8 +10,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "test": "jest --passWithNoTests",
-    "test:watch": "jest --watch",
-    "prepare": "tsc"
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.400.0",

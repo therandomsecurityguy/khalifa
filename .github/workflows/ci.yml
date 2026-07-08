@@ -34,10 +34,12 @@ jobs:
             package-lock.json
             api-service/package-lock.json
             packages/risk-engine/package-lock.json
+            packages/integrations/package-lock.json
             lambdas/collector/package-lock.json
             lambdas/incremental-collector/package-lock.json
             lambdas/list-accounts/package-lock.json
             lambdas/graph-writer/package-lock.json
+            lambdas/dspm-scanner/package-lock.json
             ui/package-lock.json
             cdk/package-lock.json
 
@@ -60,9 +62,13 @@ jobs:
         working-directory: packages/risk-engine
         run: npx prettier --check "src/**/*.ts"
 
+      - name: Check formatting (Integrations)
+        working-directory: packages/integrations
+        run: npx prettier --check "src/**/*.ts"
+
       - name: Check formatting (Lambdas)
         run: |
-          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer; do
+          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer lambdas/dspm-scanner; do
             if [ -f "$dir/package.json" ]; then
               echo "Checking $dir..."
               npx prettier --check "$dir/**/*.ts" || exit 1
@@ -85,9 +91,13 @@ jobs:
         working-directory: packages/risk-engine
         run: npx eslint src --ext .ts || true
 
+      - name: Lint Integrations
+        working-directory: packages/integrations
+        run: npx eslint src --ext .ts || true
+
       - name: Lint Lambdas
         run: |
-          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer; do
+          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer lambdas/dspm-scanner; do
             if [ -f "$dir/package.json" ] && [ -f "$dir/.eslintrc.js" -o -f "$dir/.eslintrc.json" ]; then
               echo "Linting $dir..."
               (cd "$dir" && npx eslint . --ext .ts) || exit 1
@@ -111,22 +121,32 @@ jobs:
             package-lock.json
             api-service/package-lock.json
             packages/risk-engine/package-lock.json
+            packages/integrations/package-lock.json
             lambdas/collector/package-lock.json
             lambdas/incremental-collector/package-lock.json
             lambdas/list-accounts/package-lock.json
             lambdas/graph-writer/package-lock.json
+            lambdas/dspm-scanner/package-lock.json
             ui/package-lock.json
             cdk/package-lock.json
 
       - name: Install all workspace deps
         run: npm ci --workspaces
 
-      - name: Type check API service
-        working-directory: api-service
+      - name: Build Integrations (required by risk-engine & api-service)
+        working-directory: packages/integrations
+        run: npm run build
+
+      - name: Type check Integrations
+        working-directory: packages/integrations
         run: npx tsc --noEmit
 
       - name: Type check Risk Engine
         working-directory: packages/risk-engine
+        run: npx tsc --noEmit
+
+      - name: Type check API service
+        working-directory: api-service
         run: npx tsc --noEmit
 
       - name: Type check Collector
@@ -143,6 +163,10 @@ jobs:
 
       - name: Type check Graph Writer
         working-directory: lambdas/graph-writer
+        run: npx tsc --noEmit
+
+      - name: Type check DSPM Scanner
+        working-directory: lambdas/dspm-scanner
         run: npx tsc --noEmit
 
       - name: Type check UI
@@ -171,17 +195,23 @@ jobs:
             package-lock.json
             api-service/package-lock.json
             packages/risk-engine/package-lock.json
+            packages/integrations/package-lock.json
             lambdas/collector/package-lock.json
             lambdas/incremental-collector/package-lock.json
             lambdas/list-accounts/package-lock.json
             lambdas/graph-writer/package-lock.json
+            lambdas/dspm-scanner/package-lock.json
             ui/package-lock.json
             cdk/package-lock.json
 
       - name: Install all workspace deps
         run: npm ci --workspaces
 
-      - name: Build Risk Engine (must build first — other packages import it)
+      - name: Build Integrations (must build first — risk-engine imports it)
+        working-directory: packages/integrations
+        run: npm run build
+
+      - name: Build Risk Engine (must build before API service)
         working-directory: packages/risk-engine
         run: npm run build
 
@@ -199,6 +229,10 @@ jobs:
 
       - name: Build Graph Writer
         working-directory: lambdas/graph-writer
+        run: npm run build
+
+      - name: Build DSPM Scanner
+        working-directory: lambdas/dspm-scanner
         run: npm run build
 
       - name: Build API service
@@ -235,15 +269,21 @@ jobs:
             package-lock.json
             api-service/package-lock.json
             packages/risk-engine/package-lock.json
+            packages/integrations/package-lock.json
             lambdas/collector/package-lock.json
             lambdas/incremental-collector/package-lock.json
             lambdas/list-accounts/package-lock.json
             lambdas/graph-writer/package-lock.json
+            lambdas/dspm-scanner/package-lock.json
             ui/package-lock.json
             cdk/package-lock.json
 
       - name: Install all workspace deps
         run: npm ci --workspaces
+
+      - name: Build Integrations (required by risk-engine tests)
+        working-directory: packages/integrations
+        run: npm run build
 
       - name: Run all tests (root jest)
         run: npx jest
