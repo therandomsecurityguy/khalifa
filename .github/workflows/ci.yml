@@ -137,13 +137,9 @@ jobs:
         working-directory: packages/integrations
         run: npm run build
 
-      - name: Type check Integrations
-        working-directory: packages/integrations
-        run: npx tsc --noEmit
-
-      - name: Type check Risk Engine
+      - name: Build Risk Engine (required by api-service & CDK)
         working-directory: packages/risk-engine
-        run: npx tsc --noEmit
+        run: npm run build
 
       - name: Type check API service
         working-directory: api-service
