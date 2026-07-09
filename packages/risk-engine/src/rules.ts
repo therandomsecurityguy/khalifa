@@ -274,6 +274,55 @@ export const riskRules: RiskRule[] = [
       priority: 'P2',
     },
   },
+  {
+    id: 'RULE-011',
+    name: 'Public Datastore with PII Detected by DSPM Scanner',
+    description:
+      'Detects publicly accessible S3/RDS resources that have a DataClassificationFinding showing PII or secrets',
+    severityHint: 'critical',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().has('label', within('S3Bucket', 'RdsInstance'))
+        .has('is_publicly_accessible', true)
+        .as('resource')
+        .in_('CLASSIFIES').has('label', 'DataClassificationFinding')
+        .has('data_classification', within('restricted', 'secret'))
+        .as('finding')
+        .path()
+          .by(valueMap(true))
+    `,
+    ownerTeam: 'data-security',
+    enabled: true,
+    autoTicketConfig: {
+      enabled: true,
+      projectKey: 'SEC',
+      priority: 'P1',
+    },
+  },
+  {
+    id: 'RULE-012',
+    name: 'Secret Committed in S3 Object',
+    description:
+      'Detects DataClassificationFinding vertices with secrets (private keys, AWS keys, high-entropy) on S3 buckets regardless of public access',
+    severityHint: 'high',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().has('label', 'DataClassificationFinding')
+        .has('secret_count', gt(0))
+        .as('finding')
+        .out('CLASSIFIES').has('label', 'S3Bucket')
+        .as('bucket')
+        .path()
+          .by(valueMap(true))
+    `,
+    ownerTeam: 'data-security',
+    enabled: true,
+    autoTicketConfig: {
+      enabled: true,
+      projectKey: 'SEC',
+      priority: 'P2',
+    },
+  },
 ];
 
 export function getEnabledRules(): RiskRule[] {

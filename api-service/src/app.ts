@@ -13,7 +13,7 @@ import {
 } from './routes/compliance';
 import { validateGremlinSelectors, validateArnParam } from './middleware/gremlin-validator';
 import { authenticate } from './middleware/auth';
-import { requireViewer } from './middleware/rbac';
+import { requireViewer, requireAnalyst } from './middleware/rbac';
 import {
   getEffectivePermissions,
   getEscalationPaths,
@@ -21,6 +21,8 @@ import {
   getRightsizingRecommendation,
   getTrustGraph,
 } from './routes/identity';
+import { getTrend, listTrendMetrics } from './routes/trends';
+import { getIntegrationsStatus, suppressIssue, reopenIssue } from './routes/integrations';
 
 const app = express();
 
@@ -78,6 +80,13 @@ app.get('/identity/escalation-paths', requireViewer, getEscalationPaths);
 app.get('/identity/unused-permissions', requireViewer, getUnusedPermissions);
 app.get('/identity/rightsizing/:principal', requireViewer, getRightsizingRecommendation);
 app.get('/identity/trust-graph', requireViewer, getTrustGraph);
+
+app.get('/trends', requireViewer, listTrendMetrics);
+app.get('/trends/:metric', requireViewer, getTrend);
+
+app.get('/integrations/status', requireViewer, getIntegrationsStatus);
+app.post('/issues/:id/suppress', requireAnalyst, suppressIssue);
+app.post('/issues/:id/reopen', requireAnalyst, reopenIssue);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);

@@ -11,8 +11,10 @@ import {
   type GraphClient,
   type ReportStore,
 } from './compliance-engine';
+import { PostureTrendStore, type TrendMetric, type PostureTrendPoint } from './posture-trend-store';
 
 export * from './compliance-types';
+export { PostureTrendStore, type TrendMetric, type PostureTrendPoint };
 export {
   ComplianceEngine,
   DynamoDBEvidenceStore,

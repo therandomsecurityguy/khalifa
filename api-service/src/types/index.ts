@@ -38,6 +38,7 @@ export interface Issue {
   owningTeam: string;
   remediationHint: string;
   metadata: Record<string, unknown>;
+  externalRefs?: ExternalRef[];
 }
 
 export interface GraphVertex {
@@ -107,6 +108,26 @@ export interface RiskRule {
   gremlinQueryTemplate: string;
   ownerTeam: string;
   enabled: boolean;
+}
+
+export interface ExternalRef {
+  system: string;
+  id: string;
+  url?: string;
+  emittedAt: string;
+}
+
+export interface TrendPoint {
+  metric: string;
+  date: string;
+  value: number;
+  accountIds?: string[];
+  recordedAt: string;
+}
+
+export interface TrendResponse {
+  metric: string;
+  points: TrendPoint[];
 }
 
 export interface ApiError {

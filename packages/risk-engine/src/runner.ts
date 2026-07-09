@@ -17,6 +17,7 @@ import type {
   RuleExecutionResult,
   RiskScoreInput,
   GraphVertex,
+  ExternalRef,
 } from './types';
 
 const MAX_PAGINATION_BATCH = 100;
@@ -116,6 +117,57 @@ class DynamoDBIssueStore {
     );
   }
 
+  async updateIssueFields(issue: Issue): Promise<void> {
+    const externalRefsJson = JSON.stringify(issue.externalRefs || []);
+    await this.docClient.send(
+      new UpdateItemCommand({
+        TableName: ISSUES_TABLE,
+        Key: { id: { S: issue.id } } as Record<string, AttributeValue>,
+        UpdateExpression:
+          'SET #riskScore = :riskScore, #severity = :severity, #pathSummary = :pathSummary, ' +
+          '#metadata = :metadata, #updatedAt = :updatedAt, #externalRefs = :externalRefs',
+        ConditionExpression: '#status <> :resolved',
+        ExpressionAttributeNames: {
+          '#riskScore': 'riskScore',
+          '#severity': 'severity',
+          '#pathSummary': 'pathSummary',
+          '#metadata': 'metadata',
+          '#updatedAt': 'updatedAt',
+          '#externalRefs': 'externalRefs',
+          '#status': 'status',
+        },
+        ExpressionAttributeValues: {
+          ':riskScore': { N: String(issue.riskScore) },
+          ':severity': { S: issue.severity },
+          ':pathSummary': { S: JSON.stringify(issue.pathSummary) },
+          ':metadata': { S: JSON.stringify(issue.metadata) },
+          ':updatedAt': { S: issue.updatedAt },
+          ':externalRefs': { S: externalRefsJson },
+          ':resolved': { S: 'resolved' },
+        },
+      })
+    );
+  }
+
+  async updateExternalRefs(issueId: string, refs: ExternalRef[]): Promise<void> {
+    const externalRefsJson = JSON.stringify(refs);
+    await this.docClient.send(
+      new UpdateItemCommand({
+        TableName: ISSUES_TABLE,
+        Key: { id: { S: issueId } } as Record<string, AttributeValue>,
+        UpdateExpression: 'SET #externalRefs = :externalRefs, #updatedAt = :updatedAt',
+        ExpressionAttributeNames: {
+          '#externalRefs': 'externalRefs',
+          '#updatedAt': 'updatedAt',
+        },
+        ExpressionAttributeValues: {
+          ':externalRefs': { S: externalRefsJson },
+          ':updatedAt': { S: new Date().toISOString() },
+        },
+      })
+    );
+  }
+
   async updateIssueStatus(issueId: string, status: IssueStatus): Promise<void> {
     await this.docClient.send(
       new UpdateItemCommand({
@@ -191,12 +243,16 @@ export class RiskRuleRunner {
         );
 
         if (existingIssue) {
+          if (existingIssue.status !== 'resolved') {
+            await this.refreshExistingIssue(existingIssue, rule, path, resources);
+          }
           activeIssueIds.add(existingIssue.id);
         } else {
           const issue = await this.createIssueFromMatch(rule, path, resources);
           await this.issueStore.upsertIssue(issue);
           issuesCreated++;
           activeIssueIds.add(issue.id);
+          await this.emitToIntegrations(issue, rule);
         }
       }
 
@@ -230,7 +286,38 @@ export class RiskRuleRunner {
       results.push(result);
     }
 
+    await this.snapshotTrends(results);
+
     return results;
+  }
+
+  private async snapshotTrends(results: RuleExecutionResult[]): Promise<void> {
+    try {
+      const { PostureTrendStore } = await import('./posture-trend-store');
+      const store = new PostureTrendStore();
+
+      let totalOpen = 0;
+      const bySeverity: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+
+      for (const result of results) {
+        const openIssues = await this.issueStore.getOpenIssuesByRule(result.ruleId);
+        totalOpen += openIssues.length;
+        for (const issue of openIssues) {
+          if (bySeverity[issue.severity] !== undefined) {
+            bySeverity[issue.severity]++;
+          }
+        }
+      }
+
+      await store.recordMany([
+        { metric: 'openIssuesBySeverity', value: totalOpen, accountIds: [] },
+        { metric: 'publicBuckets', value: bySeverity.critical, accountIds: [] },
+        { metric: 'crossAccountTrusts', value: bySeverity.high, accountIds: [] },
+        { metric: 'usersWithoutMfa', value: bySeverity.medium, accountIds: [] },
+      ]);
+    } catch {
+      // Trend snapshotting is best-effort; never fail the rule run
+    }
   }
 
   private extractPathFromMatch(match: any): GraphVertex[] {
@@ -358,6 +445,65 @@ export class RiskRuleRunner {
       isCrownJewel,
       attackPathLength,
     };
+  }
+
+  private async refreshExistingIssue(
+    existing: Issue,
+    rule: RiskRule,
+    path: GraphVertex[],
+    resources: { resourceId: string; resourceType: string; resourceName?: string }[]
+  ): Promise<void> {
+    const riskInput = this.buildRiskInput(rule, path, resources);
+    const scoreResult = computeRiskScore(riskInput);
+
+    const pathSegments = path.slice(0, -1).map((from, i) => ({
+      from: from.id,
+      to: path[i + 1].id,
+      edgeType: path[i + 1].label,
+    }));
+
+    const refreshed: Issue = {
+      ...existing,
+      pathSummary: pathSegments,
+      riskScore: scoreResult.score,
+      severity: scoreResult.severity,
+      updatedAt: new Date().toISOString(),
+      metadata: {
+        ...existing.metadata,
+        scoringFactors: scoreResult.factors,
+        ruleName: rule.name,
+        lastRefreshedAt: new Date().toISOString(),
+      },
+    };
+
+    try {
+      await this.issueStore.updateIssueFields(refreshed);
+    } catch (e) {
+      // Conditional update failed (issue was resolved between read and write) — skip silently
+    }
+
+    await this.emitToIntegrations(refreshed, rule);
+  }
+
+  private async emitToIntegrations(issue: Issue, rule: RiskRule): Promise<void> {
+    if (!rule.autoTicketConfig?.enabled) return;
+    if (issue.status === 'suppressed') return;
+
+    try {
+      const { IssueIntegrationsOrchestrator } = await import('@khalifa/integrations');
+      const orchestrator = new IssueIntegrationsOrchestrator();
+      const refs = await orchestrator.emit(issue, rule);
+      if (refs.length > 0) {
+        const existing = issue.externalRefs || [];
+        const merged = [...existing, ...refs].filter(
+          (ref, idx, arr) =>
+            arr.findIndex((r) => r.system === ref.system && r.id === ref.id) === idx
+        );
+        await this.issueStore.updateExternalRefs(issue.id, merged);
+      }
+    } catch (e) {
+      // Integrations are best-effort; never fail the rule run on sink errors
+    }
   }
 }
 

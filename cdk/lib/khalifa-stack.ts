@@ -9,6 +9,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as sns from 'aws-cdk-lib/aws-sns';
 import type { Construct } from 'constructs';
 
 export interface SecurityGraphIngestionStackProps extends cdk.StackProps {
@@ -242,6 +243,39 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
 
     logGroup(cloudTrailAnalyzerFn, 'CloudTrailAnalyzer');
 
+    const dspmScannerFn = new lambda.Function(this, 'DspmScannerFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset('../lambdas/dspm-scanner'),
+      role: collectorAssumeRole,
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 2048,
+      environment: {
+        NEPTUNE_ENDPOINT: neptuneEndpoint,
+        NEPTUNE_AUTH_SECRET_ARN: neptuneSecret.secretArn,
+        DSPM_SCAN_MODE: process.env.DSPM_SCAN_MODE || 'tagged-only',
+        MACIE_ENABLED: process.env.MACIE_ENABLED || 'false',
+      },
+    });
+    dspmScannerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['s3:ListBucket', 's3:GetObject', 's3:ListAllMyBuckets'],
+        resources: ['arn:aws:s3:::*'],
+      })
+    );
+    if (process.env.MACIE_ENABLED === 'true') {
+      dspmScannerFn.addToRolePolicy(
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ['macie2:ListFindings'],
+          resources: ['*'],
+        })
+      );
+    }
+
+    logGroup(dspmScannerFn, 'DspmScanner');
+
     const listAccounts = new tasks.LambdaInvoke(this, 'ListAccounts', {
       lambdaFunction: listAccountsFn,
       outputPath: '$.Payload',
@@ -414,6 +448,20 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
+    const postureTrendsTable = new dynamodb.Table(this, 'PostureTrendsTable', {
+      tableName: 'PostureTrends',
+      partitionKey: { name: 'metric', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'date', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    const issuesTopic = new sns.Topic(this, 'IssuesTopic', {
+      topicName: 'khalifa-issues',
+      displayName: 'Khalifa Security Issues',
+    });
+
     const riskEngineFn = new lambda.Function(this, 'RiskEngineFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'index.handler',
@@ -425,6 +473,12 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         NEPTUNE_ENDPOINT: neptuneEndpoint,
         ISSUES_TABLE: this.issuesTable.tableName,
         NEPTUNE_AUTH_SECRET_ARN: neptuneSecret.secretArn,
+        POSTURE_TRENDS_TABLE: postureTrendsTable.tableName,
+        ISSUES_TOPIC_ARN: issuesTopic.topicArn,
+        ISSUE_SINKS: process.env.ISSUE_SINKS || 'sns',
+        SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL || '',
+        SLACK_MIN_SEVERITY: process.env.SLACK_MIN_SEVERITY || 'high',
+        UI_BASE_URL: process.env.UI_BASE_URL || '',
       },
     });
     riskEngineFn.addToRolePolicy(
@@ -448,6 +502,20 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         resources: [this.evidenceTable.tableArn, this.reportsTable.tableArn],
       })
     );
+    riskEngineFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['dynamodb:PutItem', 'dynamodb:Query'],
+        resources: [postureTrendsTable.tableArn],
+      })
+    );
+    riskEngineFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sns:Publish'],
+        resources: [issuesTopic.topicArn],
+      })
+    );
 
     logGroup(riskEngineFn, 'RiskEngine');
 
@@ -467,6 +535,12 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       ruleName: 'cloudtrail-analyzer-scheduled-trigger',
       schedule: events.Schedule.cron({ minute: '0', hour: '2' }),
       targets: [new targets.LambdaFunction(cloudTrailAnalyzerFn)],
+    });
+
+    new events.Rule(this, 'DspmScannerScheduledTrigger', {
+      ruleName: 'dspm-scanner-scheduled-trigger',
+      schedule: events.Schedule.cron({ minute: '0', hour: '3' }),
+      targets: [new targets.LambdaFunction(dspmScannerFn)],
     });
   }
 }

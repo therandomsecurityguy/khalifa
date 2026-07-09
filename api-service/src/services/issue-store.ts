@@ -4,11 +4,12 @@ import {
   GetItemCommand,
   QueryCommand,
   ScanCommand,
+  UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import type { QueryCommandInput, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
-import type { Issue, IssueListQuery, IssueListResponse, Severity } from '../types';
+import type { Issue, IssueListQuery, IssueListResponse, Severity, IssueStatus } from '../types';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 1000;
@@ -38,6 +39,21 @@ export class IssueStore {
     }
 
     return unmarshall(result.Item) as Issue;
+  }
+
+  async updateStatus(id: string, status: IssueStatus): Promise<void> {
+    await this.docClient.send(
+      new UpdateItemCommand({
+        TableName: this.tableName,
+        Key: { id: { S: id } } as Record<string, AttributeValue>,
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':status': { S: status },
+          ':updatedAt': { S: new Date().toISOString() },
+        },
+      })
+    );
   }
 
   async listIssues(query: IssueListQuery): Promise<IssueListResponse> {
