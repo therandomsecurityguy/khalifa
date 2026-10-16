@@ -299,6 +299,11 @@ run "data_plane" {
   }
 
   assert {
+    condition     = output.runtime_secret_name == "example-khalifa/runtime"
+    error_message = "The runtime secret name must follow the <name_prefix>-khalifa/runtime convention External Secrets reads."
+  }
+
+  assert {
     condition     = aws_kms_alias.this.name == "alias/example-khalifa" && aws_kms_key.this.enable_key_rotation
     error_message = "Data-plane CMK must exist with rotation and the environment alias."
   }

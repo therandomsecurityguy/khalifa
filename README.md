@@ -102,8 +102,9 @@ terraform init
 terraform apply -var install_chart=false     # AWS data plane + ECR repositories
 kubectl create namespace khalifa
 
-# build and push api, ui, rule-runner images to the module ECR repositories
-# (see the example README, or scripts/smoke-containers.sh for local smoke)
+# build and push api, ui, rule-runner images, then set their digests in
+# terraform.tfvars (the chart only accepts digest-pinned images; see the
+# example README, or scripts/smoke-containers.sh for local smoke)
 
 terraform apply                              # install the Helm release
 ```

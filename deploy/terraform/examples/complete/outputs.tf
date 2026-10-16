@@ -13,6 +13,11 @@ output "runtime_secret_name" {
   value       = module.khalifa_data.runtime_secret_name
 }
 
+output "chart_values" {
+  description = "Non-secret chart values passed to the Helm release. Runtime credentials stay in Secrets Manager."
+  value       = local.chart_values
+}
+
 output "image_references" {
   description = "Image references the chart pulls. Push these before installing the release."
   value = {

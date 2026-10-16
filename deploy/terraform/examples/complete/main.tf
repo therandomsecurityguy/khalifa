@@ -21,12 +21,14 @@ provider "helm" {
 }
 
 locals {
+  # The data module creates IRSA roles for every workload with AWS access.
+  # The UI authenticates users only, so it keeps the chart default
+  # ServiceAccount without an AWS role annotation.
   service_account_roles = {
     api                   = module.khalifa_data.workload_role_arns["api"]
-    ui                    = module.khalifa_data.workload_role_arns["ui"]
     ruleRunner            = module.khalifa_data.workload_role_arns["rule-runner"]
-    organizationCollector = module.khalifa_data.workload_role_arns["org-collector"]
-    incrementalCollector  = module.khalifa_data.workload_role_arns["incremental"]
+    organizationCollector = module.khalifa_data.workload_role_arns["organization-collector"]
+    incrementalCollector  = module.khalifa_data.workload_role_arns["incremental-collector"]
     graphWriter           = module.khalifa_data.workload_role_arns["graph-writer"]
     compliance            = module.khalifa_data.workload_role_arns["compliance"]
     cloudtrailAnalyzer    = module.khalifa_data.workload_role_arns["cloudtrail-analyzer"]
@@ -35,9 +37,9 @@ locals {
     leastPrivilegeSweep   = module.khalifa_data.workload_role_arns["least-privilege-sweep"]
   }
 
-  api_image         = "${module.khalifa_registry.repositories["api"].url}:${var.image_tag}"
-  ui_image          = "${module.khalifa_registry.repositories["ui"].url}:${var.image_tag}"
-  rule_runner_image = "${module.khalifa_registry.repositories["rule-runner"].url}:${var.image_tag}"
+  api_image         = "${module.khalifa_registry.repositories["api"].url}@${var.image_digests.api}"
+  ui_image          = "${module.khalifa_registry.repositories["ui"].url}@${var.image_digests.ui}"
+  rule_runner_image = "${module.khalifa_registry.repositories["rule-runner"].url}@${var.image_digests.rule_runner}"
 
   # Every collector-style workload runs the rule-runner image; the runtime
   # command selects the entrypoint.
@@ -63,8 +65,10 @@ locals {
       # COLLECTOR_EXTERNAL_ID and GRAPH_WRITER_TOKEN come from Secrets Manager
       # through External Secrets; they are never chart values or state.
       externalSecrets = {
-        enabled    = true
-        targetName = module.khalifa_data.runtime_secret_name
+        enabled = true
+        # Kubernetes Secret name the workloads mount; the AWS secret name is
+        # the remoteRef key below.
+        targetName = "${var.release_name}-runtime"
         secretStore = {
           service = "SecretsManager"
           region  = var.region

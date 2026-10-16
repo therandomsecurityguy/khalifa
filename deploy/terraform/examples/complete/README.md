@@ -56,9 +56,18 @@ aws ecr get-login-password --region "$REGION" \
   | docker login --username AWS --password-stdin "$REGISTRY"
 
 # from the repository root, where the multi-stage Dockerfile lives
-docker buildx build --platform linux/amd64 --target api         -t "$REGISTRY/example-khalifa-api:$IMAGE_TAG"         --push .
-docker buildx build --platform linux/amd64 --target ui          -t "$REGISTRY/example-khalifa-ui:$IMAGE_TAG"          --push .
-docker buildx build --platform linux/amd64 --target rule-runner -t "$REGISTRY/example-khalifa-rule-runner:$IMAGE_TAG" --push .
+docker buildx build --platform linux/amd64 --target api         -t "$REGISTRY/example-khalifa-api:latest"         --push .
+docker buildx build --platform linux/amd64 --target ui          -t "$REGISTRY/example-khalifa-ui:latest"          --push .
+docker buildx build --platform linux/amd64 --target rule-runner -t "$REGISTRY/example-khalifa-rule-runner:latest" --push .
+```
+
+Then record each digest and set `image_digests` in `terraform.tfvars`. The chart schema only accepts digest-pinned images:
+
+```bash
+for repo in api ui rule-runner; do
+  printf '%s %s\n' "$repo" "$(aws ecr describe-images --repository-name "example-khalifa-$repo" \
+    --image-ids imageTag=latest --query 'imageDetails[0].imageDigest' --output text)"
+done
 ```
 
 `terraform output -json image_references` prints the exact references the chart expects. `scripts/smoke-containers.sh` shows the same build targets for local smoke testing.
