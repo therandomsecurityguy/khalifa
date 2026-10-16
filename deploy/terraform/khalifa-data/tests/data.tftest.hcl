@@ -95,13 +95,13 @@ mock_provider "aws" {
 
   mock_resource "aws_glue_catalog_database" {
     defaults = {
-      arn = "arn:aws:glue:us-west-2:111122223333:database/security_prod_khalifa_cloudtrail"
+      arn = "arn:aws:glue:us-west-2:111122223333:database/example_khalifa_cloudtrail"
     }
   }
 
   mock_resource "aws_glue_catalog_table" {
     defaults = {
-      arn = "arn:aws:glue:us-west-2:111122223333:table/security_prod_khalifa_cloudtrail/cloudtrail_logs"
+      arn = "arn:aws:glue:us-west-2:111122223333:table/example_khalifa_cloudtrail/cloudtrail_logs"
     }
   }
 }
@@ -461,7 +461,7 @@ run "cloudtrail_athena" {
 
   assert {
     condition = (
-      output.helm_values.config.athenaDatabase == "security_prod_khalifa_cloudtrail" &&
+      output.helm_values.config.athenaDatabase == "example_khalifa_cloudtrail" &&
       output.helm_values.config.athenaWorkgroup == "example-khalifa-cloudtrail" &&
       output.helm_values.config.athenaResultsLocation == "s3://example-khalifa-athena-results/results/"
     )

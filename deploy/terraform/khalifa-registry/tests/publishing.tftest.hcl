@@ -19,8 +19,8 @@ run "publishing_boundary" {
   command = plan
 
   variables {
-    name_prefix        = "example"
-    github_repository  = "example/khalifa"
+    name_prefix                = "example"
+    github_repository          = "example/khalifa"
     github_oidc_subject_prefix = "repo:example@123456789/khalifa@987654321"
   }
 
