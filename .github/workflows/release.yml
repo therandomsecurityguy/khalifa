@@ -27,8 +27,12 @@ env:
   VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
   DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
   NODE_OPTIONS: --max-old-space-size=8192
-  PUBLISH_IMAGES: 'true'
-  AWS_REGION: ${{ vars.KHALIFA_AWS_REGION || 'us-west-2' }}
+  # Image publishing activates when the release role variable is configured
+  # (set KHALIFA_AWS_ROLE_ARN plus the three ECR repository variables from the
+  # khalifa-registry module outputs). Without it the release ships the
+  # packaging artifacts only and the manifest records published: false.
+  PUBLISH_IMAGES: ${{ vars.KHALIFA_AWS_ROLE_ARN != '' }}
+  AWS_REGION: ${{ vars.KHALIFA_AWS_REGION || 'us-east-1' }}
   AWS_ROLE_ARN: ${{ vars.KHALIFA_AWS_ROLE_ARN }}
   API_ECR_REPOSITORY: ${{ vars.KHALIFA_API_ECR_REPOSITORY }}
   UI_ECR_REPOSITORY: ${{ vars.KHALIFA_UI_ECR_REPOSITORY }}
@@ -115,7 +119,9 @@ jobs:
 
       - name: Record unpublished images
         if: env.PUBLISH_IMAGES != 'true' || env.DRY_RUN == 'true'
-        run: echo '{}' > artifacts/images.json
+        run: |
+          echo '{}' > artifacts/images.json
+          echo "Images are not published (dry run, or KHALIFA_AWS_ROLE_ARN is unset); this release ships packaging artifacts only." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Assume AWS release role
         if: env.PUBLISH_IMAGES == 'true' && env.DRY_RUN != 'true'
