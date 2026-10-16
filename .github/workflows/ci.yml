@@ -131,21 +131,32 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [containers, deployment]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Validate tag token
+      # Tag pushes made with the workflow token do not trigger the Release
+      # workflow. Set a fine-grained PAT with contents: write as the
+      # GH_KHALIFA secret to chain the release; without it the tag is still
+      # created and the release can be dispatched manually.
+      - name: Select tag token
+        id: token
         env:
           GH_KHALIFA: ${{ secrets.GH_KHALIFA }}
         run: |
           if [[ -z "$GH_KHALIFA" ]]; then
-            echo "GH_KHALIFA is required to create release tags" >&2
-            exit 1
+            echo "GH_KHALIFA is not set; falling back to the workflow token." >&2
+            echo "The Release workflow will not trigger automatically; run it with:" >&2
+            echo "  gh workflow run Release --ref main -f version=<tag>" >&2
+            echo "use_pat=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "use_pat=true" >>"$GITHUB_OUTPUT"
           fi
 
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_KHALIFA }}
+          token: ${{ secrets.GH_KHALIFA || github.token }}
 
       - name: Bump version and push tag
         env:
@@ -175,3 +186,12 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "$next"
           git push origin "$next"
+
+          if [[ "${{ steps.token.outputs.use_pat }}" != "true" ]]; then
+            {
+              echo "### Tagged $next"
+              echo
+              echo "The Release workflow was not triggered automatically (no GH_KHALIFA PAT)."
+              echo "Dispatch it with: \`gh workflow run Release --ref main -f version=$next\`"
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi

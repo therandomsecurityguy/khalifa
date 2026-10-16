@@ -65,11 +65,15 @@ run "$timeout_seconds" terraform fmt -check -recursive "$root/deploy"
 cp -R "$root/deploy" "$tmp/deploy"
 run "$init_timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/khalifa-eks" init -backend=false -input=false -no-color
 run "$timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/khalifa-eks" validate -no-color
+run "$timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/khalifa-eks" test -no-color
 run "$init_timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/khalifa-registry" init -backend=false -input=false -no-color
 run "$timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/khalifa-registry" validate -no-color
 run "$timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/khalifa-registry" test -no-color
 run "$init_timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/khalifa-data" init -backend=false -input=false -no-color
 run "$timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/khalifa-data" validate -no-color
 run "$timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/khalifa-data" test -no-color
+run "$init_timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/examples/complete" init -backend=false -input=false -no-color
+run "$timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/examples/complete" validate -no-color
+run "$timeout_seconds" env TF_IN_AUTOMATION=1 terraform -chdir="$tmp/deploy/terraform/examples/complete" test -no-color
 
 echo "Deployment modules validation passed."

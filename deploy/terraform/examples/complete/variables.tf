@@ -105,10 +105,18 @@ variable "ui_base_url" {
   type        = string
 }
 
-variable "image_tag" {
-  description = "Tag the Helm chart pulls for the api, ui, and rule-runner images pushed to the module ECR repositories."
-  type        = string
-  default     = "latest"
+variable "image_digests" {
+  description = "Digest references for the api, ui, and rule-runner images pushed to the module ECR repositories. The chart schema only accepts digest-pinned images; read them from ECR or the release workflow's artifacts."
+  type = object({
+    api         = string
+    ui          = string
+    rule_runner = string
+  })
+
+  validation {
+    condition     = alltrue([for digest in values(var.image_digests) : can(regex("^sha256:[a-f0-9]{64}$", digest))])
+    error_message = "image_digests must contain sha256:<64 hex characters> digests for api, ui, and rule_runner."
+  }
 }
 
 variable "install_chart" {

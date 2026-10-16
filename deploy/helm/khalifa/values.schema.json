@@ -683,6 +683,7 @@
               "graphWriter",
               "compliance",
               "cloudtrailAnalyzer",
+              "dspmScanner",
               "policyEvaluator",
               "leastPrivilegeSweep"
             ]
