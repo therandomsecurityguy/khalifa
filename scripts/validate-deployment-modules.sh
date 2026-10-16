@@ -8,6 +8,7 @@ values="${HELM_VALUES_FILE:-$root/deploy/testdata/eks-deployment-values.yaml}"
 eks_module="${TERRAFORM_DIR:-$root/deploy/terraform/khalifa-eks}"
 registry_module="${REGISTRY_TERRAFORM_DIR:-$root/deploy/terraform/khalifa-registry}"
 data_module="${DATA_TERRAFORM_DIR:-$root/deploy/terraform/khalifa-data}"
+examples_module="${EXAMPLES_TERRAFORM_DIR:-$root/deploy/terraform/examples/complete}"
 timeout_seconds="${COMMAND_TIMEOUT_SECONDS:-180}"
 init_timeout_seconds="${TERRAFORM_INIT_TIMEOUT_SECONDS:-300}"
 
@@ -21,7 +22,7 @@ timeout_bin="$(command -v timeout || command -v gtimeout || true)"
 [[ "$init_timeout_seconds" =~ ^[1-9][0-9]*$ ]] || fail "TERRAFORM_INIT_TIMEOUT_SECONDS must be a positive integer"
 [[ -f "$chart/Chart.yaml" ]] || fail "Helm chart not found: $chart"
 [[ -f "$values" ]] || fail "Helm values not found: $values"
-for module in "$eks_module" "$registry_module" "$data_module"; do
+for module in "$eks_module" "$registry_module" "$data_module" "$examples_module"; do
   [[ -d "$module" ]] || fail "Terraform module not found: $module"
 done
 
@@ -54,7 +55,7 @@ unresolved='\{\{|\}\}|\$\{[^}]+\}'
 sentinel='(^|[^[:alnum:]_])(REPLACE([_-]?ME)?|CHANGE([_-]?ME)?|TODO|PLACEHOLDER([_-]?ARN)?)([^[:alnum:]_]|$)|<[A-Za-z][A-Za-z0-9_-]*>'
 ! grep -EnH "$unresolved" "$tmp/rendered.yaml" "$tmp/rendered-eso.yaml" || fail "Rendered manifest contains unresolved template syntax"
 ! grep -EinH "$sentinel" "$tmp/rendered.yaml" "$tmp/rendered-eso.yaml" "$values" "$eso_values" || fail "Helm output or values contain placeholder tokens"
-! grep -ERinH --include='*.tf' "$sentinel" "$eks_module" "$registry_module" "$data_module" || fail "Terraform source contains placeholder tokens"
+! grep -ERinH --include='*.tf' "$sentinel" "$eks_module" "$registry_module" "$data_module" "$examples_module" || fail "Terraform source contains placeholder tokens"
 
 echo "==> Kubernetes schema validation"
 run "$timeout_seconds" kubeconform -strict -summary -ignore-missing-schemas "$tmp/rendered.yaml" "$tmp/rendered-eso.yaml"

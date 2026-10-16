@@ -90,6 +90,26 @@ A deployment repository pins a release tag, creates namespace `khalifa`, and pas
 > [!IMPORTANT]
 > Do not copy ExternalId or the graph-writer token into Helm values or Terraform state. `khalifa-eks` will not create the namespace (`create_namespace = false`).
 
+### Getting started (EKS)
+
+[`deploy/terraform/examples/complete`](deploy/terraform/examples/complete) wires all three modules against an existing EKS cluster, including the External Secrets IRSA role that reads the runtime secret. With Terraform 1.7+, an EKS cluster (and its IAM OIDC provider), the External Secrets operator, and Docker:
+
+```bash
+cd deploy/terraform/examples/complete
+cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
+
+terraform init
+terraform apply -var install_chart=false     # AWS data plane + ECR repositories
+kubectl create namespace khalifa
+
+# build and push api, ui, rule-runner images to the module ECR repositories
+# (see the example README, or scripts/smoke-containers.sh for local smoke)
+
+terraform apply                              # install the Helm release
+```
+
+Then add yourself to Cognito (`aws cognito-idp admin-add-user-to-group ... khalifa-admin`) and deploy [`templates/SecurityGraphCollectorRole.yaml`](templates/SecurityGraphCollectorRole.yaml) into member accounts. Full walkthrough, ingress/TLS, and teardown notes: [example README](deploy/terraform/examples/complete/README.md).
+
 Collection and compliance share the rule-runner image. Command selects the entrypoint:
 
 | Command                  | Model      | Required configuration                                                                                               | Retry owner                                                                  |

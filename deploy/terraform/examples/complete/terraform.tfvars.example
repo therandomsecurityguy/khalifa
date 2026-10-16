@@ -1,0 +1,54 @@
+# Copy to terraform.tfvars and fill in for your environment.
+
+region       = "us-east-1"
+cluster_name = "my-eks-cluster"
+
+# Discover these from the cluster and its VPC:
+#   aws eks describe-cluster --name my-eks-cluster --query 'cluster.{vpc:resourcesVpcConfig.vpcId,subnets:resourcesVpcConfig.subnetIds,issuer:identity.oidc.issuer}'
+#   aws iam list-open-id-connect-providers
+#   aws eks describe-nodegroup --cluster-name my-eks-cluster --nodegroup-name <name> --query 'nodegroup.resources'
+vpc_id                 = "vpc-00000000000000000"
+vpc_cidr               = "10.0.0.0/16"
+private_subnet_ids     = ["subnet-00000000000000001", "subnet-00000000000000002"]
+node_security_group_id = "sg-00000000000000000"
+oidc_provider_arn      = "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE"
+
+name_prefix = "example"
+
+home_account_id        = "123456789012"
+collection_account_ids = ["123456789012"]
+collection_regions     = ["us-east-1"]
+
+ui_base_url = "https://khalifa.example.com"
+image_tag   = "latest"
+
+github_repository = "example/khalifa"
+
+# Optional: enable CloudTrail usage telemetry (Athena over an organization trail).
+# cloudtrail_logs_bucket      = "example-cloudtrail-logs"
+# cloudtrail_organization_id  = "o-xxxxxxxxxx"
+# cloudtrail_logs_kms_key_arn = "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-0000-0000-000000000000"
+
+# Optional: chart extras (ingress, autoscaling, serviceMonitor, ...). Values are
+# merged at the top level, so include generated keys like image when you
+# override a component map.
+# extra_chart_values = {
+#   ingress = {
+#     enabled   = true
+#     className = "alb"
+#     annotations = {
+#       "alb.ingress.kubernetes.io/scheme"      = "internal"
+#       "alb.ingress.kubernetes.io/target-type" = "ip"
+#     }
+#     hosts = [
+#       {
+#         host  = "khalifa.example.com"
+#         paths = [{ path = "/", pathType = "Prefix", component = "ui" }]
+#       },
+#       {
+#         host  = "api.khalifa.example.com"
+#         paths = [{ path = "/", pathType = "Prefix", component = "api" }]
+#       },
+#     ]
+#   }
+# }
