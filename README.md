@@ -124,7 +124,7 @@ Collection and compliance share the rule-runner image. Command selects the entry
 
 `COLLECTION_CONCURRENCY` is capped at 20. Every command supports `--check`. Workers drain on `SIGINT` / `SIGTERM`. Graph-writer mutations need a bearer token; NetworkPolicy allows collector pods only.
 
-Release tags publish Lambda archives, the Helm chart, Terraform modules, an npm SBOM, and SHA-256 checksums. Digest-only ECR images are published too when the `KHALIFA_AWS_ROLE_ARN` and ECR repository variables from `khalifa-registry` are configured; without them the release ships the packaging artifacts only. Main merges accumulate and the auto-tag job cuts the next tag once `KHALIFA_RELEASE_MIN_COMMITS` commits (repository variable, default 10) have landed since the previous tag, then dispatches the Release workflow (or chains it through the optional `GH_KHALIFA` PAT when one is set).
+Release tags publish Lambda archives, the Helm chart, Terraform modules, an npm SBOM, and SHA-256 checksums. The nightly `Trust center sync` workflow renders the publishable CIS posture into the in-repo static trust-center site (`trust-center/`, built with `npm run trust-center:build`) and deploys it to Cloudflare Pages; it is disabled until `TRUST_CENTER_PROJECT` is configured (see [OPERATIONAL.md](OPERATIONAL.md), section J). Digest-only ECR images are published too when the `KHALIFA_AWS_ROLE_ARN` and ECR repository variables from `khalifa-registry` are configured; without them the release ships the packaging artifacts only. Main merges accumulate and the auto-tag job cuts the next tag once `KHALIFA_RELEASE_MIN_COMMITS` commits (repository variable, default 10) have landed since the previous tag, then dispatches the Release workflow (or chains it through the optional `GH_KHALIFA` PAT when one is set).
 
 ### CDK / Lambda
 
@@ -237,7 +237,8 @@ Gremlin evaluators write pass / fail / manual evidence to DynamoDB. 97 controls,
 | [`api-service/`](api-service) · [`ui/`](ui)                                                                | REST API and Next.js UI                                                                            |
 | [`deploy/`](deploy)                                                                                        | Helm chart, Terraform modules, fixtures                                                            |
 | [`templates/`](templates)                                                                                  | Member collection role (`SecurityGraphCollectorRole`)                                              |
-| [`scripts/`](scripts)                                                                                      | Helm/Terraform validation, Helm kind smoke, container smoke, Lambda package/smoke, npm audit       |
+| [`scripts/`](scripts)                                                                                      | Helm/Terraform validation, Helm kind smoke, container smoke, Lambda package/smoke, trust-center sync, npm audit |
+| [`trust-center/`](trust-center)                                                                            | In-repo static trust-center site generated from the publishable posture |
 | [`cdk/`](cdk)                                                                                              | Lambda + EventBridge stack                                                                         |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`OPERATIONAL.md`](OPERATIONAL.md) · [`CHANGELOG.md`](CHANGELOG.md) | Design, runbooks, history                                                                          |
 

@@ -1,0 +1,75 @@
+name: Trust center sync
+
+on:
+  schedule:
+    # Nightly after the 4-hourly compliance reconciler.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trust-center-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync and deploy trust center
+    # Enable by configuring the TRUST_CENTER_PROJECT repository variable and
+    # the secrets listed in scripts/trust-center-sync/README.md.
+    if: vars.TRUST_CENTER_PROJECT != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Validate configuration
+        env:
+          TRUST_CENTER_PROJECT: ${{ vars.TRUST_CENTER_PROJECT }}
+          KHALIFA_API_URL: ${{ vars.KHALIFA_API_URL }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -eu
+          missing=0
+          for name in TRUST_CENTER_PROJECT KHALIFA_API_URL CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "$(printenv "$name" || true)" ]; then
+              echo "$name must be configured to run the trust-center sync" >&2
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fails closed: STALE/MISSING records, HTTP errors, or malformed payloads
+      # leave the previous configuration in place, so the deployment below
+      # never publishes a blank or degraded page.
+      - name: Render trust-center configuration
+        env:
+          KHALIFA_API_URL: ${{ vars.KHALIFA_API_URL }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          TRUST_CENTER_OUT_DIR: trust-center-config
+        run: npm run trust-center:sync
+
+      - name: Build trust-center site
+        run: npm run trust-center:build
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deploy trust-center/dist --project-name "${{ vars.TRUST_CENTER_PROJECT }}"

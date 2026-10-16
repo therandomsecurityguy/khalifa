@@ -210,3 +210,44 @@ that a label-wide traversal needs paging or reshaping.
 - CloudWatch Log Insights: `/aws/eks/security-graph-cluster/workload`
 - X-Ray: Service map for api-service
 - Prometheus metrics: `http://<pod>:8080/metrics`
+
+## J. Trust-center sync
+
+The nightly `Trust center sync` workflow renders Khalifa's publishable CIS
+posture into a static in-repo trust-center site (`trust-center/`) and deploys
+it to Cloudflare Pages. It stays disabled until `TRUST_CENTER_PROJECT` is
+configured; variables and secrets are listed in
+[`scripts/trust-center-sync/README.md`](scripts/trust-center-sync/README.md).
+
+What it sends: only the requirements that agreed with Security Hub for
+`reconciliation.minAgreementDays` and appear in
+`reconciliation.publishAllowlist`, as `{requirement, title, section, status}`.
+No accounts, Regions, counts, evidence, or disagreements.
+
+Run it by hand after a compliance cycle:
+
+```bash
+gh workflow run "Trust center sync"
+```
+
+Or locally: `npm run trust-center:sync` (API envs) then
+`npm run trust-center:build`; the site lands in `trust-center/dist/`.
+
+Site customization lives in `trust-center/site.config.json` (company name,
+security email, links, accent color, footer note). Framework and control
+statuses are generated and never hand-edited.
+
+It fails closed: a `STALE`/`MISSING` reconciliation record, an HTTP/auth error,
+or a malformed payload leaves the previous configuration in place and fails the
+job, so the previous Cloudflare Pages deployment stays live. A page that looks
+unchanged usually means the workflow failed closed — check the job log.
+
+Rotating the Access service token: create a new token for the Cloudflare Access
+policy that fronts the API, update `CF_ACCESS_CLIENT_ID` /
+`CF_ACCESS_CLIENT_SECRET` in the repository secrets, and set
+`reconciliation.trustCenterSyncClientId` (Helm values) to the new client id.
+Until both sides match, the endpoint accepts no one, by design.
+
+Provenance for a deployed page: the page's publication details show the
+generated-at time and the reconciliation record time; the same record is live
+at `GET /compliance/reconciliation/publishable`.

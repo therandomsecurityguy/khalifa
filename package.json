@@ -21,10 +21,10 @@
     "lambdas/*"
   ],
   "scripts": {
-    "format": "prettier --write \"{api-service,cdk,lambdas,packages,ui}/**/*.{ts,tsx,json,md}\"",
-    "format:check": "prettier --check \"{api-service,cdk,lambdas,packages,ui}/**/*.{ts,tsx,json,md}\"",
+    "format": "prettier --write \"{api-service,cdk,lambdas,packages,scripts/trust-center-sync,trust-center,ui}/**/*.{ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"{api-service,cdk,lambdas,packages,scripts/trust-center-sync,trust-center,ui}/**/*.{ts,tsx,json,md}\"",
     "lint": "npm run lint --workspaces --if-present -- --max-warnings=0",
-    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present && tsc --noEmit -p scripts/trust-center-sync && tsc --noEmit -p trust-center",
     "test": "npm run build:packages && jest --runInBand",
     "build": "npm run build:packages && npm run build:lambdas && npm run build:applications",
     "build:packages": "npm run build -w packages/integrations && npm run build -w packages/risk-engine",
@@ -41,7 +41,9 @@
     "ci:build": "npm run build",
     "ci:test": "npm run test",
     "ci:audit": "node scripts/check-npm-audit.mjs",
-    "ci:quality": "npm run ci:lint && npm run ci:typecheck && npm run ci:test && npm run ci:build && npm run package:lambdas && npm run smoke:lambdas"
+    "ci:quality": "npm run ci:lint && npm run ci:typecheck && npm run ci:test && npm run ci:build && npm run package:lambdas && npm run smoke:lambdas",
+    "trust-center:sync": "tsx scripts/trust-center-sync/index.ts",
+    "trust-center:build": "tsx trust-center/build.ts"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
@@ -51,7 +53,8 @@
     "jest": "^29.7.0",
     "prettier": "^3.2.5",
     "ts-jest": "^29.4.11",
-    "typescript": "^5.3.2"
+    "typescript": "^5.3.2",
+    "tsx": "^4.19.0"
   },
   "overrides": {
     "qs": "^6.16.0",
