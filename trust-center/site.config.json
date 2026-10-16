@@ -1,0 +1,14 @@
+{
+  "company": {
+    "name": "Khalifa",
+    "website": "",
+    "securityEmail": ""
+  },
+  "title": "Khalifa Trust Center",
+  "description": "Continuously evaluated AWS security posture from Khalifa's security graph.",
+  "links": [],
+  "theme": {
+    "primary": "#1e3a8a"
+  },
+  "footerNote": "This page reflects automated configuration posture. It is not a certification or an audit report."
+}

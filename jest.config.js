@@ -105,6 +105,20 @@ module.exports = {
       modulePathIgnorePatterns: ['<rootDir>/dist/', '<rootDir>/node_modules/'],
     },
     {
+      displayName: 'trust-center-site',
+      rootDir: '<rootDir>/trust-center',
+      preset: 'ts-jest',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/*.test.ts'],
+    },
+    {
+      displayName: 'trust-center-sync',
+      rootDir: '<rootDir>/scripts/trust-center-sync',
+      preset: 'ts-jest',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/*.test.ts'],
+    },
+    {
       displayName: 'ui',
       rootDir: '<rootDir>/ui',
       preset: 'ts-jest',

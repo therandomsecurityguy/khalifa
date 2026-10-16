@@ -31,7 +31,8 @@ One member role. Evaluation stays in-account.
 | **Risk**            | Scheduled rules and attack-path traversals on the live graph.                                                                                                                                                                                                                                                                                                                                               |
 | **Detection**       | GuardDuty detector coverage per region (including `MISSING`), Security Hub findings joined to internet-exposed resources (RULE-017, RULE-018), CloudTrail anomaly signals: root activity, secret reads from unseen IPs, AccessDenied bursts (RULE-020 to RULE-022), canary credential tripwires (RULE-023), and secret scanning of Lambda environment variables plus IMDSv1-with-role detection (RULE-024). |
 | **Exposure**        | Public EKS control planes (RULE-019) plus public S3/RDS and world-open security groups, derived from collected endpoint and network config.                                                                                                                                                                                                                                                                 |
-| **Compliance**      | CIS AWS Foundations v3.0, SOC 2 Type II, ISO 27001:2022, per-control evidence.                                                                                                                                                                                                                                                                                                                              |
+| **Compliance**      | CIS AWS Foundations v3.0 and the Khalifa baseline, per-control evidence, and CIS reconciliation against Security Hub before anything is publishable.                                                                                                                                                                                                                                                        |
+| **Trust center**    | Nightly static trust-center page built from the publishable posture (statuses only, in-repo site).                                                                                                                                                                                                                                                                                                          |
 | **Runtime**         | EKS Helm + `khalifa-eks` / `khalifa-data` / `khalifa-registry`. CDK Lambda remains for the in-repo pipeline.                                                                                                                                                                                                                                                                                                |
 
 ---
@@ -43,7 +44,7 @@ One member role. Evaluation stays in-account.
 | [Collector](lambdas/collector)                         | EKS    | Per-account, per-region inventory. Organization and incremental commands reuse this runtime.                   |
 | [Graph writer](lambdas/graph-writer)                   | EKS    | Bounded Neptune upserts. ClusterIP-only, token-gated.                                                          |
 | [Rule runner](packages/risk-engine)                    | EKS    | Scheduled Gremlin rules and scoring on the live graph.                                                         |
-| [Compliance](packages/risk-engine)                     | EKS    | CIS / SOC 2 / ISO evidence CronJob.                                                                            |
+| [Compliance](packages/risk-engine)                     | EKS    | CIS + Khalifa baseline evidence CronJob; reconciles CIS with Security Hub.                                     |
 | [API](api-service) / [UI](ui)                          | EKS    | Cognito or Cloudflare Access JWT. Issues, attack paths, compliance, identity.                                  |
 | [Policy evaluator](lambdas/policy-evaluator)           | Lambda | Effective permissions, trust edges, rightsizing.                                                               |
 | [CloudTrail analyzer](lambdas/cloudtrail-analyzer)     | EKS    | Athena over CloudTrail → AccessAnalyzerCache and anomaly signals written to the graph.                         |
@@ -124,7 +125,7 @@ Collection and compliance share the rule-runner image. Command selects the entry
 
 `COLLECTION_CONCURRENCY` is capped at 20. Every command supports `--check`. Workers drain on `SIGINT` / `SIGTERM`. Graph-writer mutations need a bearer token; NetworkPolicy allows collector pods only.
 
-Release tags publish Lambda archives, the Helm chart, Terraform modules, an npm SBOM, and SHA-256 checksums. Digest-only ECR images are published too when the `KHALIFA_AWS_ROLE_ARN` and ECR repository variables from `khalifa-registry` are configured; without them the release ships the packaging artifacts only. Main merges accumulate and the auto-tag job cuts the next tag once `KHALIFA_RELEASE_MIN_COMMITS` commits (repository variable, default 10) have landed since the previous tag, then dispatches the Release workflow (or chains it through the optional `GH_KHALIFA` PAT when one is set).
+Release tags publish Lambda archives, the Helm chart, Terraform modules, an npm SBOM, and SHA-256 checksums. The nightly `Trust center sync` workflow renders the publishable CIS posture into the in-repo static trust-center site (`trust-center/`, built with `npm run trust-center:build`) and deploys it to Cloudflare Pages; it is disabled until `TRUST_CENTER_PROJECT` is configured (see [OPERATIONAL.md](OPERATIONAL.md), section J). Digest-only ECR images are published too when the `KHALIFA_AWS_ROLE_ARN` and ECR repository variables from `khalifa-registry` are configured; without them the release ships the packaging artifacts only. Main merges accumulate and the auto-tag job cuts the next tag once `KHALIFA_RELEASE_MIN_COMMITS` commits (repository variable, default 10) have landed since the previous tag, then dispatches the Release workflow (or chains it through the optional `GH_KHALIFA` PAT when one is set).
 
 ### CDK / Lambda
 
@@ -190,24 +191,31 @@ Event-driven scanning is opt-in via `ENABLE_DSPM_EVENT_TRIGGER=true`: an SQS que
 
 ## API
 
-Unauthenticated: `/health`, `/livez`, `/readyz`. Everything else needs a Cognito JWT. Groups: `khalifa-admin`, `khalifa-analyst`, `khalifa-viewer`.
+Unauthenticated: `/health`, `/livez`, `/readyz`, `/metrics`. Everything else needs a Cognito JWT, or a verified Cloudflare Access identity when the Access provider is configured. RBAC groups: `khalifa-admin`, `khalifa-analyst`, `khalifa-viewer`.
 
 | Endpoint                                         | Description                                                           |
 | ------------------------------------------------ | --------------------------------------------------------------------- |
-| `GET /issues`                                    | Filters: `severity`, `team`, `status`, `ruleId`, `limit`, `nextToken`; `order` = `desc` (default) or `asc` by creation time |
-| `GET /issues/:id`                                | Issue plus attack path                                                |
-| `GET /issues/counts` · `/issues/stats`           | Severity counts                                                       |
-| `GET /attack-paths/search`                       | Presets or a resource to start/end at, `account`, `maxPathLength`     |
-| `GET /accounts`                                  | Account IDs and names                                                 |
-| `GET /resources/:arn`                            | Resource, neighbors, issues                                           |
-| `GET /resources/search`                          | `label=`                                                              |
-| `GET /compliance/frameworks`                     | List, `/:framework`, `/controls`, `/report`, `/drift`                 |
-| `GET /identity/effective-permissions/:principal` | Computed effective permissions                                        |
-| `GET /identity/escalation-paths`                 | Escalation paths                                                      |
-| `GET /identity/unused-permissions`               | Effective perms vs CloudTrail                                         |
-| `GET /identity/rightsizing/:principal`           | Least-privilege recommendation                                        |
-| `GET /identity/trust-graph`                      | Cross-account trust                                                   |
-| `GET /identity/least-privilege`                  | Sweep findings and `/summary`                                         |
+| Endpoint                                                                                      | Description                                                                                          |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `GET /session`                                                                                | Signed-in identity and effective role (Viewer+)                                                      |
+| `GET /rules` · `/rules/:id`                                                                   | Rule catalog with names, owners, and severity hints (Viewer+)                                        |
+| `GET /issues`                                                                                 | Filters: `severity`, `team`, `status`, `ruleId`, `limit`, `nextToken`; `order` = `desc` (default) or `asc` (Viewer+) |
+| `GET /issues/:id`                                                                             | Issue plus attack path (Viewer+)                                                                     |
+| `GET /issues/counts` · `/issues/stats` · `/issues/summary` · `/issues/schedule`               | Counts, statistics, summary, and collection schedule (Viewer+)                                       |
+| `POST /issues/:id/suppress` · `/issues/:id/reopen`                                            | Suppress or reopen an issue (Analyst+)                                                               |
+| `GET /attack-paths/search`                                                                    | Presets or a resource to start/end at, `account`, `maxPathLength` (Viewer+)                          |
+| `GET /accounts`                                                                               | Account IDs and names (Viewer+)                                                                      |
+| `GET /data-sources`                                                                           | Collection freshness per data source (Viewer+)                                                       |
+| `GET /resources/:arn` · `/resources/graph`                                                    | Resource with neighbors and issues; graph slice (Viewer+)                                            |
+| `GET /resources/search` · `/resources/labels` · `/resources/properties` · `/resources/values` | Resource search and label/property explorer (Viewer+)                                                |
+| `GET /compliance/frameworks`                                                                  | List frameworks; `/:framework`, `/controls`, `/controls/:controlId`, `/report`, `/drift` (Viewer+)   |
+| `GET /compliance/reconciliation/publishable`                                                  | Sanitized publishable CIS statuses; Cloudflare Access service token only                             |
+| `GET /identity/effective-permissions/:principal`                                              | Computed effective permissions (Viewer+)                                                             |
+| `GET /identity/escalation-paths` · `/identity/unused-permissions` · `/identity/trust-graph`   | CIEM views (Viewer+)                                                                                 |
+| `GET /identity/rightsizing/:principal`                                                        | Least-privilege recommendation (Viewer+)                                                             |
+| `GET /identity/least-privilege`                                                               | Sweep findings, `/summary`, and per-principal detail (Viewer+)                                       |
+| `GET /trends` · `/trends/:metric`                                                             | Posture trend metrics and series (Viewer+)                                                           |
+| `GET /integrations/status`                                                                    | Issue sink status (Viewer+)                                                                          |
 
 ```bash
 curl "https://api.example.com/api/issues?severity=critical&status=open&limit=100" \
@@ -218,13 +226,20 @@ curl "https://api.example.com/api/issues?severity=critical&status=open&limit=100
 
 ## Compliance
 
-Gremlin evaluators write pass / fail / manual evidence to DynamoDB. 97 controls, 35 automated.
+Gremlin evaluators write pass / fail / manual evidence to DynamoDB. 88 controls, 55 automated.
 
-| Framework                | Controls | Focus                                                     |
-| ------------------------ | -------: | --------------------------------------------------------- |
-| CIS AWS Foundations v3.0 |       65 | IAM, logging, monitoring, networking, data protection     |
-| SOC 2 Type II            |       14 | CC6–CC9 access, monitoring, change, risk                  |
-| ISO 27001:2022           |       18 | Annex A organizational, people, technological, operations |
+| Framework                | Controls | Focus                                                                          |
+| ------------------------ | -------: | ------------------------------------------------------------------------------ |
+| CIS AWS Foundations v3.0 |       47 | IAM, storage, logging, monitoring, networking, data protection                 |
+| Khalifa baseline         |       41 | Detection, Kubernetes, secrets and vulnerability management, attack paths      |
+
+The compliance job also runs the CIS reconciliation: it reads Security Hub's CIS
+v3.0.0 control findings through the audit account's read-only reader role and
+stores a `CIS_RECONCILIATION` record (per-requirement agreement, disagreement,
+and staleness). `/compliance/reconciliation/publishable` exposes only the
+requirements that agreed for `reconciliation.minAgreementDays` and appear in
+`reconciliation.publishAllowlist`; runbooks in
+[OPERATIONAL.md](OPERATIONAL.md), section J.
 
 ---
 
@@ -237,7 +252,8 @@ Gremlin evaluators write pass / fail / manual evidence to DynamoDB. 97 controls,
 | [`api-service/`](api-service) · [`ui/`](ui)                                                                | REST API and Next.js UI                                                                            |
 | [`deploy/`](deploy)                                                                                        | Helm chart, Terraform modules, fixtures                                                            |
 | [`templates/`](templates)                                                                                  | Member collection role (`SecurityGraphCollectorRole`)                                              |
-| [`scripts/`](scripts)                                                                                      | Helm/Terraform validation, Helm kind smoke, container smoke, Lambda package/smoke, npm audit       |
+| [`scripts/`](scripts)                                                                                      | Helm/Terraform validation, Helm kind smoke, container smoke, Lambda package/smoke, trust-center sync, npm audit |
+| [`trust-center/`](trust-center)                                                                            | In-repo static trust-center site generated from the publishable posture |
 | [`cdk/`](cdk)                                                                                              | Lambda + EventBridge stack                                                                         |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`OPERATIONAL.md`](OPERATIONAL.md) · [`CHANGELOG.md`](CHANGELOG.md) | Design, runbooks, history                                                                          |
 
