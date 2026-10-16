@@ -22,7 +22,7 @@ variable "github_repository" {
 }
 
 variable "github_oidc_subject_prefix" {
-  description = "Override for the GitHub OIDC sub prefix, for example GitHub's immutable repo:owner@ID/name@ID form. Defaults to repo:<github_repository>."
+  description = "Override for the GitHub OIDC sub prefix, for example GitHub's immutable repo:owner@ID/name@ID form. Defaults to the github_repository value with a repo: prefix."
   type        = string
   default     = ""
 
