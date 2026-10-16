@@ -31,15 +31,66 @@ describe('buildTrustFragment', () => {
 
   it('never certifies and stamps the record time', () => {
     const fragment = buildTrustFragment(response);
-    expect(fragment.frameworks).toEqual([
+    expect(fragment.frameworks[0]).toEqual({
+      id: 'CIS_AWS_FOUNDATIONS',
+      name: CIS_NAME,
+      status: 'in-progress',
+      description:
+        'Continuous posture from automated graph evaluation against the AWS configuration. Not a certification.',
+      lastVerified: '2026-10-16T00:00:00.000Z',
+    });
+  });
+
+  it('lists the mapped frameworks as planned while nothing is published for them', () => {
+    const fragment = buildTrustFragment(response);
+    expect(fragment.frameworks.map((f) => [f.id, f.status])).toEqual([
+      ['CIS_AWS_FOUNDATIONS', 'in-progress'],
+      ['SOC2', 'planned'],
+      ['ISO27001', 'planned'],
+    ]);
+    expect(fragment.controls.every((domain) => domain.framework === 'CIS_AWS_FOUNDATIONS')).toBe(
+      true
+    );
+  });
+
+  it('publishes mapped requirements under their own framework domains', () => {
+    const fragment = buildTrustFragment({
+      ...response,
+      mappedFrameworks: [
+        {
+          framework: 'SOC2',
+          requirement: 'CC9.1',
+          title: 'Availability is protected',
+          section: 'Availability',
+          status: 'PASS',
+        },
+        {
+          framework: 'ISO27001',
+          requirement: 'A.8.13',
+          title: 'Information backup is maintained',
+          section: 'Technological controls',
+          status: 'FAIL',
+        },
+      ],
+    });
+
+    expect(fragment.frameworks.map((f) => f.status)).toEqual([
+      'in-progress',
+      'in-progress',
+      'in-progress',
+    ]);
+    const soc2 = fragment.controls.find(
+      (domain) => domain.framework === 'SOC2' && domain.domain === 'Availability'
+    );
+    expect(soc2?.items).toEqual([
       {
-        name: CIS_NAME,
-        status: 'in-progress',
-        description:
-          'Continuous posture from automated graph evaluation against the AWS configuration. Not a certification.',
-        lastVerified: '2026-10-16T00:00:00.000Z',
+        title: 'Availability is protected',
+        description: 'SOC 2 Trust Services Criteria; requirement CC9.1.',
+        status: 'implemented',
       },
     ]);
+    const iso = fragment.controls.find((domain) => domain.framework === 'ISO27001');
+    expect(iso?.items[0].status).toBe('partial');
   });
 
   it('marks the framework planned while nothing is publishable', () => {

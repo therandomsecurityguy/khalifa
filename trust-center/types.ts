@@ -22,12 +22,16 @@ export type FrameworkStatus = 'certified' | 'in-progress' | 'planned';
 /** The generated sections, as written by scripts/trust-center-sync. */
 export interface GeneratedConfig {
   frameworks?: Array<{
+    /** Stable framework id; optional for hand-written single-framework configs. */
+    id?: string;
     name: string;
     status: FrameworkStatus;
     description?: string;
     lastVerified?: string;
   }>;
   controls?: Array<{
+    /** Which framework's requirements these domains belong to. */
+    framework?: string;
     domain: string;
     items: Array<{
       title: string;

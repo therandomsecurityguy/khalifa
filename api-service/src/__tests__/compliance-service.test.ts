@@ -1,12 +1,21 @@
 import { ComplianceService } from '../services/compliance-service';
 
 describe('ComplianceService', () => {
-  it('lists the supported frameworks', async () => {
+  it('lists the supported frameworks, canonical first', async () => {
     const service = new ComplianceService({
       reportsTableName: undefined,
     });
     const summaries = await service.listFrameworks();
-    expect(summaries.map((s) => s.framework)).toEqual(['CIS_AWS_FOUNDATIONS', 'KHALIFA_BASELINE']);
+    expect(summaries.map((s) => s.framework)).toEqual([
+      'CIS_AWS_FOUNDATIONS',
+      'KHALIFA_BASELINE',
+      'SOC2',
+      'ISO27001',
+    ]);
+    // Mapped frameworks report their requirement counts, not canonical controls.
+    const soc2 = summaries.find((s) => s.framework === 'SOC2');
+    expect(soc2?.totalControls).toBe(9);
+    expect(soc2?.version).toBe('2017');
   });
 
   it('returns framework summary with control counts', async () => {

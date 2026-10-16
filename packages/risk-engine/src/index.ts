@@ -9,6 +9,19 @@ export {
 export type { NeptuneEndpoint, NeptuneQueryOptions } from './neptune-client';
 export { riskRules, getEnabledRules, getRuleById } from './rules';
 export { effectivePermissionId } from './graph-ids';
+export { deriveMappedReport } from './compliance-engine';
+export {
+  ALL_FRAMEWORKS,
+  FRAMEWORK_CITATIONS,
+  FRAMEWORK_VERSIONS,
+  MAPPED_FRAMEWORKS,
+  aggregateMappedStatus,
+  citationsByFramework,
+  citationsForControl,
+  isMappedFramework,
+  type FrameworkCitation,
+  type MappedFramework,
+} from './framework-citations';
 export { computeRiskScore, riskInputFromPath } from './scoring';
 export { PostureTrendStore, type TrendMetric, type PostureTrendPoint } from './posture-trend-store';
 export {

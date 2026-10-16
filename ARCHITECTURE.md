@@ -189,6 +189,17 @@ and builds the static site in `trust-center/` (plain HTML/CSS, statuses only),
 which is deployed to Cloudflare Pages. See
 [OPERATIONAL.md](OPERATIONAL.md) section J.
 
+Mapped frameworks (SOC 2 and ISO 27001) do not define their own catalogs: 26
+curated requirements cite the canonical controls
+(`packages/risk-engine/src/framework-citations.ts`), and their reports derive
+from a single canonical assessment pass (no duplicate evaluators, no separate
+evidence rows). The publishable endpoint publishes a mapped requirement only
+while every mapped control is reconciliation-publishable (CIS) or assessed
+PASS/FAIL in the latest Khalifa baseline report; manual or unevaluated controls
+keep it off the page, and an unreadable baseline report leaves mapped
+frameworks unpublished rather than failing the CIS response. The trust-center
+site groups controls under each published framework.
+
 ## Graph Schema
 
 ### Vertex Labels

@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 import { ComplianceService } from '../services/compliance-service';
 import {
+  ALL_FRAMEWORKS,
   DynamoDBIssueRepository,
+  citationsForControl,
   getRuleById,
   type ComplianceFramework,
   type ComplianceControlResult,
@@ -60,7 +62,7 @@ async function relatedRuleIssues(ruleIds: string[]): Promise<RelatedRuleIssues[]
   });
 }
 
-const VALID_FRAMEWORKS: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'KHALIFA_BASELINE'];
+const VALID_FRAMEWORKS: ComplianceFramework[] = ALL_FRAMEWORKS;
 
 function isValidFramework(f: string): f is ComplianceFramework {
   return VALID_FRAMEWORKS.includes(f as ComplianceFramework);
@@ -170,7 +172,6 @@ export async function getControlDetails(
       return;
     }
     const result = await complianceService.getControlResult(controlId, framework);
-    const evidence: ComplianceEvidence[] = result ? result.evidence : [];
 
     if (!result) {
       res.status(404).json({
@@ -179,6 +180,12 @@ export async function getControlDetails(
       });
       return;
     }
+
+    // A mapped requirement has no evidence of its own: its evidence is the
+    // mapped canonical controls' evidence from the latest canonical reports.
+    const evidence: ComplianceEvidence[] = result.mappedControls
+      ? await complianceService.getControlEvidence(controlId, framework)
+      : result.evidence;
 
     res.json({
       id: result.control.id,
@@ -195,6 +202,13 @@ export async function getControlDetails(
       evidence,
       regionsEvaluated: result.regionsEvaluated,
       relatedIssues: await relatedRuleIssues(result.control.relatedRules),
+      mappedControls: result.mappedControls,
+      // For canonical controls: which mapped-framework requirements cite them.
+      citedBy: citationsForControl(controlId).map((citation) => ({
+        framework: citation.framework,
+        requirement: citation.requirement,
+        title: citation.title,
+      })),
     });
   } catch (error) {
     console.error('Error getting control details:', error);

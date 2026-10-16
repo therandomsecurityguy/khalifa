@@ -69,6 +69,53 @@ describe('renderSite', () => {
     expect(fallback).toContain('--accent: #1e3a8a');
   });
 
+  it('groups controls under their framework headings when several frameworks are published', () => {
+    const { 'index.html': html } = renderSite(
+      config,
+      {
+        frameworks: [
+          {
+            id: 'CIS_AWS_FOUNDATIONS',
+            name: 'CIS AWS Foundations Benchmark v3.0.0',
+            status: 'in-progress',
+          },
+          { id: 'SOC2', name: 'SOC 2 Trust Services Criteria', status: 'in-progress' },
+        ],
+        controls: [
+          {
+            framework: 'CIS_AWS_FOUNDATIONS',
+            domain: '1. Identity',
+            items: [{ title: 'Root has MFA', status: 'implemented' }],
+          },
+          {
+            framework: 'SOC2',
+            domain: 'Availability',
+            items: [{ title: 'Backups', status: 'partial' }],
+          },
+        ],
+      },
+      null
+    );
+    expect(html).toContain('class="section-title"');
+    expect(html.indexOf('1. Identity')).toBeLessThan(html.indexOf('Availability'));
+    // Each framework name appears once as a card heading and once as a control-group heading.
+    expect(html.match(/CIS AWS Foundations Benchmark v3\.0\.0<\/h2>/g)).toHaveLength(2);
+    expect(html.match(/SOC 2 Trust Services Criteria<\/h2>/g)).toHaveLength(2);
+  });
+
+  it('keeps the flat layout for single-framework configs', () => {
+    const html = renderSite(
+      config,
+      {
+        frameworks: [{ name: 'CIS', status: 'in-progress' }],
+        controls: [{ domain: 'd', items: [{ title: 't', status: 'planned' }] }],
+      },
+      null
+    )['index.html'];
+    expect(html).not.toContain('section-title');
+    expect(html).toContain('Controls by domain');
+  });
+
   it('trips on identifiers that must never reach the page', () => {
     expect(() =>
       renderSite(

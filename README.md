@@ -241,6 +241,15 @@ requirements that agreed for `reconciliation.minAgreementDays` and appear in
 `reconciliation.publishAllowlist`; runbooks in
 [OPERATIONAL.md](OPERATIONAL.md), section J.
 
+SOC 2 and ISO 27001 are integrated by **mapping**: 26 curated requirements cite
+the canonical controls above (`packages/risk-engine/src/framework-citations.ts`),
+so one evaluation pass and one evidence store serve every framework — e.g.
+SOC 2 CC9.1 cites KH-2.5, KH-2.8 and KH-2.10. A mapped requirement passes only
+while every mapped control passes; manual or unevaluated controls keep it from
+passing. The API serves them like any other framework, control pages link both
+ways ("Evidenced by" / "Cited by framework requirements"), and nothing is ever
+reported as certified.
+
 ---
 
 ## Repository

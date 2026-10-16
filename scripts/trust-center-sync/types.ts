@@ -7,10 +7,17 @@ export interface PublishableRequirement {
   status: PublishableStatus;
 }
 
+export type PublishedFramework = 'CIS_AWS_FOUNDATIONS' | 'SOC2' | 'ISO27001';
+
+export interface PublishableMappedRequirement extends PublishableRequirement {
+  framework: Exclude<PublishedFramework, 'CIS_AWS_FOUNDATIONS'>;
+}
+
 export interface PublishableResponse {
   status: 'OK' | 'STALE' | 'MISSING';
   generatedAt: string | null;
   requirements: PublishableRequirement[];
+  mappedFrameworks?: PublishableMappedRequirement[];
 }
 
 export type TrustControlStatus = 'implemented' | 'partial' | 'planned';
@@ -23,12 +30,14 @@ export type TrustFrameworkStatus = 'in-progress' | 'planned';
  */
 export interface TrustConfigFragment {
   frameworks: Array<{
+    id: PublishedFramework;
     name: string;
     status: TrustFrameworkStatus;
     description: string;
     lastVerified?: string;
   }>;
   controls: Array<{
+    framework: PublishedFramework;
     domain: string;
     items: Array<{
       title: string;

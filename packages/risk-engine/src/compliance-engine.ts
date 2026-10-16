@@ -1,13 +1,23 @@
 import type {
   ComplianceControl,
   ComplianceFramework,
+  ComplianceControlStatus,
   ComplianceEvidence,
   ComplianceReport,
   ComplianceControlResult,
   ComplianceFrameworkSummary,
+  MappedControlReference,
 } from './compliance-types';
-import { getControlsByFramework, REGIONAL_CONTROL_IDS } from './compliance-types';
+import { getControlById, getControlsByFramework, REGIONAL_CONTROL_IDS } from './compliance-types';
 import { complianceRuleEvaluators } from './compliance-rules';
+import {
+  FRAMEWORK_VERSIONS,
+  MAPPED_FRAMEWORKS,
+  aggregateMappedStatus,
+  citationsByFramework,
+  isMappedFramework,
+  type MappedFramework,
+} from './framework-citations';
 import { getRuleById } from './rules';
 import {
   DynamoDBClient,
@@ -36,6 +46,115 @@ export interface OpenIssueReader {
 }
 
 const SAMPLE_ISSUE_IDS = 10;
+
+const CANONICAL_FRAMEWORKS: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'KHALIFA_BASELINE'];
+
+function summarizeResults(
+  controls: ComplianceControl[],
+  results: ComplianceControlResult[]
+): ComplianceReport['summary'] {
+  const passed = results.filter((r) => r.status === 'PASS').length;
+  const failed = results.filter((r) => r.status === 'FAIL').length;
+  const manual = results.filter((r) => r.status === 'MANUAL').length;
+  const notApplicable = results.filter((r) => r.status === 'NOT_APPLICABLE').length;
+  const notEvaluated = results.filter((r) => r.status === 'NOT_EVALUATED').length;
+  const totalAutomated = controls.filter((c) => c.automated).length;
+  const evaluatedAutomated = results.filter(
+    (r) => r.control.automated && r.status !== 'NOT_EVALUATED'
+  ).length;
+  const coveragePercent =
+    totalAutomated > 0 ? Math.round((evaluatedAutomated / totalAutomated) * 100) : 0;
+  return {
+    totalControls: controls.length,
+    passed,
+    failed,
+    manual,
+    notApplicable,
+    notEvaluated,
+    coveragePercent,
+  };
+}
+
+/**
+ * A mapped framework's report: every requirement is a synthetic control whose
+ * status aggregates its cited canonical controls. No evaluators run and no
+ * evidence rows are written; the canonical reports remain the evidence and
+ * each requirement carries references to them.
+ */
+export function deriveMappedReport(
+  framework: MappedFramework,
+  canonicalReports: ComplianceReport[],
+  generatedAt: string = new Date().toISOString()
+): ComplianceReport {
+  const byControl = new Map<string, ComplianceControlResult>();
+  for (const report of canonicalReports) {
+    for (const result of report.controls) {
+      byControl.set(`${result.control.framework}:${result.control.id}`, result);
+    }
+  }
+  const findCanonical = (controlId: string): ComplianceControlResult | undefined =>
+    byControl.get(`CIS_AWS_FOUNDATIONS:${controlId}`) ??
+    byControl.get(`KHALIFA_BASELINE:${controlId}`);
+
+  const results: ComplianceControlResult[] = [];
+  for (const citation of citationsByFramework(framework)) {
+    const mappedControls: MappedControlReference[] = [];
+    const statuses: ComplianceControlStatus[] = [];
+    const issues: string[] = [];
+    for (const controlId of citation.controls) {
+      const canonical = findCanonical(controlId);
+      if (!canonical) {
+        statuses.push('NOT_EVALUATED');
+        issues.push(`Mapped control not evaluated: ${controlId}`);
+        continue;
+      }
+      mappedControls.push({
+        controlId,
+        framework: canonical.control.framework,
+        status: canonical.status,
+        issues: canonical.issues,
+      });
+      statuses.push(canonical.status);
+      for (const issue of canonical.issues) issues.push(`${controlId}: ${issue}`);
+    }
+
+    const resolved = citation.controls
+      .map((id) => findCanonical(id)?.control)
+      .filter((c): c is ComplianceControl => !!c);
+    const control: ComplianceControl = {
+      id: citation.requirement,
+      framework,
+      section: citation.section,
+      title: citation.title,
+      description: citation.description,
+      severity: citation.severity ?? 'high',
+      automated: resolved.length > 0 && resolved.every((c) => c.automated),
+      relatedRules: [...new Set(resolved.flatMap((c) => c.relatedRules))],
+      evidenceRequirements: [],
+      remediationGuidance: `Address the mapped controls: ${citation.controls.join(', ')}.`,
+    };
+
+    results.push({
+      control,
+      status: aggregateMappedStatus(statuses),
+      evidence: [],
+      issues,
+      lastEvaluated: generatedAt,
+      mappedControls,
+    });
+  }
+
+  return {
+    framework,
+    generatedAt,
+    summary: summarizeResults(
+      results.map((r) => r.control),
+      results
+    ),
+    controls: results,
+    derivedFrom: CANONICAL_FRAMEWORKS,
+  };
+}
 
 export class ComplianceEngine {
   private graphClient: GraphClient;
@@ -137,6 +256,11 @@ export class ComplianceEngine {
   }
 
   async runAssessment(framework: ComplianceFramework): Promise<ComplianceReport> {
+    if (isMappedFramework(framework)) {
+      throw new Error(
+        `${framework} is a mapped framework; its report derives from the canonical assessments in runAllAssessments()`
+      );
+    }
     const controls = getControlsByFramework(framework);
     const results: ComplianceControlResult[] = [];
     const failures: string[] = [];
@@ -200,30 +324,10 @@ export class ComplianceEngine {
       }
     }
 
-    const passed = results.filter((r) => r.status === 'PASS').length;
-    const failed = results.filter((r) => r.status === 'FAIL').length;
-    const manual = results.filter((r) => r.status === 'MANUAL').length;
-    const notApplicable = results.filter((r) => r.status === 'NOT_APPLICABLE').length;
-    const notEvaluated = results.filter((r) => r.status === 'NOT_EVALUATED').length;
-    const totalAutomated = controls.filter((c) => c.automated).length;
-    const evaluatedAutomated = results.filter(
-      (r) => r.control.automated && r.status !== 'NOT_EVALUATED'
-    ).length;
-    const coveragePercent =
-      totalAutomated > 0 ? Math.round((evaluatedAutomated / totalAutomated) * 100) : 0;
-
     const report: ComplianceReport = {
       framework,
       generatedAt: new Date().toISOString(),
-      summary: {
-        totalControls: controls.length,
-        passed,
-        failed,
-        manual,
-        notApplicable,
-        notEvaluated,
-        coveragePercent,
-      },
+      summary: summarizeResults(controls, results),
       controls: results,
     };
 
@@ -237,18 +341,38 @@ export class ComplianceEngine {
   }
 
   async runAllAssessments(): Promise<ComplianceReport[]> {
-    const frameworks: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'KHALIFA_BASELINE'];
     const reports: ComplianceReport[] = [];
 
-    for (const framework of frameworks) {
+    for (const framework of CANONICAL_FRAMEWORKS) {
       reports.push(await this.runAssessment(framework));
+    }
+
+    // Mapped frameworks derive from the canonical reports above: one
+    // evaluation pass, one evidence store, every framework's view.
+    for (const framework of MAPPED_FRAMEWORKS) {
+      const report = deriveMappedReport(framework, reports);
+      await this.reportStore.saveReport(report);
+      reports.push(report);
     }
 
     return reports;
   }
 
   async getFrameworkSummary(framework: ComplianceFramework): Promise<ComplianceFrameworkSummary> {
-    const controls = getControlsByFramework(framework);
+    const controls: ComplianceControl[] = isMappedFramework(framework)
+      ? citationsByFramework(framework).map((citation) => ({
+          id: citation.requirement,
+          framework,
+          section: citation.section,
+          title: citation.title,
+          description: citation.description,
+          severity: citation.severity ?? 'high',
+          automated: citation.controls.every((id) => getControlById(id)?.automated === true),
+          relatedRules: [],
+          evidenceRequirements: [],
+          remediationGuidance: '',
+        }))
+      : getControlsByFramework(framework);
     const automatedControls = controls.filter((c) => c.automated).length;
     const manualControls = controls.filter((c) => !c.automated).length;
 
@@ -258,7 +382,7 @@ export class ComplianceEngine {
 
     return {
       framework,
-      version: framework === 'CIS_AWS_FOUNDATIONS' ? '3.0.0' : '2022',
+      version: FRAMEWORK_VERSIONS[framework],
       totalControls: controls.length,
       automatedControls,
       manualControls,
@@ -278,9 +402,35 @@ export class ComplianceEngine {
 
   async getControlEvidence(
     controlId: string,
-    _framework: ComplianceFramework
+    framework: ComplianceFramework
   ): Promise<ComplianceEvidence[]> {
-    return this.evidenceStore.getEvidence(controlId);
+    if (!isMappedFramework(framework)) {
+      return this.evidenceStore.getEvidence(controlId);
+    }
+
+    // A mapped requirement has no evidence rows of its own: its evidence is
+    // the canonical controls' evidence from the latest canonical reports.
+    const citation = citationsByFramework(framework).find((c) => c.requirement === controlId);
+    if (!citation) return [];
+    const reports = [
+      await this.getLatestReport('CIS_AWS_FOUNDATIONS'),
+      await this.getLatestReport('KHALIFA_BASELINE'),
+    ].filter((report): report is ComplianceReport => !!report);
+    const byControl = new Map<string, ComplianceControlResult>();
+    for (const report of reports) {
+      for (const result of report.controls) byControl.set(result.control.id, result);
+    }
+    const seen = new Set<string>();
+    const merged: ComplianceEvidence[] = [];
+    for (const id of citation.controls) {
+      for (const item of byControl.get(id)?.evidence ?? []) {
+        const key = `${item.controlId}:${item.resourceId}:${item.collectedAt}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(item);
+      }
+    }
+    return merged;
   }
 
   async getControlResult(

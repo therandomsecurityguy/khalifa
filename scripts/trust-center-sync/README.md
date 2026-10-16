@@ -25,8 +25,10 @@ npm run trust-center:sync
 
 Outputs, written atomically only when the record is `OK`:
 
-- `trust.config.json` — `{ frameworks, controls }` (same shape as the public
-  Fimil trust-center schema, so the output stays portable); the site's
+- `trust.config.json` — `{ frameworks, controls }`; the endpoint's CIS
+  requirements plus any publishable mapped-framework requirements (SOC 2 /
+  ISO 27001), with each control domain tagged by `framework`. Same shape as the
+  public Fimil trust-center schema, so the output stays portable; the site's
   hand-edited `trust-center/site.config.json` keeps company, contact, and theme
 - `build-meta.json` — generated-at timestamp, source record freshness, and counts
   rendered into the page's publication details

@@ -155,11 +155,52 @@ describe('parsePublishableResponse', () => {
       status: 'STALE',
       generatedAt: null,
       requirements: [],
+      mappedFrameworks: [],
     });
     expect(parsePublishableResponse({ status: 'MISSING', requirements: [] })).toEqual({
       status: 'MISSING',
       generatedAt: null,
       requirements: [],
+      mappedFrameworks: [],
     });
+  });
+
+  it('parses mapped-framework requirements and rejects unknown frameworks', () => {
+    const parsed = parsePublishableResponse({
+      status: 'OK',
+      requirements: [],
+      mappedFrameworks: [
+        {
+          framework: 'SOC2',
+          requirement: 'CC9.1',
+          title: 'Availability',
+          section: 'Availability',
+          status: 'PASS',
+          accountId: '111122223333',
+        },
+      ],
+    });
+    expect(parsed.mappedFrameworks).toEqual([
+      {
+        framework: 'SOC2',
+        requirement: 'CC9.1',
+        title: 'Availability',
+        section: 'Availability',
+        status: 'PASS',
+      },
+    ]);
+
+    expect(() =>
+      parsePublishableResponse({
+        status: 'OK',
+        requirements: [],
+        mappedFrameworks: [
+          { framework: 'PCI_DSS', requirement: 'x', title: 't', section: 's', status: 'PASS' },
+        ],
+      })
+    ).toThrow('unknown framework');
+    expect(() =>
+      parsePublishableResponse({ status: 'OK', requirements: [], mappedFrameworks: 'nope' })
+    ).toThrow('malformed mappedFrameworks');
   });
 });
