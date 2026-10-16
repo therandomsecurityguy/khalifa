@@ -18,6 +18,8 @@ export interface PublishableResponse {
   generatedAt: string | null;
   requirements: PublishableRequirement[];
   mappedFrameworks?: PublishableMappedRequirement[];
+  /** Hours after which a record is STALE; absent on older APIs. */
+  maxAgeHours?: number;
 }
 
 export type TrustControlStatus = 'implemented' | 'partial' | 'planned';
@@ -58,6 +60,10 @@ export interface BuildMeta {
     endpoint: string;
     recordStatus: 'OK';
     recordGeneratedAt: string | null;
+    /** Age of the assessed record at build time, in whole hours. */
+    recordAgeHours?: number;
+    /** The staleness window the API enforces, as published by the endpoint. */
+    maxAgeHours?: number;
   };
   counts: {
     requirements: number;

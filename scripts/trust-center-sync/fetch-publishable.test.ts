@@ -32,6 +32,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
 const okPayload = {
   status: 'OK',
   generatedAt: '2026-10-16T00:00:00.000Z',
+  maxAgeHours: 24,
   requirements: [
     { requirement: '1.5', title: 'Root has MFA', section: '1. Identity', status: 'PASS' },
   ],
@@ -148,6 +149,19 @@ describe('parsePublishableResponse', () => {
         requirements: [{ requirement: '1.5', title: 't', section: 's', status: 'MANUAL' }],
       })
     ).toThrow('unknown status');
+  });
+
+  it('parses the published staleness window and rejects invalid ones', () => {
+    expect(parsePublishableResponse(okPayload).maxAgeHours).toBe(24);
+    expect(
+      parsePublishableResponse({ status: 'OK', requirements: [] }).maxAgeHours
+    ).toBeUndefined();
+    expect(() =>
+      parsePublishableResponse({ status: 'OK', requirements: [], maxAgeHours: 0 })
+    ).toThrow('invalid maxAgeHours');
+    expect(() =>
+      parsePublishableResponse({ status: 'OK', requirements: [], maxAgeHours: 'soon' })
+    ).toThrow('invalid maxAgeHours');
   });
 
   it('accepts STALE and MISSING records with no requirements', () => {

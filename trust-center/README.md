@@ -24,8 +24,12 @@ npx serve trust-center/dist
 | `--out`       | `trust-center/dist`             | Output directory                                       |
 
 `site.config.json` is deployment-owned: company name, optional security email,
-website, links, accent color, footer note. Everything posture-related comes
-from the generated files and is never hand-edited.
+website, links, accent color, footer note, and the `monitoring` block
+(assessment/publication cadence, plus an optional `staleAfterHours` claim).
+The monitoring statement is derived from the generated `build-meta.json` — the
+API's published staleness window — and the build fails if the configured claim
+contradicts it. Everything posture-related comes from the generated files and
+is never hand-edited.
 
 The page shows framework and control statuses only, rendered from the
 sanitized publishable endpoint (requirements that agreed with Security Hub for

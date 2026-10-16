@@ -29,6 +29,13 @@ export function loadSiteConfig(path: string): SiteConfig {
   if (config.theme?.primary && !/^#[0-9a-fA-F]{6}$/.test(config.theme.primary)) {
     throw new Error(`${path} theme.primary must be a 6-digit hex color`);
   }
+  const staleAfterHours = config.monitoring?.staleAfterHours;
+  if (
+    staleAfterHours !== undefined &&
+    (!Number.isSafeInteger(staleAfterHours) || staleAfterHours < 1)
+  ) {
+    throw new Error(`${path} monitoring.staleAfterHours must be a positive integer`);
+  }
   return config;
 }
 
@@ -65,6 +72,22 @@ export function buildSite(options: BuildOptions = {}): BuildResult {
 
   const config = loadSiteConfig(siteConfigPath);
   const { generated, meta } = loadGenerated(generatedDir);
+
+  // A claimed staleness window is only published when the API reports the same
+  // one; a contradiction fails the build instead of shipping a false claim.
+  const configuredStale = config.monitoring?.staleAfterHours;
+  const serverStale = meta?.source?.maxAgeHours;
+  if (
+    configuredStale !== undefined &&
+    serverStale !== undefined &&
+    configuredStale !== serverStale
+  ) {
+    throw new Error(
+      `site.config.json monitoring.staleAfterHours (${configuredStale}) contradicts the API's published maxAgeHours (${serverStale}); ` +
+        'the page would claim a staleness window the API does not enforce'
+    );
+  }
+
   const rendered = renderSite(config, generated, meta);
 
   mkdirSync(outDir, { recursive: true });

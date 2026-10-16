@@ -8,6 +8,7 @@ import { FailClosedError, runSync, type SyncEnvironment } from './index';
 const okPayload = {
   status: 'OK',
   generatedAt: '2026-10-16T00:00:00.000Z',
+  maxAgeHours: 24,
   requirements: [
     { requirement: '1.5', title: 'Root has MFA', section: '1. Identity', status: 'PASS' },
     { requirement: '2.1', title: 'CloudTrail enabled', section: '2. Logging', status: 'FAIL' },
@@ -76,9 +77,30 @@ describe('runSync', () => {
       const meta = JSON.parse(readFileSync(join(outDir, 'build-meta.json'), 'utf8'));
       expect(meta).toMatchObject({
         generatedAt: '2026-10-16T12:00:00.000Z',
-        source: { recordStatus: 'OK', recordGeneratedAt: '2026-10-16T00:00:00.000Z' },
+        source: {
+          recordStatus: 'OK',
+          recordGeneratedAt: '2026-10-16T00:00:00.000Z',
+          recordAgeHours: 12,
+          maxAgeHours: 24,
+        },
         counts: { requirements: 2, pass: 1, fail: 1, domains: 2 },
       });
+    });
+  });
+
+  it('omits the staleness window when the endpoint does not publish one', async () => {
+    const payload = { ...okPayload } as Record<string, unknown>;
+    delete payload.maxAgeHours;
+    await withServer(payload, 200, async (apiUrl) => {
+      const logs: string[] = [];
+      await runSync(environment(apiUrl, outDir), {
+        now: () => new Date('2026-10-16T12:00:00.000Z'),
+        log: (line) => logs.push(line),
+      });
+      const meta = JSON.parse(readFileSync(join(outDir, 'build-meta.json'), 'utf8'));
+      expect(meta.source.maxAgeHours).toBeUndefined();
+      expect(meta.source.recordAgeHours).toBe(12);
+      expect(logs.join(' ')).toContain('did not publish maxAgeHours');
     });
   });
 

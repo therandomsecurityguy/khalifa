@@ -59,7 +59,7 @@ export async function runSync(
   }
 
   const fragment = buildTrustFragment(response);
-  const meta = buildMeta(response, apiUrl, now());
+  const meta = buildMeta(response, apiUrl, now(), log);
 
   mkdirSync(outDir, { recursive: true });
   writeAtomic(join(outDir, 'trust.config.json'), JSON.stringify(fragment, null, 2));
@@ -77,17 +77,30 @@ export async function runSync(
 function buildMeta(
   response: Awaited<ReturnType<typeof fetchPublishable>>,
   apiUrl: string,
-  now: Date
+  now: Date,
+  log: (line: string) => void
 ): BuildMeta {
   const pass = response.requirements.filter((requirement) => requirement.status === 'PASS').length;
+  const source: BuildMeta['source'] = {
+    endpoint: `${apiUrl.trim().replace(/\/+$/, '')}/compliance/reconciliation/publishable`,
+    recordStatus: 'OK',
+    recordGeneratedAt: response.generatedAt,
+  };
+  if (response.generatedAt) {
+    const ageMs = now.getTime() - Date.parse(response.generatedAt);
+    if (Number.isFinite(ageMs)) source.recordAgeHours = Math.max(0, Math.round(ageMs / 3_600_000));
+  }
+  if (response.maxAgeHours !== undefined) {
+    source.maxAgeHours = response.maxAgeHours;
+  } else {
+    log(
+      'publishable endpoint did not publish maxAgeHours; the page will omit the staleness window'
+    );
+  }
   return {
     generatedAt: now.toISOString(),
     framework: { id: 'CIS_AWS_FOUNDATIONS', name: CIS_NAME, version: '3.0.0' },
-    source: {
-      endpoint: `${apiUrl.trim().replace(/\/+$/, '')}/compliance/reconciliation/publishable`,
-      recordStatus: 'OK',
-      recordGeneratedAt: response.generatedAt,
-    },
+    source,
     counts: {
       requirements: response.requirements.length,
       pass,

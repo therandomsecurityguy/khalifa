@@ -198,7 +198,10 @@ while every mapped control is reconciliation-publishable (CIS) or assessed
 PASS/FAIL in the latest Khalifa baseline report; manual or unevaluated controls
 keep it off the page, and an unreadable baseline report leaves mapped
 frameworks unpublished rather than failing the CIS response. The trust-center
-site groups controls under each published framework.
+site groups controls under each published framework, and its continuous-
+monitoring statement (cadence plus the automatic-unpublish window) derives from
+the endpoint's published `maxAgeHours`, so the public claim cannot drift from
+the gate.
 
 ## Graph Schema
 

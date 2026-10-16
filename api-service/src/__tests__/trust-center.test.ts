@@ -60,6 +60,7 @@ describe('publishableFrom', () => {
         },
       ],
       mappedFrameworks: [],
+      maxAgeHours: 24,
     });
   });
 
@@ -88,6 +89,7 @@ describe('publishableFrom', () => {
       generatedAt: '2026-10-14T11:30:00.000Z',
       requirements: [],
       mappedFrameworks: [],
+      maxAgeHours: 24,
     });
   });
 
@@ -109,6 +111,7 @@ describe('publishableFrom', () => {
       generatedAt: null,
       requirements: [],
       mappedFrameworks: [],
+      maxAgeHours: 24,
     });
   });
 
@@ -267,5 +270,14 @@ describe('publishableFrom: mapped frameworks', () => {
 
   it('leaves mapped frameworks unpublished when the baseline report is unreadable', () => {
     expect(publishableFrom(record(), NOW).mappedFrameworks).toEqual([]);
+  });
+});
+
+describe('publishableFrom: monitoring window', () => {
+  it('publishes the staleness window the API enforces', () => {
+    expect(MAX_RECORD_AGE_MS / (60 * 60 * 1000)).toBe(24);
+    expect(publishableFrom(record(), NOW).maxAgeHours).toBe(24);
+    expect(publishableFrom(null, NOW).maxAgeHours).toBe(24);
+    expect(publishableFrom(record({ status: 'STALE' }), NOW).maxAgeHours).toBe(24);
   });
 });

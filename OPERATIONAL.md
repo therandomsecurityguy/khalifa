@@ -234,6 +234,15 @@ publishable (CIS) or assessed PASS/FAIL in the latest Khalifa baseline report
 (`REPORTS_TABLE`). If that report is unreadable, the endpoint serves CIS only —
 mapped frameworks stay unpublished rather than failing the response.
 
+The page states how it is monitored (the "Continuous monitoring" section):
+assessment and publication cadence come from `trust-center/site.config.json`
+(`monitoring.assessmentCadence` / `monitoring.publishCadence`), and the
+staleness window is the API's own published `maxAgeHours` (24h). That makes the
+claim "when the last assessment is older than 24 hours, every framework
+unpublishes automatically" data-derived rather than a promise. If
+`monitoring.staleAfterHours` in the site config contradicts the API's value,
+the site build fails instead of publishing a false claim.
+
 Run it by hand after a compliance cycle:
 
 ```bash

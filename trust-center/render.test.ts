@@ -38,18 +38,43 @@ describe('renderSite', () => {
     expect(html).not.toContain('"><img');
   });
 
-  it('renders provenance from build-meta and falls back to the build time', () => {
+  it('renders the monitoring statement from build-meta and falls back to the build time', () => {
     const withMeta = renderSite(config, generated, {
       generatedAt: '2026-10-16T12:00:00.000Z',
       source: { recordGeneratedAt: '2026-10-16T00:00:00.000Z' },
     })['index.html'];
-    expect(withMeta).toContain('Page generated 2026-10-16T12:00:00.000Z');
-    expect(withMeta).toContain('recorded 2026-10-16T00:00:00.000Z');
+    expect(withMeta).toContain('last build 2026-10-16T12:00:00.000Z');
+    expect(withMeta).toContain('assessment recorded 2026-10-16T00:00:00.000Z');
+    expect(withMeta).toContain('Continuously monitored by Khalifa.');
 
     const withoutMeta = renderSite(config, generated, null, new Date('2026-10-17T00:00:00.000Z'))[
       'index.html'
     ];
-    expect(withoutMeta).toContain('Page generated 2026-10-17T00:00:00.000Z');
+    expect(withoutMeta).toContain('last build 2026-10-17T00:00:00.000Z');
+  });
+
+  it('states the cadence and the staleness window the API publishes', () => {
+    const html = renderSite(
+      { ...config, monitoring: { assessmentCadence: 'every 4 hours', publishCadence: 'nightly' } },
+      generated,
+      {
+        generatedAt: '2026-10-16T12:00:00.000Z',
+        source: { recordGeneratedAt: '2026-10-16T10:00:00.000Z', maxAgeHours: 24 },
+      }
+    )['index.html'];
+    expect(html).toContain('assessments run every 4 hours against the AWS configuration');
+    expect(html).toContain('The page is rebuilt nightly;');
+    expect(html).toContain('older than 24 hours, every framework unpublishes automatically');
+  });
+
+  it('omits the staleness window when the API does not publish one', () => {
+    const html = renderSite(
+      { ...config, monitoring: { assessmentCadence: 'every 4 hours' } },
+      generated,
+      { generatedAt: '2026-10-16T12:00:00.000Z', source: { recordGeneratedAt: null } }
+    )['index.html'];
+    expect(html).not.toContain('unpublishes automatically');
+    expect(html).toContain('The page is rebuilt on a schedule');
   });
 
   it('omits the contact section when no email or website is configured', () => {

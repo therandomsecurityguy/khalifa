@@ -30,8 +30,16 @@ Outputs, written atomically only when the record is `OK`:
   ISO 27001), with each control domain tagged by `framework`. Same shape as the
   public Fimil trust-center schema, so the output stays portable; the site's
   hand-edited `trust-center/site.config.json` keeps company, contact, and theme
-- `build-meta.json` — generated-at timestamp, source record freshness, and counts
-  rendered into the page's publication details
+- `build-meta.json` — generated-at timestamp, source record freshness
+  (`recordGeneratedAt`, `recordAgeHours`), the API's published staleness window
+  (`maxAgeHours`, absent on older endpoints — a warning is logged and the page
+  omits the window), and counts for the pipeline log
+
+The endpoint also publishes `maxAgeHours`, the window after which a record is
+`STALE`; the site's continuous-monitoring statement derives from it, so the
+public claim cannot drift from the gate (a contradicting
+`monitoring.staleAfterHours` in `trust-center/site.config.json` fails the site
+build).
 
 Statuses: `PASS → implemented`, `FAIL → partial`; the framework is
 `in-progress` while anything is publishable and `planned` while the record is

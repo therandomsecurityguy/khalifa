@@ -124,7 +124,15 @@ export function parsePublishableResponse(body: unknown): PublishableResponse {
     } as PublishableMappedRequirement;
   });
 
-  return { status, generatedAt, requirements, mappedFrameworks };
+  let maxAgeHours: number | undefined;
+  if (record.maxAgeHours !== undefined) {
+    if (!Number.isSafeInteger(record.maxAgeHours) || (record.maxAgeHours as number) < 1) {
+      throw new Error('publishable endpoint returned an invalid maxAgeHours');
+    }
+    maxAgeHours = record.maxAgeHours as number;
+  }
+
+  return { status, generatedAt, requirements, mappedFrameworks, maxAgeHours };
 }
 
 function textField(item: Record<string, unknown>, field: string, index: number | string): string {
