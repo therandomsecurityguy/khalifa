@@ -154,6 +154,10 @@ Then set `cloudtrailAnalyzer.suspend = false` in the environment's Helm values. 
 
 ## H. Deployment Commands
 
+> Automated and agent-driven installs must follow [`AGENTS.md`](AGENTS.md);
+the end-to-end secure workflow also lives in
+[`deploy/terraform/examples/complete/README.md`](deploy/terraform/examples/complete/README.md).
+
 ```bash
 # Deploy through the environment repository's Terraform root
 terraform apply
