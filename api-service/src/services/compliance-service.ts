@@ -1,4 +1,5 @@
 import {
+  ALL_FRAMEWORKS,
   ComplianceEngine,
   DynamoDBEvidenceStore,
   DynamoDBReportStore,
@@ -41,9 +42,8 @@ export class ComplianceService {
   }
 
   async listFrameworks(): Promise<ComplianceFrameworkSummary[]> {
-    const frameworks: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'KHALIFA_BASELINE'];
     const summaries: ComplianceFrameworkSummary[] = [];
-    for (const f of frameworks) {
+    for (const f of ALL_FRAMEWORKS) {
       summaries.push(await this.engine.getFrameworkSummary(f));
     }
     return summaries;

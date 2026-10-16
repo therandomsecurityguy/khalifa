@@ -1,4 +1,8 @@
-export type ComplianceFramework = 'CIS_AWS_FOUNDATIONS' | 'KHALIFA_BASELINE';
+// CIS and the Khalifa baseline are canonical: they own controls and
+// evaluators. SOC2 and ISO27001 are mapped frameworks: their requirements
+// cite canonical controls (see framework-citations.ts) and derive their
+// status from those controls' assessments.
+export type ComplianceFramework = 'CIS_AWS_FOUNDATIONS' | 'KHALIFA_BASELINE' | 'SOC2' | 'ISO27001';
 
 export type ComplianceControlStatus =
   'PASS' | 'FAIL' | 'MANUAL' | 'NOT_APPLICABLE' | 'NOT_EVALUATED';
@@ -41,6 +45,15 @@ export interface ComplianceReport {
   generatedAt: string;
   summary: ComplianceAssessmentSummary;
   controls: ComplianceControlResult[];
+  /** Present on mapped-framework reports: the canonical frameworks they derived from. */
+  derivedFrom?: ComplianceFramework[];
+}
+
+export interface MappedControlReference {
+  controlId: string;
+  framework: ComplianceFramework;
+  status: ComplianceControlStatus;
+  issues: string[];
 }
 
 export interface ComplianceControlResult {
@@ -49,6 +62,8 @@ export interface ComplianceControlResult {
   evidence: ComplianceEvidence[];
   issues: string[];
   lastEvaluated: string;
+  /** Present on mapped-framework requirements: the canonical controls behind it. */
+  mappedControls?: MappedControlReference[];
   // Set for regional controls: the regions whose resources the result covers.
   // A PASS means PASS in these regions, not in every region the control names.
   regionsEvaluated?: string[];
@@ -1452,12 +1467,17 @@ export function getControlsByFramework(framework: ComplianceFramework): Complian
       return CIS_AWS_FOUNDATIONS_V3_CONTROLS;
     case 'KHALIFA_BASELINE':
       return KHALIFA_BASELINE_CONTROLS;
+    case 'SOC2':
+    case 'ISO27001':
+      // Mapped frameworks cite canonical controls instead of owning a catalog.
+      return [];
   }
 }
 
 export function getControlById(
   id: string,
-  framework: ComplianceFramework
+  framework?: ComplianceFramework
 ): ComplianceControl | undefined {
-  return getControlsByFramework(framework).find((c) => c.id === id);
+  const controls = framework ? getControlsByFramework(framework) : getAllControls();
+  return controls.find((c) => c.id === id);
 }

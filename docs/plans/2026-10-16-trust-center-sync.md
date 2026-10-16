@@ -104,3 +104,21 @@ CI configuration (repository variables / secrets):
   already matches its schema, so only the static sections would move.
 - Audit-logging evidence section (static, deployment-owned facts) once there is
   a stable source of truth.
+
+---
+
+## 7. Status update (2026-10-16)
+
+Phase 1 shipped (sync tool, in-repo static site, nightly workflow, docs), and
+the SOC 2 / ISO 27001 item from phase 2 shipped in a **different form** than
+originally planned: instead of restoring parallel catalogs and evaluators, 26
+curated requirements cite the canonical controls
+(`packages/risk-engine/src/framework-citations.ts`). One assessment pass and
+one evidence store now serve CIS, the Khalifa baseline, SOC 2, and ISO 27001;
+the publishable endpoint and the trust center both publish mapped requirements
+under the same discipline (CIS-mapped controls must be reconciliation-
+publishable; baseline-mapped controls must be assessed PASS/FAIL).
+
+Still deferred: FSBP / "AWS-native controls" (no second audit-account read
+path), the audit-logging evidence section, pass-rate percentages, and live
+updates.

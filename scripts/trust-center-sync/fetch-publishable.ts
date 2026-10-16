@@ -1,4 +1,10 @@
-import type { PublishableResponse, PublishableRequirement, PublishableStatus } from './types';
+import type {
+  PublishableMappedRequirement,
+  PublishableResponse,
+  PublishableRequirement,
+  PublishableStatus,
+  PublishedFramework,
+} from './types';
 
 export const PUBLISHABLE_PATH = '/compliance/reconciliation/publishable';
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -89,7 +95,36 @@ export function parsePublishableResponse(body: unknown): PublishableResponse {
     return { requirement, title, section, status: itemStatus as PublishableStatus };
   });
 
-  return { status, generatedAt, requirements };
+  const rawMapped = record.mappedFrameworks ?? [];
+  if (!Array.isArray(rawMapped)) {
+    throw new Error('publishable endpoint payload has a malformed mappedFrameworks');
+  }
+  const mappedFrameworks: PublishableMappedRequirement[] = rawMapped.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`mapped requirement ${index} is not an object`);
+    }
+    const item = entry as Record<string, unknown>;
+    const framework = item.framework;
+    if (framework !== 'SOC2' && framework !== 'ISO27001') {
+      throw new Error(`mapped requirement ${index} has an unknown framework: ${String(framework)}`);
+    }
+    const requirement = textField(item, 'requirement', index);
+    const title = textField(item, 'title', index);
+    const section = textField(item, 'section', index);
+    const itemStatus = item.status;
+    if (!STATUSES.includes(itemStatus as PublishableStatus)) {
+      throw new Error(`requirement ${requirement} has an unknown status: ${String(itemStatus)}`);
+    }
+    return {
+      framework: framework as PublishedFramework,
+      requirement,
+      title,
+      section,
+      status: itemStatus as PublishableStatus,
+    } as PublishableMappedRequirement;
+  });
+
+  return { status, generatedAt, requirements, mappedFrameworks };
 }
 
 function textField(item: Record<string, unknown>, field: string, index: number | string): string {

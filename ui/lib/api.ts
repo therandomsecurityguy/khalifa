@@ -427,6 +427,19 @@ export interface ComplianceControl {
   regionsEvaluated?: string[];
 }
 
+export interface ComplianceMappedControl {
+  controlId: string;
+  framework: string;
+  status: string;
+  issues: string[];
+}
+
+export interface ComplianceCitation {
+  framework: string;
+  requirement: string;
+  title: string;
+}
+
 export interface ComplianceControlDetail extends ComplianceControl {
   framework: string;
   lastEvaluated: string;
@@ -435,6 +448,10 @@ export interface ComplianceControlDetail extends ComplianceControl {
   evidenceRequirements?: string[];
   evidence: ComplianceEvidence[];
   relatedIssues: ComplianceRelatedIssue[];
+  // Mapped-framework requirements only: the canonical controls behind it.
+  mappedControls?: ComplianceMappedControl[];
+  // Canonical controls only: mapped-framework requirements citing it.
+  citedBy?: ComplianceCitation[];
 }
 
 export interface ComplianceEvidence {

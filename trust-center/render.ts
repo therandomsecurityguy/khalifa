@@ -26,6 +26,7 @@ const FRAMEWORK_LABELS: Record<FrameworkStatus, string> = {
 };
 
 const DEFAULT_PRIMARY = '#1e3a8a';
+const DEFAULT_FRAMEWORK = 'CIS_AWS_FOUNDATIONS';
 
 export function renderSite(
   config: SiteConfig,
@@ -58,7 +59,7 @@ export function renderSite(
 </header>
 <main class="wrap">
 ${frameworks.map((framework) => renderFramework(framework)).join('\n')}
-${controls.length > 0 ? renderControls(controls) : ''}
+${renderControlsGrouped(frameworks, controls)}
 ${renderProvenance(generatedAt, recordAt)}
 ${renderContact(config)}
 </main>
@@ -90,7 +91,50 @@ function renderFramework(framework: GeneratedFramework): string {
 </section>`;
 }
 
-function renderControls(controls: GeneratedControlDomain[]): string {
+function renderControlsGrouped(
+  frameworks: NonNullable<GeneratedConfig['frameworks']>,
+  controls: GeneratedControlDomain[]
+): string {
+  if (controls.length === 0) return '';
+
+  // Bucket domains by framework; controls without a framework id belong to the
+  // first declared framework (single-framework configs omit the field).
+  const buckets = new Map<string, GeneratedControlDomain[]>();
+  for (const domain of controls) {
+    const key = domain.framework ?? frameworks[0]?.id ?? DEFAULT_FRAMEWORK;
+    const list = buckets.get(key) ?? [];
+    list.push(domain);
+    buckets.set(key, list);
+  }
+
+  const ordered: Array<{ heading: string | null; domains: GeneratedControlDomain[] }> = [];
+  const seen = new Set<string>();
+  for (const framework of frameworks) {
+    const key = framework.id ?? DEFAULT_FRAMEWORK;
+    const domains = buckets.get(key);
+    if (!domains) continue;
+    seen.add(key);
+    ordered.push({ heading: framework.name, domains });
+  }
+  for (const [key, domains] of buckets) {
+    if (!seen.has(key)) ordered.push({ heading: key, domains });
+  }
+
+  // Single-framework configs keep the original heading-free layout.
+  const grouped = ordered.length > 1;
+  return ordered
+    .map(({ heading, domains }) => {
+      const cards = renderDomainCards(domains);
+      if (!grouped) return cards;
+      return `<section class="framework-controls" aria-label="${escapeHtml(heading ?? 'Controls')}">
+  <h2 class="section-title">${escapeHtml(heading ?? 'Controls')}</h2>
+  ${cards}
+</section>`;
+    })
+    .join('\n');
+}
+
+function renderDomainCards(controls: GeneratedControlDomain[]): string {
   const sorted = [...controls].sort((a, b) =>
     a.domain.localeCompare(b.domain, 'en', { numeric: true })
   );
@@ -175,6 +219,8 @@ h2 { font-size: 1.1rem; margin: 0; }
 }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .cards { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); }
+.framework-controls { margin-top: 2rem; }
+.section-title { font-size: 1.25rem; margin: 0 0 1rem; }
 .cards .card { margin-bottom: 0; }
 .badge {
   display: inline-block;

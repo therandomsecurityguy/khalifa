@@ -59,6 +59,7 @@ describe('publishableFrom', () => {
           status: 'PASS',
         },
       ],
+      mappedFrameworks: [],
     });
   });
 
@@ -86,6 +87,7 @@ describe('publishableFrom', () => {
       status: 'STALE',
       generatedAt: '2026-10-14T11:30:00.000Z',
       requirements: [],
+      mappedFrameworks: [],
     });
   });
 
@@ -106,6 +108,7 @@ describe('publishableFrom', () => {
       status: 'MISSING',
       generatedAt: null,
       requirements: [],
+      mappedFrameworks: [],
     });
   });
 
@@ -194,5 +197,75 @@ describe('requireTrustCenterSync', () => {
     const { next, res } = run(user);
     expect(next).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
+  });
+});
+
+describe('publishableFrom: mapped frameworks', () => {
+  // CC9.1 cites KH-2.5, KH-2.8 and KH-2.10; ISO A.8.13 cites the same set.
+  const baseline = new Map<string, 'PASS' | 'FAIL'>([
+    ['KH-2.5', 'PASS'],
+    ['KH-2.8', 'PASS'],
+    ['KH-2.10', 'PASS'],
+  ]);
+
+  it('publishes a mapped requirement once every mapped control is publishable or assessed', () => {
+    const out = publishableFrom(record({ requirements: [] }), NOW, baseline);
+    const cc91 = out.mappedFrameworks.find((r) => r.requirement === 'CC9.1');
+    expect(cc91).toMatchObject({ framework: 'SOC2', status: 'PASS', section: 'Availability' });
+    const a813 = out.mappedFrameworks.find((r) => r.requirement === 'A.8.13');
+    expect(a813).toMatchObject({ framework: 'ISO27001', status: 'PASS' });
+  });
+
+  it('fails a mapped requirement when any mapped control fails', () => {
+    const out = publishableFrom(
+      record({ requirements: [] }),
+      NOW,
+      new Map([
+        ['KH-2.5', 'PASS'],
+        ['KH-2.8', 'FAIL' as const],
+        ['KH-2.10', 'PASS' as const],
+      ])
+    );
+    expect(out.mappedFrameworks.find((r) => r.requirement === 'CC9.1')?.status).toBe('FAIL');
+  });
+
+  it('keeps requirements off the page while any mapped control is manual or unevaluated', () => {
+    const out = publishableFrom(
+      record({ requirements: [] }),
+      NOW,
+      new Map([
+        ['KH-2.5', 'MANUAL' as const],
+        ['KH-2.8', 'PASS' as const],
+        ['KH-2.10', 'PASS' as const],
+      ])
+    );
+    expect(out.mappedFrameworks).toEqual([]);
+  });
+
+  it('gates a CIS-mapped control on reconciliation agreement, not just a stored status', () => {
+    // CC6.1 cites 1.5; the stored baseline map alone must not publish it.
+    const out = publishableFrom(record({ requirements: [] }), NOW, new Map([['1.5', 'PASS']]));
+    expect(out.mappedFrameworks.find((r) => r.requirement === 'CC6.1')).toBeUndefined();
+
+    // Once 1.5 is publishable in the record, CC6.1 publishes too.
+    const withCis = publishableFrom(
+      record({ requirements: [requirement({ requirement: '1.5', khalifaStatus: 'PASS' })] }),
+      NOW,
+      new Map([
+        ['1.4', 'PASS'],
+        ['1.5', 'PASS'],
+        ['1.7', 'PASS'],
+        ['1.10', 'PASS'],
+        ['1.15', 'PASS'],
+        ['KH-1.8', 'PASS'],
+        ['KH-1.19', 'PASS'],
+        ['KH-IAM-1', 'PASS'],
+      ])
+    );
+    expect(withCis.mappedFrameworks.find((r) => r.requirement === 'CC6.1')?.status).toBe('PASS');
+  });
+
+  it('leaves mapped frameworks unpublished when the baseline report is unreadable', () => {
+    expect(publishableFrom(record(), NOW).mappedFrameworks).toEqual([]);
   });
 });

@@ -109,6 +109,52 @@ export default function ControlDetailPage() {
               </Card>
             )}
 
+            {detail.mappedControls && detail.mappedControls.length > 0 && (
+              <Card title="Evidenced by">
+                <ul className="space-y-2">
+                  {detail.mappedControls.map((mapped) => (
+                    <li
+                      key={`${mapped.framework}:${mapped.controlId}`}
+                      className="flex flex-wrap items-center gap-3"
+                    >
+                      <StatusBadge status={mapped.status} />
+                      <Link
+                        href={`/compliance/${encodeURIComponent(mapped.framework)}/controls/${encodeURIComponent(mapped.controlId)}`}
+                        className={LINK}
+                      >
+                        {frameworkLabel(mapped.framework)} · {mapped.controlId}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-sm text-gray-600">
+                  This requirement passes only while every mapped control passes; a failing or
+                  unevaluated control keeps it from passing.
+                </p>
+              </Card>
+            )}
+
+            {detail.citedBy && detail.citedBy.length > 0 && (
+              <Card title="Cited by framework requirements">
+                <ul className="space-y-2">
+                  {detail.citedBy.map((citation) => (
+                    <li
+                      key={`${citation.framework}:${citation.requirement}`}
+                      className="flex flex-wrap items-center gap-3"
+                    >
+                      <Badge tone={TONES.accent}>{frameworkLabel(citation.framework)}</Badge>
+                      <Link
+                        href={`/compliance/${encodeURIComponent(citation.framework)}/controls/${encodeURIComponent(citation.requirement)}`}
+                        className={LINK}
+                      >
+                        {citation.requirement} — {citation.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+
             {detail.evidence && detail.evidence.length > 0 && (
               <Card title="Evidence" flush>
                 <Table caption="Evidence">
