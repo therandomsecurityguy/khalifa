@@ -1,22 +1,103 @@
 import type { Request, Response } from 'express';
-import { NeptuneClient } from '../services/neptune-client';
-import type { NeptuneRawVertex } from '../services/neptune-client';
-import { IssueStore } from '../services/issue-store';
+import { DynamoDBIssueRepository } from '@khalifa/risk-engine';
+import { parseBoundedInteger } from '../middleware/gremlin-validator';
+import { getApiNeptuneClient } from '../services/api-dependencies';
+import { ALL_LABELS } from '../services/neptune-client';
 import type { GraphVertex, GraphEdge, Issue } from '../types';
 
-const neptuneEndpoint = process.env.NEPTUNE_ENDPOINT || '';
-const neptuneClient = new NeptuneClient({ endpoint: neptuneEndpoint });
-const issueStore = new IssueStore();
+const neptuneClient = getApiNeptuneClient();
+const issueStore = new DynamoDBIssueRepository();
+const MAX_GRAPH_NODES = 500;
+const MAX_GRAPH_EDGES = 1_000;
 
-export async function getResource(req: Request, res: Response): Promise<void> {
+// Counting labels reads every vertex and can take tens of seconds, while the
+// counts only move when the collector runs. The last good count is served at
+// once and refreshed in the background when stale; only the first request
+// waits. A failed refresh keeps the previous count. Concurrent callers share
+// one in-flight read.
+const LABELS_TTL_MS = 10 * 60 * 1000;
+type LabelCounts = Awaited<ReturnType<typeof neptuneClient.listResourceLabels>>;
+let labelCounts: { at: number; labels: LabelCounts } | null = null;
+let labelRead: Promise<LabelCounts> | null = null;
+
+function refreshLabelCounts(): Promise<LabelCounts> {
+  if (!labelRead) {
+    labelRead = Promise.resolve()
+      .then(() => neptuneClient.listResourceLabels())
+      .then((labels) => {
+        labelCounts = { at: Date.now(), labels };
+        return labels;
+      })
+      .finally(() => {
+        labelRead = null;
+      });
+  }
+  return labelRead;
+}
+
+export async function listResourceLabels(_req: Request, res: Response): Promise<void> {
+  try {
+    if (labelCounts) {
+      if (Date.now() - labelCounts.at > LABELS_TTL_MS) {
+        refreshLabelCounts().catch((error) =>
+          console.error('Error refreshing resource labels:', error)
+        );
+      }
+      res.json({ labels: labelCounts.labels });
+      return;
+    }
+    res.json({ labels: await refreshLabelCounts() });
+  } catch (error) {
+    console.error('Error listing resource labels:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to list resource labels' });
+  }
+}
+
+// Graph labels and property keys are identifiers, never free text.
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
+const identifier = (value: unknown): string | null =>
+  typeof value === 'string' && IDENTIFIER.test(value) ? value : null;
+const labelOrAll = (value: unknown): string | null =>
+  value === ALL_LABELS ? ALL_LABELS : identifier(value);
+
+export async function listResourceProperties(req: Request, res: Response): Promise<void> {
+  const label = labelOrAll(req.query.label);
+  if (!label) {
+    res.status(400).json({ code: 'BAD_REQUEST', message: 'A valid label is required' });
+    return;
+  }
+  try {
+    res.json({ properties: await neptuneClient.listResourceProperties(label) });
+  } catch (error) {
+    console.error('Error listing resource properties:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to list properties' });
+  }
+}
+
+export async function listPropertyValues(req: Request, res: Response): Promise<void> {
+  const label = labelOrAll(req.query.label);
+  const property = identifier(req.query.property);
+  if (!label || !property) {
+    res
+      .status(400)
+      .json({ code: 'BAD_REQUEST', message: 'A valid label and property are required' });
+    return;
+  }
+  try {
+    res.json(await neptuneClient.listPropertyValues(label, property));
+  } catch (error) {
+    console.error('Error listing property values:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to list property values' });
+  }
+}
+
+export async function getResource(req: Request<{ arn: string }>, res: Response): Promise<void> {
   try {
     const { arn } = req.params;
     const { includeNeighbors, includeIssues } = req.query;
 
     const includeNeigh = includeNeighbors !== 'false';
     const includeIss = includeIssues !== 'false';
-
-    await neptuneClient.connect();
 
     const resource = await neptuneClient.getResource(arn);
 
@@ -53,57 +134,73 @@ export async function getResource(req: Request, res: Response): Promise<void> {
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to get resource',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
 
 export async function searchResources(req: Request, res: Response): Promise<void> {
   try {
-    const { label, property, value, limit } = req.query;
+    const { label, property, value, limit, nextToken } = req.query;
 
-    if (!label) {
+    if (typeof label !== 'string' || !label) {
       res.status(400).json({
         code: 'BAD_REQUEST',
         message: 'label query parameter is required',
       });
       return;
     }
-
-    await neptuneClient.connect();
-
-    const limitNum = limit ? parseInt(limit as string, 10) : 100;
-
-    let query = `g.V().has('label', P.label)`;
-    const bindings: Record<string, unknown> = { label, limit: limitNum };
-
-    if (property && value) {
-      query += `.has(P.property, P.value)`;
-      bindings.property = property;
-      bindings.value = value;
+    if ((property === undefined) !== (value === undefined)) {
+      res.status(400).json({
+        code: 'BAD_REQUEST',
+        message: 'property and value must be provided together',
+      });
+      return;
+    }
+    if (
+      (property !== undefined && typeof property !== 'string') ||
+      (value !== undefined && typeof value !== 'string') ||
+      (nextToken !== undefined && typeof nextToken !== 'string')
+    ) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid resource search query' });
+      return;
     }
 
-    query += `.limit(P.limit)`;
-
-    const results = await neptuneClient.executeQuery(query, bindings);
-
-    const resources: GraphVertex[] = (results as NeptuneRawVertex[]).map((result) => ({
-      id: typeof result.id === 'object' ? result.id.value : result.id,
-      label: result.label,
-      properties: extractProperties(result),
-    }));
+    const limitNum = parseBoundedInteger(limit, 100, 1, 200, 'limit');
+    const result =
+      label === ALL_LABELS && property === undefined
+        ? await neptuneClient.browseAllLabels({
+            labels: (labelCounts?.labels ?? (await refreshLabelCounts())).map(
+              (entry) => entry.label
+            ),
+            limit: limitNum,
+            nextToken,
+          })
+        : await neptuneClient.searchResources({
+            label,
+            property,
+            value,
+            limit: limitNum,
+            nextToken,
+          });
 
     res.json({
-      label: label,
-      total: resources.length,
-      resources,
+      label,
+      resources: result.resources,
+      nextToken: result.nextToken,
     });
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Invalid pagination token')) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: error.message });
+      return;
+    }
+    if (error instanceof Error && error.message.startsWith('limit must be')) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: error.message });
+      return;
+    }
     console.error('Error searching resources:', error);
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to search resources',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
@@ -111,27 +208,28 @@ export async function searchResources(req: Request, res: Response): Promise<void
 export async function getResourceGraph(req: Request, res: Response): Promise<void> {
   try {
     const { arn, depth } = req.query;
-    const maxDepth = depth ? parseInt(depth as string, 10) : 2;
 
-    if (!arn) {
+    if (typeof arn !== 'string' || !arn) {
       res.status(400).json({
         code: 'BAD_REQUEST',
         message: 'arn query parameter is required',
       });
       return;
     }
-
-    await neptuneClient.connect();
+    const maxDepth = parseBoundedInteger(depth, 2, 0, 3, 'depth');
 
     const result = await getResourceWithNeighbors(arn as string, maxDepth);
 
     res.json(result);
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('depth must be')) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: error.message });
+      return;
+    }
     console.error('Error getting resource graph:', error);
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to get resource graph',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
@@ -140,52 +238,35 @@ async function getResourceWithNeighbors(
   arn: string,
   depth: number
 ): Promise<{ nodes: GraphVertex[]; edges: GraphEdge[] }> {
-  const visited = new Set<string>();
-  const nodes: GraphVertex[] = [];
-  const edges: GraphEdge[] = [];
+  const root = await neptuneClient.getResource(arn);
+  if (!root) return { nodes: [], edges: [] };
 
-  async function traverse(currentArn: string, currentDepth: number): Promise<void> {
-    if (currentDepth > depth || visited.has(currentArn)) {
-      return;
-    }
+  const nodes = new Map<string, GraphVertex>([[root.id, root]]);
+  const edges = new Map<string, GraphEdge>();
+  let frontier = [arn];
 
-    visited.add(currentArn);
-
-    const resource = await neptuneClient.getResource(currentArn);
-    if (resource) {
-      nodes.push(resource);
-    }
-
-    const { nodes: neighbors, edges: neighborEdges } = await neptuneClient.getNeighbors(currentArn);
-
-    for (const neighbor of neighbors) {
-      if (!visited.has(neighbor.id)) {
-        edges.push(...neighborEdges.filter((e) => e.from === currentArn && e.to === neighbor.id));
-        await traverse(neighbor.id, currentDepth + 1);
+  for (let currentDepth = 0; currentDepth < depth && frontier.length > 0; currentDepth += 1) {
+    const nextFrontier: string[] = [];
+    for (const currentArn of frontier) {
+      if (nodes.size >= MAX_GRAPH_NODES || edges.size >= MAX_GRAPH_EDGES) break;
+      const remainingEdges = Math.min(200, MAX_GRAPH_EDGES - edges.size);
+      const result = await neptuneClient.getNeighbors(currentArn, remainingEdges);
+      result.edges.forEach((edge) => edges.set(edge.id, edge));
+      for (const neighbor of result.nodes) {
+        if (nodes.size >= MAX_GRAPH_NODES) break;
+        if (!nodes.has(neighbor.id)) {
+          nodes.set(neighbor.id, neighbor);
+          const neighborArn =
+            typeof neighbor.properties.arn === 'string' ? neighbor.properties.arn : neighbor.id;
+          nextFrontier.push(neighborArn);
+        }
       }
     }
+    frontier = nextFrontier;
   }
 
-  await traverse(arn, 0);
-
-  return { nodes, edges };
-}
-
-function extractProperties(obj: NeptuneRawVertex): Record<string, unknown> {
-  const properties: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(obj)) {
-    if (key !== 'id' && key !== 'label') {
-      properties[key] = unwrapGremlinValue(value);
-    }
-  }
-
-  return properties;
-}
-
-function unwrapGremlinValue(val: unknown): unknown {
-  if (val && typeof val === 'object' && 'value' in val) {
-    return (val as { value: unknown }).value ?? val;
-  }
-  return val;
+  return {
+    nodes: [...nodes.values()],
+    edges: [...edges.values()].filter((edge) => nodes.has(edge.from) && nodes.has(edge.to)),
+  };
 }

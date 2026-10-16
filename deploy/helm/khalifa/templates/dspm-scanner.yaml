@@ -1,0 +1,73 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "khalifa.fullname" . }}-dspm-scanner
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dspm-scanner
+spec:
+  schedule: {{ .Values.dspmScanner.schedule | quote }}
+  {{- with .Values.dspmScanner.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.dspmScanner.suspend }}
+  concurrencyPolicy: {{ .Values.dspmScanner.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.dspmScanner.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.dspmScanner.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.dspmScanner.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "dspm-scanner") | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.dspmScanner.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.dspmScanner.ttlSecondsAfterFinished }}
+      backoffLimit: {{ .Values.dspmScanner.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "khalifa.selectorLabels" (dict "root" . "component" "dspm-scanner") | nindent 12 }}
+            {{- with .Values.dspmScanner.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.dspmScanner.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "dspmScanner" "suffix" "dspm-scanner") }}
+          automountServiceAccountToken: {{ .Values.serviceAccounts.dspmScanner.automountServiceAccountToken }}
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "khalifa.podSecurityContext" . | nindent 12 }}
+          {{- if .Values.topologySpread.enabled }}
+          topologySpreadConstraints:
+            {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "dspm-scanner") | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: dspm-scanner
+              image: {{ required "dspmScanner.image must be an immutable repository@sha256 digest" .Values.dspmScanner.image | quote }}
+              imagePullPolicy: IfNotPresent
+              args: ["dspm-scanner"]
+              securityContext:
+                {{- include "khalifa.containerSecurityContext" . | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-config
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-collection
+                - secretRef:
+                    name: {{ include "khalifa.graphWriterTokenSecretName" . }}
+                {{- include "khalifa.extraExternalSecretRef" (dict "root" . "component" "dspmScanner" "already" (list (include "khalifa.graphWriterTokenSecretName" .))) | nindent 16 }}
+              resources:
+                {{- toYaml .Values.dspmScanner.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

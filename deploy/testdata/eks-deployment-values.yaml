@@ -1,0 +1,200 @@
+commonLabels:
+  app.kubernetes.io/part-of: khalifa
+  environment: validation
+
+serviceAccounts:
+  api:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-api
+  ruleRunner:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-rule-runner
+  organizationCollector:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-org-collector
+  incrementalCollector:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-incremental
+  graphWriter:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-graph-writer
+  compliance:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-compliance
+  cloudtrailAnalyzer:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-cloudtrail-analyzer
+  dspmScanner:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-dspm-scanner
+  policyEvaluator:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-policy-evaluator
+  leastPrivilegeSweep:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/validation-khalifa-least-privilege-sweep
+
+config:
+  awsRegion: us-west-2
+  neptuneEndpoint: wss://neptune.validation.invalid:8182/gremlin
+  neptuneQueryTimeoutMs: 30000
+  neptuneMaxAttempts: 3
+  neptuneMaxResults: 1000
+  issuesTable: validation-khalifa-issues
+  evidenceTable: validation-khalifa-evidence
+  reportsTable: validation-khalifa-reports
+  postureTrendsTable: validation-khalifa-posture-trends
+  accessAnalyzerTable: validation-khalifa-access-analyzer
+  leastPrivilegeTable: validation-khalifa-least-privilege
+  cognitoUserPoolId: us-west-2_validation
+  cognitoClientId: validationclient
+  cognitoRegion: us-west-2
+  cloudflareAccessTeamDomain: example-team.cloudflareaccess.com
+  cloudflareAccessAud: validation-khalifa-access-aud
+  corsAllowedOrigins:
+    - https://khalifa.validation.invalid
+  issueSinks:
+    - sns
+  issuesTopicArn: arn:aws:sns:us-west-2:111122223333:validation-khalifa-issues
+  uiBaseUrl: https://khalifa.validation.invalid
+
+collection:
+  homeAccountId: '111122223333'
+  accountIds:
+    - '111122223333'
+  regions:
+    - us-west-2
+  incrementalQueueUrl: https://sqs.us-west-2.amazonaws.com/111122223333/validation-khalifa-incremental.fifo
+
+api:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-api@sha256:1111111111111111111111111111111111111111111111111111111111111111
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  pdb:
+    enabled: true
+    minAvailable: 1
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+
+ui:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+ruleRunner:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-rule-runner@sha256:3333333333333333333333333333333333333333333333333333333333333333
+  schedule: '0 * * * *'
+  timeZone: America/Los_Angeles
+
+organizationCollector:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  schedule: '0 * * * *'
+  timeZone: America/Los_Angeles
+
+incrementalCollector:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+
+graphWriter:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+compliance:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  schedule: '0 3 * * *'
+  timeZone: America/Los_Angeles
+
+cloudtrailAnalyzer:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  schedule: '0 2 * * *'
+  timeZone: America/Los_Angeles
+
+dspmScanner:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  schedule: '0 4 * * *'
+  timeZone: America/Los_Angeles
+
+policyEvaluator:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  schedule: '0 5 * * *'
+  timeZone: America/Los_Angeles
+
+leastPrivilegeSweep:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  schedule: '30 5 * * *'
+  timeZone: America/Los_Angeles
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+  hosts:
+    - host: api.khalifa.validation.invalid
+      paths:
+        - path: /
+          pathType: Prefix
+          component: api
+    - host: khalifa.validation.invalid
+      paths:
+        - path: /
+          pathType: Prefix
+          component: ui
+  tls:
+    - hosts:
+        - api.khalifa.validation.invalid
+        - khalifa.validation.invalid
+      secretName: khalifa-validation-tls
+
+networkPolicies:
+  enabled: true
+  egressCidrs:
+    - cidr: 10.20.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8182
+      components:
+        - api
+        - rule-runner
+        - org-collector
+        - incremental
+        - graph-writer
+        - compliance
+        - cloudtrail-analyzer
+        - policy-evaluator
+        - least-privilege-sweep
+    - cidr: 10.30.0.0/24
+      ports:
+        - protocol: TCP
+          port: 443
+      components:
+        - api
+        - rule-runner
+        - org-collector
+        - incremental
+        - graph-writer
+        - compliance
+        - cloudtrail-analyzer
+        - dspm-scanner
+        - policy-evaluator
+        - least-privilege-sweep
+
+# The runtime secret is supplied by External Secrets; the chart no longer
+# accepts collection.externalId / graphWriter.token.
+externalSecrets:
+  targetName: khalifa-runtime

@@ -1,8 +1,23 @@
 import type { Request, Response, NextFunction } from 'express';
 import express from 'express';
-import { listIssues, getIssue, getIssueCounts, getIssueStats } from './routes/issues';
-import { findAttackPath, findAllAttackPaths } from './routes/attack-paths';
-import { getResource, searchResources, getResourceGraph } from './routes/resources';
+import {
+  listIssues,
+  getIssue,
+  getIssueCounts,
+  getIssueStats,
+  getIssueSummary,
+  getIssueSchedule,
+} from './routes/issues';
+import { listAccounts, searchAttackPaths } from './routes/attack-paths';
+import { getDataSources } from './routes/data-sources';
+import {
+  getResource,
+  searchResources,
+  getResourceGraph,
+  listResourceLabels,
+  listResourceProperties,
+  listPropertyValues,
+} from './routes/resources';
 import {
   listFrameworks,
   getFrameworkSummary,
@@ -11,22 +26,42 @@ import {
   getComplianceReport,
   getDriftReport,
 } from './routes/compliance';
-import { validateGremlinSelectors, validateArnParam } from './middleware/gremlin-validator';
+import { validateGremlinSelectors, validateArnPathParam } from './middleware/gremlin-validator';
 import { authenticate } from './middleware/auth';
-import { requireViewer, requireAnalyst } from './middleware/rbac';
+import { requireViewer, requireAnalyst, requireTrustCenterSync } from './middleware/rbac';
+import { apiRateLimiter, expensiveRateLimiter } from './middleware/rate-limit';
+import { metricsMiddleware, renderMetrics } from './observability/metrics';
+import compression from 'compression';
+import helmet from 'helmet';
+import { getReadinessService } from './services/readiness';
 import {
   getEffectivePermissions,
   getEscalationPaths,
   getUnusedPermissions,
   getRightsizingRecommendation,
   getTrustGraph,
+  getLeastPrivilegeFindings,
+  getLeastPrivilegeFinding,
+  getLeastPrivilegeSummary,
 } from './routes/identity';
 import { getTrend, listTrendMetrics } from './routes/trends';
 import { getIntegrationsStatus, suppressIssue, reopenIssue } from './routes/integrations';
+import { getSession } from './routes/session';
+import { getRule, listRules } from './routes/rules';
+import { getPublishableRequirements } from './routes/trust-center';
 
 const app = express();
+app.disable('x-powered-by');
 
-app.use(express.json());
+app.use(metricsMiddleware);
+app.use(
+  helmet({
+    // The API serves JSON only; CSP is enforced at the edge and in the UI.
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
+app.use(compression());
 
 app.use((_req: Request, res: Response, next: NextFunction) => {
   const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
@@ -47,39 +82,102 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+const liveness = (_req: Request, res: Response): void => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+};
+app.get('/health', liveness);
+app.get('/livez', liveness);
+
+app.get('/readyz', async (_req: Request, res: Response) => {
+  try {
+    const result = await getReadinessService().check();
+    res.status(result.status === 'ready' ? 200 : 503).json({
+      ...result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Readiness check failed:', error);
+    res.status(503).json({ status: 'not_ready', timestamp: new Date().toISOString() });
+  }
 });
 
-app.use(validateGremlinSelectors);
-app.use('/resources/:arn', validateArnParam);
+app.get('/metrics', (_req: Request, res: Response) => {
+  res.type('text/plain; version=0.0.4; charset=utf-8').send(renderMetrics());
+});
 
 app.use(authenticate);
+app.use(express.json({ limit: '32kb' }));
+app.use(apiRateLimiter);
+app.use(validateGremlinSelectors);
 
+app.get('/session', requireViewer, getSession);
+app.get('/rules', requireViewer, listRules);
+app.get('/rules/:id', requireViewer, getRule);
 app.get('/issues', requireViewer, listIssues);
 app.get('/issues/counts', requireViewer, getIssueCounts);
 app.get('/issues/stats', requireViewer, getIssueStats);
+app.get('/issues/summary', requireViewer, getIssueSummary);
+app.get('/issues/schedule', requireViewer, getIssueSchedule);
 app.get('/issues/:id', requireViewer, getIssue);
 
-app.get('/attack-paths', requireViewer, findAttackPath);
-app.get('/attack-paths/all', requireViewer, findAllAttackPaths);
+app.get('/attack-paths/search', requireViewer, expensiveRateLimiter, searchAttackPaths);
+app.get('/accounts', requireViewer, listAccounts);
+app.get('/data-sources', requireViewer, expensiveRateLimiter, getDataSources);
 
-app.get('/resources/:arn', requireViewer, getResource);
 app.get('/resources/search', requireViewer, searchResources);
-app.get('/resources/graph', requireViewer, getResourceGraph);
+app.get('/resources/labels', requireViewer, expensiveRateLimiter, listResourceLabels);
+app.get('/resources/properties', requireViewer, expensiveRateLimiter, listResourceProperties);
+app.get('/resources/values', requireViewer, expensiveRateLimiter, listPropertyValues);
+app.get('/resources/graph', requireViewer, expensiveRateLimiter, getResourceGraph);
+app.get('/resources/:arn(*)', validateArnPathParam('arn'), requireViewer, getResource);
 
 app.get('/compliance/frameworks', requireViewer, listFrameworks);
-app.get('/compliance/frameworks/:framework', requireViewer, getFrameworkSummary);
 app.get('/compliance/frameworks/:framework/controls', requireViewer, getFrameworkControls);
 app.get('/compliance/frameworks/:framework/controls/:controlId', requireViewer, getControlDetails);
-app.get('/compliance/frameworks/:framework/report', requireViewer, getComplianceReport);
-app.get('/compliance/frameworks/:framework/drift', requireViewer, getDriftReport);
+app.get(
+  '/compliance/frameworks/:framework/report',
+  requireViewer,
+  expensiveRateLimiter,
+  getComplianceReport
+);
+app.get(
+  '/compliance/frameworks/:framework/drift',
+  requireViewer,
+  expensiveRateLimiter,
+  getDriftReport
+);
+app.get('/compliance/frameworks/:framework', requireViewer, getFrameworkSummary);
+app.get(
+  '/compliance/reconciliation/publishable',
+  requireTrustCenterSync,
+  getPublishableRequirements
+);
 
-app.get('/identity/effective-permissions/:principal', requireViewer, getEffectivePermissions);
 app.get('/identity/escalation-paths', requireViewer, getEscalationPaths);
 app.get('/identity/unused-permissions', requireViewer, getUnusedPermissions);
-app.get('/identity/rightsizing/:principal', requireViewer, getRightsizingRecommendation);
 app.get('/identity/trust-graph', requireViewer, getTrustGraph);
+app.get('/identity/least-privilege', requireViewer, getLeastPrivilegeFindings);
+app.get('/identity/least-privilege/summary', requireViewer, getLeastPrivilegeSummary);
+app.get(
+  '/identity/least-privilege/:accountId/:principalArn(*)',
+  validateArnPathParam('principalArn'),
+  requireViewer,
+  getLeastPrivilegeFinding
+);
+app.get(
+  '/identity/effective-permissions/:principal(*)',
+  validateArnPathParam('principal'),
+  requireViewer,
+  expensiveRateLimiter,
+  getEffectivePermissions
+);
+app.get(
+  '/identity/rightsizing/:principal(*)',
+  validateArnPathParam('principal'),
+  requireViewer,
+  expensiveRateLimiter,
+  getRightsizingRecommendation
+);
 
 app.get('/trends', requireViewer, listTrendMetrics);
 app.get('/trends/:metric', requireViewer, getTrend);
@@ -94,12 +192,6 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     code: 'INTERNAL_ERROR',
     message: 'An unexpected error occurred',
   });
-});
-
-const PORT = process.env.PORT || 8080;
-
-app.listen(PORT, () => {
-  console.log(`API service listening on port ${PORT}`);
 });
 
 export default app;

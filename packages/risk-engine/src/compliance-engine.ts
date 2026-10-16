@@ -1,12 +1,14 @@
 import type {
+  ComplianceControl,
   ComplianceFramework,
   ComplianceEvidence,
   ComplianceReport,
   ComplianceControlResult,
   ComplianceFrameworkSummary,
 } from './compliance-types';
-import { getControlsByFramework } from './compliance-types';
+import { getControlsByFramework, REGIONAL_CONTROL_IDS } from './compliance-types';
 import { complianceRuleEvaluators } from './compliance-rules';
+import { getRuleById } from './rules';
 import {
   DynamoDBClient,
   BatchWriteItemCommand,
@@ -14,6 +16,7 @@ import {
   PutItemCommand,
   ScanCommand,
 } from '@aws-sdk/client-dynamodb';
+import type { WriteRequest } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 
@@ -27,26 +30,125 @@ export interface EvidenceStore {
   getAllEvidence(): Promise<ComplianceEvidence[]>;
 }
 
+// The issues store, as a rule-backed control reads it.
+export interface OpenIssueReader {
+  getOpenIssuesByRule(ruleId: string): Promise<{ id: string; status?: string }[]>;
+}
+
+const SAMPLE_ISSUE_IDS = 10;
+
 export class ComplianceEngine {
   private graphClient: GraphClient;
   private evidenceStore: EvidenceStore;
   private reportStore: ReportStore;
+  private issueReader?: OpenIssueReader;
 
-  constructor(graphClient: GraphClient, evidenceStore: EvidenceStore, reportStore?: ReportStore) {
+  constructor(
+    graphClient: GraphClient,
+    evidenceStore: EvidenceStore,
+    reportStore?: ReportStore,
+    issueReader?: OpenIssueReader
+  ) {
     this.graphClient = graphClient;
     this.evidenceStore = evidenceStore;
     this.reportStore = reportStore || new InMemoryReportStore();
+    this.issueReader = issueReader;
+  }
+
+  // A control defined as the outcome its risk rules measure (KH-DET-2 is
+  // "no canary credential has been used", RULE-023 detects one). It has no
+  // evaluator of its own, so it was reported "No automated evaluator" forever,
+  // whatever the rules found. FAIL on any open issue of a related rule; PASS
+  // when none is open and every related rule is enabled. Suppressed and
+  // resolved issues do not count. A disabled rule, or an issue store that
+  // cannot be read, is NOT_EVALUATED rather than a failed assessment.
+  private async evaluateFromRules(
+    control: ComplianceControl
+  ): Promise<Omit<ComplianceControlResult, 'control' | 'lastEvaluated'>> {
+    const reader = this.issueReader!;
+    const inactive = control.relatedRules.filter((id) => getRuleById(id)?.enabled !== true);
+    if (inactive.length > 0) {
+      return {
+        status: 'NOT_EVALUATED',
+        evidence: [],
+        issues: [`Related rule disabled or unknown: ${inactive.join(', ')}`],
+      };
+    }
+    let byRule: [string, { id: string; status?: string }[]][];
+    try {
+      byRule = await Promise.all(
+        control.relatedRules.map(
+          async (id) =>
+            [id, await reader.getOpenIssuesByRule(id)] as [
+              string,
+              { id: string; status?: string }[],
+            ]
+        )
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: 'NOT_EVALUATED',
+        evidence: [],
+        issues: [`Issue store unreadable: ${message}`],
+      };
+    }
+    const open = byRule.map(
+      ([id, list]) => [id, list.filter((i) => (i.status ?? 'open') === 'open')] as const
+    );
+    const total = open.reduce((n, [, list]) => n + list.length, 0);
+    const status = total === 0 ? 'PASS' : 'FAIL';
+    return {
+      status,
+      evidence: [
+        {
+          controlId: control.id,
+          resourceId: control.relatedRules.join(','),
+          resourceType: 'RiskRule',
+          status,
+          details: {
+            openIssuesByRule: Object.fromEntries(open.map(([id, list]) => [id, list.length])),
+            sampleIssueIds: open
+              .flatMap(([, list]) => list.map((i) => i.id))
+              .slice(0, SAMPLE_ISSUE_IDS),
+          },
+          collectedAt: new Date().toISOString(),
+          collectedBy: 'compliance-engine',
+        },
+      ],
+      issues: open
+        .filter(([, list]) => list.length > 0)
+        .map(([id, list]) => `${list.length} open ${id} issue${list.length === 1 ? '' : 's'}`),
+    };
+  }
+
+  // The regions collection actually ran in, read from the per-account
+  // resource-inventory coverage vertices. Undefined if the read fails: the
+  // label is then missing, which is better than failing the assessment.
+  private async collectedRegions(): Promise<string[] | undefined> {
+    try {
+      const regions = await this.graphClient.executeQuery(
+        `g.V().hasLabel('CollectionCoverage').has('service', 'resource-inventory').values('region').dedup()`
+      );
+      return [...new Set(regions.map(String))].sort();
+    } catch {
+      return undefined;
+    }
   }
 
   async runAssessment(framework: ComplianceFramework): Promise<ComplianceReport> {
     const controls = getControlsByFramework(framework);
     const results: ComplianceControlResult[] = [];
+    const failures: string[] = [];
+    const regions = controls.some((c) => REGIONAL_CONTROL_IDS.has(c.id))
+      ? await this.collectedRegions()
+      : undefined;
 
     for (const control of controls) {
       if (!control.automated) {
         results.push({
           control,
-          status: 'NOT_EVALUATED',
+          status: 'MANUAL',
           evidence: [],
           issues: ['Manual assessment required'],
           lastEvaluated: new Date().toISOString(),
@@ -55,6 +157,12 @@ export class ComplianceEngine {
       }
 
       const evaluator = complianceRuleEvaluators.find((e) => e.controlId === control.id);
+      if (!evaluator && control.relatedRules.length > 0 && this.issueReader) {
+        const result = await this.evaluateFromRules(control);
+        await this.evidenceStore.saveEvidence(result.evidence);
+        results.push({ control, ...result, lastEvaluated: new Date().toISOString() });
+        continue;
+      }
       if (!evaluator) {
         results.push({
           control,
@@ -77,13 +185,16 @@ export class ComplianceEngine {
           evidence,
           issues,
           lastEvaluated: new Date().toISOString(),
+          ...(REGIONAL_CONTROL_IDS.has(control.id) && regions ? { regionsEvaluated: regions } : {}),
         });
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push(`${control.id}: ${message}`);
         results.push({
           control,
           status: 'NOT_EVALUATED',
           evidence: [],
-          issues: [`Evaluation error: ${error instanceof Error ? error.message : String(error)}`],
+          issues: [`Evaluation error: ${message}`],
           lastEvaluated: new Date().toISOString(),
         });
       }
@@ -118,16 +229,19 @@ export class ComplianceEngine {
 
     await this.reportStore.saveReport(report);
 
+    if (failures.length > 0) {
+      throw new Error(`Compliance assessment failed for ${framework}: ${failures.join('; ')}`);
+    }
+
     return report;
   }
 
   async runAllAssessments(): Promise<ComplianceReport[]> {
-    const frameworks: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'SOC2', 'ISO27001'];
+    const frameworks: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'KHALIFA_BASELINE'];
     const reports: ComplianceReport[] = [];
 
     for (const framework of frameworks) {
-      const report = await this.runAssessment(framework);
-      reports.push(report);
+      reports.push(await this.runAssessment(framework));
     }
 
     return reports;
@@ -150,6 +264,15 @@ export class ComplianceEngine {
       manualControls,
       coveragePercent,
       lastAssessment,
+      summary: latestReport?.summary ?? {
+        totalControls: controls.length,
+        passed: 0,
+        failed: 0,
+        manual: manualControls,
+        notApplicable: 0,
+        notEvaluated: automatedControls,
+        coveragePercent,
+      },
     };
   }
 
@@ -204,34 +327,60 @@ export class InMemoryReportStore implements ReportStore {
 export class DynamoDBEvidenceStore implements EvidenceStore {
   private tableName: string;
   private docClient: DynamoDBDocumentClient;
+  private sleep: (ms: number) => Promise<void>;
+  private maxAttempts: number;
 
-  constructor(tableName: string = 'ComplianceEvidence') {
+  constructor(
+    tableName: string = 'ComplianceEvidence',
+    options: {
+      client?: DynamoDBDocumentClient;
+      sleep?: (ms: number) => Promise<void>;
+      maxAttempts?: number;
+    } = {}
+  ) {
     const client = new DynamoDBClient({
       region: process.env.AWS_REGION || 'us-east-1',
     });
     this.tableName = tableName;
-    this.docClient = DynamoDBDocumentClient.from(client);
+    this.docClient = options.client || DynamoDBDocumentClient.from(client);
+    this.sleep = options.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.maxAttempts = options.maxAttempts || 5;
   }
 
   async saveEvidence(evidence: ComplianceEvidence[]): Promise<void> {
     if (evidence.length === 0) return;
-    const items = evidence.map((e) => ({
+    const items: WriteRequest[] = evidence.map((e) => ({
       PutRequest: {
         Item: marshall({
           ...e,
-          pk: `${e.controlId}#${e.resourceId}#${e.collectedAt}`,
         }),
       },
     }));
 
     for (let i = 0; i < items.length; i += 25) {
-      await this.docClient.send(
-        new BatchWriteItemCommand({
-          RequestItems: {
-            [this.tableName]: items.slice(i, i + 25),
-          },
-        })
-      );
+      let pending = items.slice(i, i + 25);
+
+      for (let attempt = 0; pending.length > 0 && attempt < this.maxAttempts; attempt++) {
+        const result = await this.docClient.send(
+          new BatchWriteItemCommand({
+            RequestItems: {
+              [this.tableName]: pending,
+            },
+          })
+        );
+        pending = result.UnprocessedItems?.[this.tableName] || [];
+
+        if (pending.length > 0 && attempt + 1 < this.maxAttempts) {
+          const maxDelay = Math.min(100 * 2 ** attempt, 2000);
+          await this.sleep(Math.floor(Math.random() * maxDelay));
+        }
+      }
+
+      if (pending.length > 0) {
+        throw new Error(
+          `Failed to persist ${pending.length} compliance evidence items after ${this.maxAttempts} attempts`
+        );
+      }
     }
   }
 
@@ -313,19 +462,4 @@ export class DynamoDBReportStore implements ReportStore {
     if (!result.Items) return [];
     return result.Items.map((item) => unmarshall(item).report as ComplianceReport);
   }
-}
-
-export function createComplianceEngine(
-  graphClient: GraphClient,
-  evidenceStore: EvidenceStore,
-  reportStore?: ReportStore
-): ComplianceEngine {
-  return new ComplianceEngine(graphClient, evidenceStore, reportStore);
-}
-
-export async function runScheduledComplianceAssessment(neptuneClient: GraphClient): Promise<void> {
-  const evidenceStore = new DynamoDBEvidenceStore();
-  const reportStore = new DynamoDBReportStore();
-  const engine = new ComplianceEngine(neptuneClient, evidenceStore, reportStore);
-  await engine.runAllAssessments();
 }

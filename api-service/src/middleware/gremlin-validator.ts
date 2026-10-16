@@ -1,7 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
+import { ALL_LABELS } from '../services/neptune-client';
 
 const LABEL_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
-const ARN_PATTERN = /^arn:aws[a-z-]*:[a-z]+:[a-z0-9-]+:\d{12}:.+$|^\d{12}$|^\*$/;
+const ARN_PATTERN =
+  /^arn:(aws|aws-us-gov|aws-cn|aws-iso|aws-iso-b|aws-iso-e|aws-iso-f|aws-eusc):[a-z0-9-]+:[^:]*:(?:\d{12})?:.+$/;
+const ACCOUNT_ID_PATTERN = /^\d{12}$/;
 
 const LABEL_PARAMS = [
   'fromSelector',
@@ -11,56 +14,77 @@ const LABEL_PARAMS = [
   'escalationType',
   'riskLevel',
 ];
-const ARN_PARAMS = ['principal', 'sourceAccount', 'targetRole'];
+const ARN_PARAMS = ['arn', 'principal', 'sourceAccount', 'targetRole', 'account'];
 
 export function validateGremlinSelectors(req: Request, res: Response, next: NextFunction): void {
   for (const param of LABEL_PARAMS) {
     const value = req.query[param];
     if (value === undefined) continue;
-    const candidates = Array.isArray(value) ? value : [value];
-    for (const candidate of candidates) {
-      if (typeof candidate !== 'string') continue;
-      if (!LABEL_PATTERN.test(candidate)) {
-        res.status(400).json({
-          code: 'INVALID_SELECTOR',
-          message: `Query parameter '${param}' must match ${LABEL_PATTERN} (alphanumeric + underscore)`,
-        });
-        return;
-      }
+    // The resource explorer's "All labels"; the resources routes never put it in a query.
+    if (param === 'label' && value === ALL_LABELS) continue;
+    if (typeof value !== 'string' || !LABEL_PATTERN.test(value)) {
+      res.status(400).json({
+        code: 'INVALID_SELECTOR',
+        message: `Query parameter '${param}' must match ${LABEL_PATTERN} (alphanumeric + underscore)`,
+      });
+      return;
     }
   }
 
   for (const param of ARN_PARAMS) {
     const value = req.query[param];
     if (value === undefined) continue;
-    const candidates = Array.isArray(value) ? value : [value];
-    for (const candidate of candidates) {
-      if (typeof candidate !== 'string') continue;
-      if (!ARN_PATTERN.test(candidate)) {
-        res.status(400).json({
-          code: 'INVALID_ARN_PARAM',
-          message: `Query parameter '${param}' must be a valid AWS ARN, account ID, or '*'`,
-        });
-        return;
-      }
+    if (
+      typeof value !== 'string' ||
+      (!ARN_PATTERN.test(value) && !ACCOUNT_ID_PATTERN.test(value))
+    ) {
+      res.status(400).json({
+        code: 'INVALID_ARN_PARAM',
+        message: `Query parameter '${param}' must be a valid AWS ARN or account ID`,
+      });
+      return;
     }
   }
 
   next();
 }
 
-export function validateArnParam(req: Request, res: Response, next: NextFunction): void {
-  const arn = req.params.arn;
-  if (!arn) {
+export function validateArnPathParam(
+  parameter: string
+): (req: Request, res: Response, next: NextFunction) => void {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const arn = req.params[parameter];
+    if (!arn) {
+      next();
+      return;
+    }
+    if (!ARN_PATTERN.test(arn)) {
+      res.status(400).json({
+        code: 'INVALID_ARN',
+        message: `Path parameter :${parameter} must be a valid AWS ARN`,
+      });
+      return;
+    }
     next();
-    return;
+  };
+}
+
+export function parseBoundedInteger(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  name: string
+): number {
+  if (value === undefined) {
+    return fallback;
   }
-  if (typeof arn !== 'string' || !arn.startsWith('arn:')) {
-    res.status(400).json({
-      code: 'INVALID_ARN',
-      message: 'Path parameter :arn must be a valid AWS ARN',
-    });
-    return;
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
   }
-  next();
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return parsed;
 }

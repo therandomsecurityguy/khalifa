@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "khalifa.fullname" . }}-rule-runner
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rule-runner
+spec:
+  schedule: {{ .Values.ruleRunner.schedule | quote }}
+  {{- with .Values.ruleRunner.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.ruleRunner.suspend }}
+  concurrencyPolicy: {{ .Values.ruleRunner.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.ruleRunner.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.ruleRunner.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.ruleRunner.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "rule-runner") | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.ruleRunner.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.ruleRunner.ttlSecondsAfterFinished }}
+      backoffLimit: {{ .Values.ruleRunner.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "khalifa.selectorLabels" (dict "root" . "component" "rule-runner") | nindent 12 }}
+            {{- with .Values.ruleRunner.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.ruleRunner.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "ruleRunner" "suffix" "rule-runner") }}
+          automountServiceAccountToken: {{ .Values.serviceAccounts.ruleRunner.automountServiceAccountToken }}
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "khalifa.podSecurityContext" . | nindent 12 }}
+          {{- if .Values.topologySpread.enabled }}
+          topologySpreadConstraints:
+            {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "rule-runner") | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: rule-runner
+              image: {{ required "ruleRunner.image must be an immutable repository@sha256 digest" .Values.ruleRunner.image | quote }}
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                {{- include "khalifa.containerSecurityContext" . | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-config
+                {{- if and .Values.externalSecrets.enabled (has "ruleRunner" .Values.externalSecrets.mountIn) }}
+                - secretRef:
+                    name: {{ .Values.externalSecrets.targetName }}
+                {{- end }}
+              resources:
+                {{- toYaml .Values.ruleRunner.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

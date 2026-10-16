@@ -1,64 +1,51 @@
 import type { Request, Response } from 'express';
-import { validateGremlinSelectors } from '../middleware/gremlin-validator';
+import {
+  parseBoundedInteger,
+  validateArnPathParam,
+  validateGremlinSelectors,
+} from '../middleware/gremlin-validator';
 
-function makeReq(query: Record<string, unknown>): Request {
-  return { query } as unknown as Request;
+function response(): Response {
+  const value: any = { statusCode: 200 };
+  value.status = (statusCode: number) => Object.assign(value, { statusCode });
+  value.json = (body: unknown) => Object.assign(value, { body });
+  return value;
 }
 
-function makeRes(): Response {
-  const res: any = {
-    statusCode: 200,
-    body: undefined,
-    status(code: number) {
-      this.statusCode = code;
-      return this;
-    },
-    json(payload: any) {
-      this.body = payload;
-      return this;
-    },
-  };
-  return res as Response;
-}
-
-describe('validateGremlinSelectors', () => {
-  it('accepts valid label', () => {
+describe('Gremlin input validation', () => {
+  it.each([
+    [{ label: 'EC2Instance' }, true],
+    [{ arn: 'arn:aws:iam::123456789012:role/team/Admin' }, true],
+    [{ label: "EC2'); g.drop()--" }, false],
+    [{ label: '*' }, true],
+    [{ label: '**' }, false],
+    [{ property: '*' }, false],
+    [{ fromSelector: '*' }, false],
+    [{ fromSelector: 'Internet&.drop()' }, false],
+    [{ arn: 'arn:evil' }, false],
+  ])('validates %p', (query, accepted) => {
     const next = jest.fn();
-    const res = makeRes();
-    validateGremlinSelectors(makeReq({ label: 'EC2Instance' }), res, next);
-    expect(next).toHaveBeenCalled();
-    expect(res.statusCode).toBe(200);
+    const res = response();
+    validateGremlinSelectors({ query } as unknown as Request, res, next);
+    expect(next).toHaveBeenCalledTimes(accepted ? 1 : 0);
+    expect(res.statusCode).toBe(accepted ? 200 : 400);
   });
 
-  it('rejects label with Gremlin injection attempt', () => {
+  it('accepts a slash-containing ARN path parameter', () => {
     const next = jest.fn();
-    const res = makeRes();
-    validateGremlinSelectors(makeReq({ label: "EC2'); g.drop()--" }), res, next);
-    expect(next).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-    expect((res as any).body.code).toBe('INVALID_SELECTOR');
+    validateArnPathParam('principal')(
+      {
+        params: { principal: 'arn:aws:iam::123456789012:role/team/Admin' },
+      } as unknown as Request,
+      response(),
+      next
+    );
+    expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects label starting with a number', () => {
-    const next = jest.fn();
-    const res = makeRes();
-    validateGremlinSelectors(makeReq({ label: '123' }), res, next);
-    expect(next).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-  });
-
-  it('rejects fromSelector injection', () => {
-    const next = jest.fn();
-    const res = makeRes();
-    validateGremlinSelectors(makeReq({ fromSelector: 'Internet&.drop()' }), res, next);
-    expect(next).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-  });
-
-  it('skips validation when query params not provided', () => {
-    const next = jest.fn();
-    const res = makeRes();
-    validateGremlinSelectors(makeReq({}), res, next);
-    expect(next).toHaveBeenCalled();
+  it.each(['1.5', '-1', '1e2', '201', ['10']])('rejects bounded integer %p', (value) => {
+    expect(() => parseBoundedInteger(value, 10, 1, 200, 'limit')).toThrow(
+      'limit must be an integer between 1 and 200'
+    );
   });
 });

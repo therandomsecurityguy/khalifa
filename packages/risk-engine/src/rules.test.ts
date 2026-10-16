@@ -1,12 +1,11 @@
 import { riskRules, getEnabledRules, getRuleById } from './rules';
+import { ADMIN_PORT_RANGE_PREDICATE } from './admin-ports';
+
+const MANAGED_HOP = "optional(outE('CONTAINS').inV().hasLabel('IamPolicyDocument'))";
 
 describe('riskRules', () => {
-  test('should have at least 5 rules', () => {
-    expect(riskRules.length).toBeGreaterThanOrEqual(5);
-  });
-
-  test('should have exactly 10 rules', () => {
-    expect(riskRules.length).toBe(12);
+  test('should have exactly 30 rules', () => {
+    expect(riskRules.length).toBe(30);
   });
 
   test('each rule should have required fields', () => {
@@ -34,6 +33,29 @@ describe('riskRules', () => {
       expect(rule.gremlinQueryTemplate.trim().length).toBeGreaterThan(0);
     }
   });
+
+  test('each rule uses graph labels and a single read-only traversal', () => {
+    for (const rule of riskRules) {
+      expect(rule.gremlinQueryTemplate).toContain('.hasLabel(');
+      expect(rule.gremlinQueryTemplate).not.toContain(".has('label'");
+    }
+  });
+
+  test('each rule traverses path hops as explicit edges so paths carry edge labels', () => {
+    for (const rule of riskRules) {
+      expect(rule.gremlinQueryTemplate).not.toMatch(/\.(out|in|both)\(/);
+      expect(rule.gremlinQueryTemplate).not.toContain('repeat(out(');
+    }
+  });
+
+  test('each rule projects only the path properties the runner reads', () => {
+    for (const rule of riskRules) {
+      expect(rule.gremlinQueryTemplate).toContain(
+        "path().by(valueMap(true, 'arn', 'name', 'Name', 'is_internet_exposed', 'data_classification', 'crown_jewel', 'env', 'is_admin', 'is_admin_role', 'has_cross_account_trust', 'is_cross_account'))"
+      );
+      expect(rule.gremlinQueryTemplate).not.toContain('valueMap(true))');
+    }
+  });
 });
 
 describe('getEnabledRules', () => {
@@ -49,124 +71,95 @@ describe('getEnabledRules', () => {
     expect(rule?.enabled).toBe(false);
   });
 
-  test('should return 11 enabled rules (RULE-003 disabled)', () => {
+  test('should return 29 enabled rules (RULE-003 disabled)', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(11);
+    expect(enabledRules.length).toBe(29);
   });
 });
 
 describe('getRuleById', () => {
-  test('should return rule by valid ID', () => {
-    const rule = getRuleById('RULE-001');
-    expect(rule).toBeDefined();
-    expect(rule?.id).toBe('RULE-001');
+  test.each([
+    [
+      'RULE-001',
+      'Internet-Exposed EC2',
+      ['Ec2Instance', 'data_classification', 'restricted', MANAGED_HOP],
+    ],
+    [
+      'RULE-002',
+      'SSH',
+      [
+        '0.0.0.0/0',
+        "has('direction', 'ingress')",
+        "has('port_from', lte(22)).has('port_to', gte(22))",
+      ],
+    ],
+    ['RULE-003', 'Container', ['ContainerImage', 'HAS_CVE', 'CRITICAL', 'cvss_base_score']],
+    ['RULE-004', 'IAM', ['HAS_IAM_ROLE', "has('is_admin', true)"]],
+    ['RULE-005', 'Crown Jewel', ['crown_jewel']],
+    [
+      'RULE-006',
+      'Cross-Account',
+      [
+        "out('TRUSTS').hasLabel('ExternalAccount')",
+        "V().hasLabel('AwsAccount')",
+        "eq('trusted')",
+        MANAGED_HOP,
+      ],
+    ],
+    ['RULE-007', 'S3', ['is_publicly_accessible']],
+    ['RULE-008', 'RDS', ['RdsInstance']],
+    ['RULE-009', 'Lambda', ['LambdaFunction', MANAGED_HOP]],
+    [
+      'RULE-010',
+      'Secrets',
+      ['Secret', "inE('CONTAINS').outV().hasLabel('IamPolicy').inE('ATTACHED_TO')"],
+    ],
+    [
+      'RULE-011',
+      'Public S3 Bucket with PII',
+      ['DataClassificationFinding', 'is_publicly_accessible'],
+    ],
+    ['RULE-012', 'Secret Committed', ['secret_count', 'CLASSIFIES']],
+    ['RULE-013', 'Access Key Older', ['AccessKey', 'key_age_days', 'HAS_ACCESS_KEY']],
+    ['RULE-014', 'Access Key Unused', ['last_used_days_ago', 'gt(90)']],
+    ['RULE-015', 'Console Access and No MFA', ['password_enabled', 'mfa_enabled']],
+    [
+      'RULE-016',
+      'Wildcard Secrets',
+      [
+        'grants_secret_read',
+        'secret_grant_scope',
+        "optional(inE('CONTAINS').outV().hasLabel('IamPolicy'))",
+      ],
+    ],
+    ['RULE-017', 'GuardDuty', ['GuardDutyDetector', 'MISSING', 'DISABLED']],
+    ['RULE-018', 'Security Hub', ['SecurityHubFinding', 'DETECTS_ON', 'is_internet_exposed']],
+    ['RULE-019', 'EKS', ['EksCluster', 'endpoint_public_access', 'endpoint_world_open']],
+    ['RULE-020', 'Root', ['CloudTrailAnomaly', 'ROOT_USAGE']],
+    ['RULE-021', 'Secrets Read', ['CloudTrailAnomaly', 'SECRET_READ_NEW_SOURCE_IP']],
+    ['RULE-022', 'AccessDenied', ['CloudTrailAnomaly', 'ACCESS_DENIED_SPIKE']],
+    ['RULE-023', 'Canary', ['CloudTrailAnomaly', 'CANARY_USED']],
+    ['RULE-024', 'IMDS', ['Ec2Instance', 'metadata_http_tokens', 'HAS_IAM_ROLE']],
+    [
+      'RULE-029',
+      'GuardDuty',
+      ['GuardDutyFinding', 'finding_class', 'gte(4)', 'DETECTS_ON', 'is_internet_exposed'],
+    ],
+    ['RULE-030', 'Escalate', ['CAN_ESCALATE_TO', "within('critical', 'high')"]],
+  ])('returns %s with its expected graph contract', (id, name, queryTokens) => {
+    const rule = getRuleById(id);
+    expect(rule?.id).toBe(id);
+    expect(rule?.name).toContain(name);
+    for (const token of queryTokens) expect(rule?.gremlinQueryTemplate).toContain(token);
   });
 
   test('should return undefined for invalid ID', () => {
     const rule = getRuleById('RULE-999');
     expect(rule).toBeUndefined();
   });
-
-  test('should find internet-exposed EC2 rule', () => {
-    const rule = getRuleById('RULE-001');
-    expect(rule?.name).toContain('Internet-Exposed EC2');
-    expect(rule?.gremlinQueryTemplate).toContain('Ec2Instance');
-    expect(rule?.gremlinQueryTemplate).toContain('data_classification');
-  });
-
-  test('should find security group SSH/RDP rule', () => {
-    const rule = getRuleById('RULE-002');
-    expect(rule?.name).toContain('SSH');
-    expect(rule?.gremlinQueryTemplate).toContain('0.0.0.0/0');
-  });
-
-  test('should find container CVE rule', () => {
-    const rule = getRuleById('RULE-003');
-    expect(rule?.name).toContain('Container');
-    expect(rule?.gremlinQueryTemplate).toContain('ContainerImage');
-    expect(rule?.gremlinQueryTemplate).toContain('HAS_CVE');
-  });
-
-  test('should find over-privileged IAM rule', () => {
-    const rule = getRuleById('RULE-004');
-    expect(rule?.name).toContain('IAM');
-    expect(rule?.gremlinQueryTemplate).toContain('HAS_IAM_ROLE');
-  });
-
-  test('should find crown jewel attack path rule', () => {
-    const rule = getRuleById('RULE-005');
-    expect(rule?.name).toContain('Crown Jewel');
-    expect(rule?.gremlinQueryTemplate).toContain('crown_jewel');
-  });
-
-  test('should find cross-account IAM trust rule', () => {
-    const rule = getRuleById('RULE-006');
-    expect(rule?.name).toContain('Cross-Account');
-    expect(rule?.gremlinQueryTemplate).toContain('TRUSTS');
-  });
-
-  test('should find public S3 bucket rule', () => {
-    const rule = getRuleById('RULE-007');
-    expect(rule?.name).toContain('S3');
-    expect(rule?.gremlinQueryTemplate).toContain('is_publicly_accessible');
-  });
-
-  test('should find RDS public access rule', () => {
-    const rule = getRuleById('RULE-008');
-    expect(rule?.name).toContain('RDS');
-    expect(rule?.gremlinQueryTemplate).toContain('RdsInstance');
-  });
-
-  test('should find Lambda VPC rule', () => {
-    const rule = getRuleById('RULE-009');
-    expect(rule?.name).toContain('Lambda');
-    expect(rule?.gremlinQueryTemplate).toContain('LambdaFunction');
-  });
-
-  test('should find Secrets Manager rule', () => {
-    const rule = getRuleById('RULE-010');
-    expect(rule?.name).toContain('Secrets');
-    expect(rule?.gremlinQueryTemplate).toContain('Secret');
-  });
-
-  test('should find public datastore PII rule', () => {
-    const rule = getRuleById('RULE-011');
-    expect(rule?.name).toContain('Public Datastore');
-    expect(rule?.gremlinQueryTemplate).toContain('DataClassificationFinding');
-    expect(rule?.gremlinQueryTemplate).toContain('is_publicly_accessible');
-  });
-
-  test('should find secret in S3 rule', () => {
-    const rule = getRuleById('RULE-012');
-    expect(rule?.name).toContain('Secret Committed');
-    expect(rule?.gremlinQueryTemplate).toContain('secret_count');
-    expect(rule?.gremlinQueryTemplate).toContain('CLASSIFIES');
-  });
 });
 
 describe('Rule gremlin queries', () => {
-  test('RULE-001 should query for restricted S3 access', () => {
-    const rule = getRuleById('RULE-001');
-    expect(rule?.gremlinQueryTemplate).toContain('restricted');
-  });
-
-  test('RULE-002 should query for SSH and RDP ports', () => {
-    const rule = getRuleById('RULE-002');
-    expect(rule?.gremlinQueryTemplate).toContain('22');
-    expect(rule?.gremlinQueryTemplate).toContain('3389');
-  });
-
-  test('RULE-003 should query for CRITICAL CVEs', () => {
-    const rule = getRuleById('RULE-003');
-    expect(rule?.gremlinQueryTemplate).toContain('CRITICAL');
-    expect(rule?.gremlinQueryTemplate).toContain('cvss_base_score');
-  });
-
-  test('RULE-004 should have threshold for permission count', () => {
-    const rule = getRuleById('RULE-004');
-    expect(rule?.gremlinQueryTemplate).toContain('gt(5)');
-  });
-
   test('rules should use snake_case property names', () => {
     for (const rule of riskRules) {
       expect(rule.gremlinQueryTemplate).not.toContain('isInternetExposed');
@@ -178,11 +171,73 @@ describe('Rule gremlin queries', () => {
     }
   });
 
+  test('repeat() uses until() or times(), not both', () => {
+    for (const rule of riskRules) {
+      expect(rule.gremlinQueryTemplate).not.toMatch(
+        /\.repeat\([\s\S]*?\)\s*\.times\(\d+\)\s*\.until\(/
+      );
+    }
+    expect(getRuleById('RULE-005')?.gremlinQueryTemplate).toContain(
+      "until(or(has('crown_jewel', true), loops().is(4)))"
+    );
+  });
+
   test('rules should not reference non-existent edges', () => {
     for (const rule of riskRules) {
       expect(rule.gremlinQueryTemplate).not.toContain('ALLOWS_ACCESS_TO');
       expect(rule.gremlinQueryTemplate).not.toContain('ALLOWS_INGRESS');
       expect(rule.gremlinQueryTemplate).not.toContain('STORES');
     }
+  });
+});
+
+// These three rules fed the compliance evaluators added alongside them, and
+// carried the same defects: each failed toward reporting nothing wrong.
+describe('rule predicates that were silently wrong', () => {
+  const q = (id: string) => riskRules.find((r) => r.id === id)!.gremlinQueryTemplate;
+
+  // DescribeInstances is called unfiltered, so terminated instances linger in
+  // the graph and produced findings nobody could remediate.
+  it('RULE-024 ignores terminated instances', () => {
+    expect(q('RULE-024')).toContain("not(has('state', within('terminated', 'shutting-down')))");
+  });
+
+  // The collector leaves rotation_enabled undefined when GetKeyRotationStatus
+  // throws, and normalizeProperties drops undefined -- so the property is absent,
+  // not false. Matching false alone missed every key it could not read.
+  it('RULE-026 treats an unreadable rotation status as a finding', () => {
+    expect(q('RULE-026')).toContain("hasNot('rotation_enabled')");
+  });
+
+  // RULE-025 cannot fire on an account with no analyzer, because there is no
+  // vertex to attach a finding to. The collector now emits a synthetic MISSING
+  // analyzer for that case, the way it already did for GuardDuty.
+  it('RULE-025 matches any analyzer that is not ACTIVE, including MISSING', () => {
+    expect(q('RULE-025')).toContain("not(has('status', 'ACTIVE'))");
+  });
+});
+
+// RULE-002 maps to CIS 5.2/5.3, so it must match exactly what they match:
+// a range containing 22 or 3389, or 0-0 (all traffic). It matched port_from
+// alone, missing 20-25 and flagging 0-21, and fired on egress rules.
+describe('RULE-002 admin-port predicate', () => {
+  it('uses the predicate the CIS 5.x controls use', () => {
+    expect(getRuleById('RULE-002')?.gremlinQueryTemplate).toContain(ADMIN_PORT_RANGE_PREDICATE);
+  });
+
+  it('no longer matches on port_from alone', () => {
+    expect(getRuleById('RULE-002')?.gremlinQueryTemplate).not.toContain("has('port_from', 22),");
+  });
+
+  it('groups route-only differences into one issue for the rules that fan out per path', () => {
+    const routed = riskRules.filter((rule) => rule.routeLabels).map((rule) => rule.id);
+    expect(routed).toEqual(['RULE-002', 'RULE-006', 'RULE-016', 'RULE-018']);
+    expect(getRuleById('RULE-018')?.routeLabels).toEqual(['SecurityHubFinding']);
+  });
+
+  it('skips Security Hub findings already suppressed or resolved in Security Hub', () => {
+    expect(getRuleById('RULE-018')?.gremlinQueryTemplate).toContain(
+      ".not(has('workflow_state', within('SUPPRESSED', 'RESOLVED')))"
+    );
   });
 });

@@ -1,0 +1,34 @@
+{{- range $item := list (dict "key" "api" "component" "api") (dict "key" "ui" "component" "ui") }}
+{{- $workload := index $.Values $item.key }}
+{{- if $workload.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "khalifa.fullname" $ }}-{{ $item.component }}
+  labels:
+    {{- include "khalifa.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $item.component }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "khalifa.fullname" $ }}-{{ $item.component }}
+  minReplicas: {{ $workload.autoscaling.minReplicas }}
+  maxReplicas: {{ $workload.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $workload.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $workload.autoscaling.targetMemoryUtilizationPercentage }}
+---
+{{- end }}
+{{- end }}
+

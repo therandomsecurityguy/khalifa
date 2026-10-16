@@ -1,0 +1,22 @@
+{{- if .Values.api.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "khalifa.fullname" . }}-api
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+    {{- with .Values.api.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "khalifa.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ .Values.api.serviceMonitor.path }}
+      interval: {{ .Values.api.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.api.serviceMonitor.scrapeTimeout }}
+{{- end }}
+

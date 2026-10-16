@@ -1,0 +1,72 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "khalifa.fullname" . }}-compliance
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: compliance
+spec:
+  schedule: {{ .Values.compliance.schedule | quote }}
+  {{- with .Values.compliance.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.compliance.suspend }}
+  concurrencyPolicy: {{ .Values.compliance.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.compliance.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.compliance.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.compliance.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "compliance") | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.compliance.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.compliance.ttlSecondsAfterFinished }}
+      backoffLimit: {{ .Values.compliance.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "khalifa.selectorLabels" (dict "root" . "component" "compliance") | nindent 12 }}
+            {{- with .Values.compliance.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.compliance.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "compliance" "suffix" "compliance") }}
+          automountServiceAccountToken: {{ .Values.serviceAccounts.compliance.automountServiceAccountToken }}
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "khalifa.podSecurityContext" . | nindent 12 }}
+          {{- if .Values.topologySpread.enabled }}
+          topologySpreadConstraints:
+            {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "compliance") | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: compliance
+              image: {{ required "compliance.image must be an immutable repository@sha256 digest" .Values.compliance.image | quote }}
+              imagePullPolicy: IfNotPresent
+              args: ["compliance"]
+              securityContext:
+                {{- include "khalifa.containerSecurityContext" . | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-config
+                {{- if and .Values.externalSecrets.enabled (has "compliance" .Values.externalSecrets.mountIn) }}
+                - secretRef:
+                    name: {{ .Values.externalSecrets.targetName }}
+                {{- end }}
+              resources:
+                {{- toYaml .Values.compliance.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

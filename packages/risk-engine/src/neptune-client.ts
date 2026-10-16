@@ -7,9 +7,26 @@ import Gremlin from 'gremlin';
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_MAX_RESULTS = 10_000;
+
+// Neptune Serverless raises MemoryLimitExceededException /
+// ConcurrentModificationException sporadically while it scales, and the
+// identical query succeeds once the transition settles. Ride that out with
+// more attempts and a longer, capped backoff than the connection-level retries
+// use — a short 100/200ms budget was not enough and failed whole assessments.
 const SERVERLESS_TRANSIENT_ATTEMPTS = 5;
 const SERVERLESS_TRANSIENT_BASE_MS = 500;
 const SERVERLESS_TRANSIENT_MAX_MS = 5_000;
+
+interface GremlinClient {
+  readonly isOpen: boolean;
+  open(): Promise<void>;
+  close(): Promise<void>;
+  submit(
+    query: string | Gremlin.process.Bytecode,
+    bindings?: Record<string, unknown>,
+    options?: Partial<Gremlin.driver.RequestOptions>
+  ): Promise<unknown>;
+}
 
 export interface NeptuneEndpoint {
   hostname: string;
@@ -17,7 +34,13 @@ export interface NeptuneEndpoint {
   url: string;
 }
 
-export interface NeptuneRuntimeClientConfig {
+export interface NeptuneQueryClient {
+  connect(): Promise<void>;
+  close(): Promise<void>;
+  executeQuery(query: string): Promise<any[]>;
+}
+
+export interface NeptuneRuntimeConfig {
   endpoint: string;
   region?: string;
   timeoutMs?: number;
@@ -25,40 +48,36 @@ export interface NeptuneRuntimeClientConfig {
   maxResults?: number;
 }
 
-export interface NeptuneRuntimeClientDependencies {
+export interface NeptuneQueryOptions {
+  timeoutMs?: number;
+  maxAttempts?: number;
+  /** Per-call override of the result guard (see `submit`). */
+  maxResults?: number;
+}
+
+export interface NeptuneRuntimeDependencies {
+  createClient?: (url: string, headers: Record<string, string>) => GremlinClient;
   createHeaders?: (endpoint: NeptuneEndpoint, region: string) => Promise<Record<string, string>>;
-  createClient?: (url: string, headers: Record<string, string>) => Gremlin.driver.Client;
   sleep?: (ms: number) => Promise<void>;
 }
 
-interface TraverserLike {
-  object: unknown;
-  bulk?: number;
-}
-
-export class NeptuneRuntimeClient {
-  private client: Gremlin.driver.Client | null = null;
-  private connecting: Promise<Gremlin.driver.Client> | null = null;
+export class NeptuneRuntimeClient implements NeptuneQueryClient {
+  private client: GremlinClient | null = null;
+  private connecting: Promise<GremlinClient> | null = null;
   private generation = 0;
   private readonly timeoutMs: number;
   private readonly maxAttempts: number;
   private readonly maxResults: number;
   private readonly endpoint: string;
   private readonly region: string;
+  private readonly createClient: (url: string, headers: Record<string, string>) => GremlinClient;
   private readonly createHeaders: (
     endpoint: NeptuneEndpoint,
     region: string
   ) => Promise<Record<string, string>>;
-  private readonly createClient: (
-    url: string,
-    headers: Record<string, string>
-  ) => Gremlin.driver.Client;
   private readonly sleep: (ms: number) => Promise<void>;
 
-  constructor(
-    config: NeptuneRuntimeClientConfig,
-    dependencies: NeptuneRuntimeClientDependencies = {}
-  ) {
+  constructor(config: NeptuneRuntimeConfig, dependencies: NeptuneRuntimeDependencies = {}) {
     this.timeoutMs = positiveInteger(config.timeoutMs, DEFAULT_TIMEOUT_MS, 'timeoutMs');
     this.maxAttempts = positiveInteger(config.maxAttempts, DEFAULT_MAX_ATTEMPTS, 'maxAttempts');
     this.maxResults = positiveInteger(config.maxResults, DEFAULT_MAX_RESULTS, 'maxResults');
@@ -71,8 +90,8 @@ export class NeptuneRuntimeClient {
         new Gremlin.driver.Client(url, {
           traversalSource: 'g',
           headers,
-          messageMaxChunkSize: 65536,
-        }));
+          messageMaxChunkSize: 65_536,
+        }) as GremlinClient);
     this.sleep = dependencies.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
@@ -93,7 +112,7 @@ export class NeptuneRuntimeClient {
     if (client) await withTimeout(client.close(), this.timeoutMs, 'Neptune connection close');
   }
 
-  async executeQuery(query: string): Promise<unknown[]> {
+  async executeQuery(query: string): Promise<any[]> {
     if (!query.trim()) throw new Error('Gremlin query is required');
     const normalized = query.trim().replace(/;$/, '');
     const bounded = /\.count\(\s*\)$/.test(normalized)
@@ -111,31 +130,28 @@ export class NeptuneRuntimeClient {
    * and would be rejected or truncated by executeQuery. Callers of this method
    * are responsible for bounding their own result set.
    *
-   * `NeptuneRuntimeClient` has no bindings: Amazon Neptune rejects Gremlin script
+   * `NeptuneQueryClient` has no bindings: Amazon Neptune rejects Gremlin script
    * bindings ("Bindings in Gremlin are not supported"), so callers submit
    * either a fully-formed script or a Bytecode traversal, never parameters.
    */
-  async submit(query: string | Gremlin.process.Bytecode): Promise<unknown[]> {
+  async submit(query: string | Gremlin.process.Bytecode): Promise<any[]> {
     return this.execute(query, { maxResults: Number.MAX_SAFE_INTEGER });
   }
 
-  private async execute(
+  async execute(
     query: string | Gremlin.process.Bytecode,
-    options: { timeoutMs?: number; maxAttempts?: number; maxResults?: number } = {}
-  ): Promise<unknown[]> {
+    options: NeptuneQueryOptions = {}
+  ): Promise<any[]> {
     const timeoutMs = options.timeoutMs ?? this.timeoutMs;
     const maxAttempts = options.maxAttempts ?? this.maxAttempts;
     const maxResults = options.maxResults ?? this.maxResults;
-
     for (let attempt = 1; ; attempt += 1) {
       try {
         const client = await withTimeout(this.getClient(), timeoutMs, 'Neptune connection');
         const result = unwrapTraversers(
           toArray(
             await withTimeout(
-              client.submit(query, void 0, {
-                evaluationTimeout: timeoutMs,
-              } as unknown as Gremlin.driver.RequestOptions),
+              client.submit(query, undefined, { evaluationTimeout: timeoutMs }),
               timeoutMs,
               'Neptune query'
             )
@@ -150,6 +166,8 @@ export class NeptuneRuntimeClient {
         const transient = isNeptuneServerlessTransient(error);
         const retryable = transient || isNeptuneRetryable(error);
         if (!retryable) throw error;
+        // Always drop the connection first: a stalled query (timeout) leaves a
+        // hung socket that must be closed even when this is the last attempt.
         await this.resetClient(error);
         const limit = transient
           ? Math.max(maxAttempts, SERVERLESS_TRANSIENT_ATTEMPTS)
@@ -165,9 +183,10 @@ export class NeptuneRuntimeClient {
         );
       }
     }
+    throw new Error('Neptune query failed without an error');
   }
 
-  private async getClient(): Promise<Gremlin.driver.Client> {
+  private async getClient(): Promise<GremlinClient> {
     if (this.client?.isOpen) return this.client;
     if (this.connecting) return this.connecting;
 
@@ -194,7 +213,6 @@ export class NeptuneRuntimeClient {
       }
       return client;
     })();
-
     this.connecting = connecting;
     try {
       return await connecting;
@@ -243,7 +261,7 @@ export function normalizeNeptuneEndpoint(value: string): NeptuneEndpoint {
     throw new Error('NEPTUNE_ENDPOINT path must be /gremlin');
   }
   const port = parsed.port ? Number(parsed.port) : 8182;
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid Neptune port');
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('Invalid Neptune port');
   return {
     hostname: parsed.hostname,
     port,
@@ -280,6 +298,11 @@ export async function createSigV4Headers(
   );
 }
 
+// Bytecode submissions come back as Traverser wrappers ({ object, bulk }); the
+// driver only expands them for DriverRemoteConnection users. Script submissions
+// come back as plain values. Expand bulk so callers see one item per result,
+// but never past limit + 1 items: the caller rejects anything over the limit,
+// so a bulk value from the server cannot drive an unbounded allocation.
 function unwrapTraversers(items: unknown[], limit: number): unknown[] {
   const expanded: unknown[] = [];
   for (const item of items) {
@@ -288,28 +311,30 @@ function unwrapTraversers(items: unknown[], limit: number): unknown[] {
       expanded.push(item);
       continue;
     }
-    const { object, bulk } = item as unknown as TraverserLike;
+    // The driver's Traverser carries `object` and `bulk`; the typings omit both.
+    const { object, bulk } = item as unknown as { object: unknown; bulk?: number };
     const count = Math.min(Math.max(1, Number(bulk) || 1), limit + 1 - expanded.length);
     for (let index = 0; index < count; index += 1) expanded.push(object);
   }
   return expanded;
 }
 
-function toArray(value: unknown): unknown[] {
+function toArray(value: unknown): any[] {
   if (Array.isArray(value)) return value;
   if (value && typeof value === 'object' && 'toArray' in value) {
-    const result = (value as { toArray(): unknown }).toArray();
+    const result = (value as { toArray: () => unknown }).toArray();
     if (Array.isArray(result)) return result;
   }
   throw new Error('Neptune returned an invalid result set');
 }
 
 function neptuneErrorText(error: unknown): string {
-  const value = error as { code?: string; message?: string } | undefined;
+  const value = error as { code?: string; message?: string };
   return `${value?.code || ''} ${value?.message || String(error)}`.toLowerCase();
 }
 
-function isNeptuneServerlessTransient(error: unknown): boolean {
+/** Neptune Serverless capacity-transition errors, which retry more patiently. */
+export function isNeptuneServerlessTransient(error: unknown): boolean {
   const text = neptuneErrorText(error);
   return (
     text.includes('memorylimitexceededexception') ||
@@ -318,10 +343,15 @@ function isNeptuneServerlessTransient(error: unknown): boolean {
 }
 
 export function isNeptuneRetryable(error: unknown): boolean {
-  const value = error as
-    | { $metadata?: { httpStatusCode?: number }; statusCode?: number }
-    | undefined;
+  const value = error as {
+    code?: string;
+    message?: string;
+    statusCode?: number;
+    $metadata?: { httpStatusCode?: number };
+  };
   const text = neptuneErrorText(error);
+  // Neptune reports permanent query failures (InternalFailureException) with
+  // status 500, so only the gateway/throttling statuses are retryable on their own.
   return (
     [408, 429, 502, 503, 504].includes(
       Number(value?.$metadata?.httpStatusCode ?? value?.statusCode)

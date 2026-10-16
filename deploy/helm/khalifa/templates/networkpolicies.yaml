@@ -1,0 +1,103 @@
+{{- if .Values.networkPolicies.enabled }}
+{{- range $component := list "api" "ui" "rule-runner" "org-collector" "incremental" "graph-writer" "compliance" "cloudtrail-analyzer" "dspm-scanner" "policy-evaluator" "least-privilege-sweep" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "khalifa.fullname" $ }}-{{ $component }}-egress
+  labels:
+    {{- include "khalifa.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "khalifa.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            {{- toYaml $.Values.networkPolicies.dns.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml $.Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- if eq $component "ui" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "khalifa.selectorLabels" (dict "root" $ "component" "api") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.api.port }}
+    {{- end }}
+    {{- if and (eq $component "api") $.Values.config.cloudflareAccessTeamDomain }}
+    # jose fetches Access JWKS over HTTPS from the team domain.
+    - to:
+        - ipBlock:
+            cidr: "0.0.0.0/0"
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    {{- if or (eq $component "org-collector") (eq $component "incremental") (eq $component "cloudtrail-analyzer") (eq $component "dspm-scanner") }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "khalifa.selectorLabels" (dict "root" $ "component" "graph-writer") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.graphWriter.service.port }}
+        {{- if ne (int $.Values.graphWriter.service.port) (int $.Values.graphWriter.port) }}
+        - protocol: TCP
+          port: {{ $.Values.graphWriter.port }}
+        {{- end }}
+    {{- end }}
+    {{- range $.Values.networkPolicies.egressCidrs }}
+    {{- if has $component .components }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr | quote }}
+            {{- with .except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+      ports:
+        {{- toYaml .ports | nindent 8 }}
+    {{- end }}
+    {{- end }}
+---
+{{- end }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "khalifa.fullname" . }}-graph-writer-ingress
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: graph-writer
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "khalifa.selectorLabels" (dict "root" . "component" "graph-writer") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "khalifa.selectorLabels" (dict "root" . "component" "org-collector") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "khalifa.selectorLabels" (dict "root" . "component" "incremental") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "khalifa.selectorLabels" (dict "root" . "component" "cloudtrail-analyzer") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "khalifa.selectorLabels" (dict "root" . "component" "dspm-scanner") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.graphWriter.port }}

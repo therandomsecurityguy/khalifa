@@ -1,44 +1,45 @@
-import { ComplianceEngine, DynamoDBEvidenceStore, DynamoDBReportStore } from './compliance-engine';
 import type { ComplianceReport } from './compliance-types';
-import { createNeptuneRuntimeClient } from './neptune-client';
+import { ComplianceEngine, DynamoDBEvidenceStore, DynamoDBReportStore } from './compliance-engine';
+import { createNeptuneRuntimeClient, type NeptuneQueryClient } from './neptune-client';
+import { DynamoDBIssueRepository } from './issue-repository';
+import {
+  DynamoDBReconciliationStore,
+  readSecurityHubCisFindings,
+  reconciliationSettingsFromEnv,
+  runReconciliation,
+  securityHubClientForRole,
+} from './cis-reconciliation';
+
+interface ComplianceRuntime {
+  connect(): Promise<void>;
+  runAllAssessments(): Promise<ComplianceReport[]>;
+  close(): Promise<void>;
+}
 
 export interface ComplianceRunSummary {
   frameworksRun: number;
   controlsAssessed: number;
   failedControls: number;
   notEvaluatedControls: number;
+  /** CIS reconciliation against Security Hub; DISABLED when unconfigured. */
+  reconciliation: 'OK' | 'STALE' | 'DISABLED';
 }
 
-export interface ComplianceRuntime {
-  connect(): Promise<void>;
-  runAllAssessments(): Promise<ComplianceReport[]>;
-  close(): Promise<void>;
-}
-
-function createDefaultRuntime(endpoint: string): ComplianceRuntime {
-  const client = createNeptuneRuntimeClient(endpoint);
-  const engine = new ComplianceEngine(
-    client,
-    new DynamoDBEvidenceStore(process.env.COMPLIANCE_EVIDENCE_TABLE || 'ComplianceEvidence'),
-    new DynamoDBReportStore(process.env.COMPLIANCE_REPORTS_TABLE || 'ComplianceReports')
-  );
-  return {
-    connect: () => client.connect(),
-    runAllAssessments: () => engine.runAllAssessments(),
-    close: () => client.close(),
-  };
-}
+/** Runs after the assessments; must not throw. */
+export type Reconciler = (reports: ComplianceReport[]) => Promise<'OK' | 'STALE' | 'DISABLED'>;
 
 export async function runComplianceOnce(
   neptuneEndpoint: string,
-  createRuntime: (endpoint: string) => ComplianceRuntime = createDefaultRuntime
+  createRuntime: (endpoint: string) => ComplianceRuntime = createDefaultRuntime,
+  reconcile: Reconciler = reconcileFromEnv
 ): Promise<ComplianceRunSummary> {
   if (!neptuneEndpoint.trim()) throw new Error('NEPTUNE_ENDPOINT is required');
+
   const runtime = createRuntime(neptuneEndpoint);
   try {
     await runtime.connect();
     const reports = await runtime.runAllAssessments();
-    return reports.reduce(
+    const totals = reports.reduce(
       (summary, report) => ({
         frameworksRun: summary.frameworksRun + 1,
         controlsAssessed: summary.controlsAssessed + report.summary.totalControls,
@@ -47,7 +48,53 @@ export async function runComplianceOnce(
       }),
       { frameworksRun: 0, controlsAssessed: 0, failedControls: 0, notEvaluatedControls: 0 }
     );
+    return { ...totals, reconciliation: await reconcile(reports) };
   } finally {
     await runtime.close();
   }
+}
+
+export async function handler(): Promise<ComplianceRunSummary> {
+  return runComplianceOnce(process.env.NEPTUNE_ENDPOINT || '');
+}
+
+async function reconcileFromEnv(reports: ComplianceReport[]): Promise<'OK' | 'STALE' | 'DISABLED'> {
+  let settings;
+  try {
+    settings = reconciliationSettingsFromEnv();
+  } catch (error) {
+    console.error('CIS reconciliation misconfigured; skipped', { error: String(error) });
+    return 'STALE';
+  }
+  if (!settings) return 'DISABLED';
+  const { roleArn, region } = settings;
+  const record = await runReconciliation(
+    reports.find((r) => r.framework === 'CIS_AWS_FOUNDATIONS') ?? null,
+    settings,
+    {
+      readFindings: async () =>
+        readSecurityHubCisFindings(await securityHubClientForRole(roleArn, region)),
+      store: new DynamoDBReconciliationStore(
+        process.env.COMPLIANCE_REPORTS_TABLE || 'ComplianceReports'
+      ),
+    }
+  );
+  return record.status;
+}
+
+function createDefaultRuntime(endpoint: string): ComplianceRuntime {
+  const client: NeptuneQueryClient = createNeptuneRuntimeClient(endpoint);
+  const engine = new ComplianceEngine(
+    client,
+    new DynamoDBEvidenceStore(process.env.COMPLIANCE_EVIDENCE_TABLE || 'ComplianceEvidence'),
+    new DynamoDBReportStore(process.env.COMPLIANCE_REPORTS_TABLE || 'ComplianceReports'),
+    // Rule-backed controls (KH-DET-*, 1.7, ...) read their rules' open issues.
+    // ISSUES_TABLE comes from the shared config map.
+    new DynamoDBIssueRepository()
+  );
+  return {
+    connect: () => client.connect(),
+    runAllAssessments: () => engine.runAllAssessments(),
+    close: () => client.close(),
+  };
 }

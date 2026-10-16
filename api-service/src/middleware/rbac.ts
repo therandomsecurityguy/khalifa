@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { isTrustedEmail } from './auth';
 
 export enum Role {
   Admin = 'Admin',
@@ -35,8 +36,15 @@ export function userRole(req: Request): Role | null {
 
 export function hasRole(req: Request, role: Role): boolean {
   const current = userRole(req);
-  if (!current) return false;
-  return ROLE_HIERARCHY[current].includes(role);
+  if (current && ROLE_HIERARCHY[current].includes(role)) {
+    return true;
+  }
+  // A verified email is the authentication floor (Viewer); elevated roles
+  // (Analyst/Admin) require an explicit Cognito group, not just an email domain.
+  if (isTrustedEmail(req.user?.email)) {
+    return role === Role.Viewer;
+  }
+  return false;
 }
 
 export function requireRole(role: Role) {
@@ -44,7 +52,7 @@ export function requireRole(role: Role) {
     if (!hasRole(req, role)) {
       res.status(403).json({
         code: 'FORBIDDEN',
-        message: `Requires ${role} role (cognito group khalifa-${role.toLowerCase()})`,
+        message: 'Insufficient role',
       });
       return;
     }
@@ -55,3 +63,13 @@ export function requireRole(role: Role) {
 export const requireViewer = requireRole(Role.Viewer);
 export const requireAnalyst = requireRole(Role.Analyst);
 export const requireAdmin = requireRole(Role.Admin);
+
+// The trust-center sync's service token, and nothing else: staff roles do not
+// grant it, so the endpoint stays a machine interface with one caller.
+export function requireTrustCenterSync(req: Request, res: Response, next: NextFunction): void {
+  if (req.user?.serviceToken !== true) {
+    res.status(403).json({ code: 'FORBIDDEN', message: 'Trust-center sync token required' });
+    return;
+  }
+  next();
+}

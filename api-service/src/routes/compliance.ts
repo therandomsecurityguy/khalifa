@@ -1,20 +1,66 @@
 import type { Request, Response } from 'express';
 import { ComplianceService } from '../services/compliance-service';
 import {
+  DynamoDBIssueRepository,
+  getRuleById,
   type ComplianceFramework,
   type ComplianceControlResult,
   type ComplianceReport,
   type ComplianceEvidence,
 } from '@khalifa/risk-engine';
+import type { Severity } from '../types';
 
-const neptuneEndpoint = process.env.NEPTUNE_ENDPOINT || '';
 const complianceService = new ComplianceService({
-  neptuneEndpoint,
   evidenceTableName: process.env.EVIDENCE_TABLE,
   reportsTableName: process.env.REPORTS_TABLE,
 });
 
-const VALID_FRAMEWORKS: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'SOC2', 'ISO27001'];
+const issueStore = new DynamoDBIssueRepository();
+
+// Issues listed per rule on a control page; the count is always the full total.
+const RELATED_ISSUES_SHOWN = 5;
+const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+interface RelatedRuleIssues {
+  ruleId: string;
+  ruleName: string;
+  // null when the issue store could not be read: unknown, not zero.
+  openCount: number | null;
+  highestSeverity: Severity | null;
+  issues: { id: string; severity: Severity; resourceId: string; resourceName?: string }[];
+}
+
+// A control's related rules and their actual open issues. The route previously
+// returned every related rule as `status: 'open'` with the control's severity,
+// whether or not the rule had a single finding.
+async function relatedRuleIssues(ruleIds: string[]): Promise<RelatedRuleIssues[]> {
+  const settled = await Promise.allSettled(ruleIds.map((id) => issueStore.getOpenIssuesByRule(id)));
+  return ruleIds.map((ruleId, index) => {
+    const ruleName = getRuleById(ruleId)?.name ?? ruleId;
+    const outcome = settled[index];
+    if (outcome.status === 'rejected') {
+      console.error(`Error reading open issues for ${ruleId}:`, outcome.reason);
+      return { ruleId, ruleName, openCount: null, highestSeverity: null, issues: [] };
+    }
+    const open = [...outcome.value].sort(
+      (a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.riskScore - a.riskScore
+    );
+    return {
+      ruleId,
+      ruleName,
+      openCount: open.length,
+      highestSeverity: open[0]?.severity ?? null,
+      issues: open.slice(0, RELATED_ISSUES_SHOWN).map((issue) => ({
+        id: issue.id,
+        severity: issue.severity,
+        resourceId: issue.resourcesInvolved[0]?.resourceId ?? '',
+        resourceName: issue.resourcesInvolved[0]?.resourceName,
+      })),
+    };
+  });
+}
+
+const VALID_FRAMEWORKS: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'KHALIFA_BASELINE'];
 
 function isValidFramework(f: string): f is ComplianceFramework {
   return VALID_FRAMEWORKS.includes(f as ComplianceFramework);
@@ -32,12 +78,14 @@ export async function listFrameworks(_req: Request, res: Response): Promise<void
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to list frameworks',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
 
-export async function getFrameworkSummary(req: Request, res: Response): Promise<void> {
+export async function getFrameworkSummary(
+  req: Request<{ framework: string }>,
+  res: Response
+): Promise<void> {
   try {
     const { framework } = req.params;
     if (!isValidFramework(framework)) {
@@ -49,27 +97,22 @@ export async function getFrameworkSummary(req: Request, res: Response): Promise<
     }
     const summary = await complianceService.getFrameworkSummary(framework);
     res.json({
-      framework: summary.framework,
-      version: summary.version,
-      totalControls: summary.totalControls,
-      automatedControls: summary.automatedControls,
-      manualControls: summary.manualControls,
-      coveragePercent: summary.coveragePercent,
-      lastAssessment: summary.lastAssessment,
+      ...summary,
       sections: [],
-      summary: summary,
     });
   } catch (error) {
     console.error('Error getting framework summary:', error);
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to get framework summary',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
 
-export async function getFrameworkControls(req: Request, res: Response): Promise<void> {
+export async function getFrameworkControls(
+  req: Request<{ framework: string }>,
+  res: Response
+): Promise<void> {
   try {
     const { framework } = req.params;
     if (!isValidFramework(framework)) {
@@ -97,6 +140,7 @@ export async function getFrameworkControls(req: Request, res: Response): Promise
       status: r.status,
       relatedRules: r.control.relatedRules,
       lastEvaluated: r.lastEvaluated,
+      regionsEvaluated: r.regionsEvaluated,
     }));
     res.json({
       framework,
@@ -108,12 +152,14 @@ export async function getFrameworkControls(req: Request, res: Response): Promise
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to get framework controls',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
 
-export async function getControlDetails(req: Request, res: Response): Promise<void> {
+export async function getControlDetails(
+  req: Request<{ framework: string; controlId: string }>,
+  res: Response
+): Promise<void> {
   try {
     const { framework, controlId } = req.params;
     if (!isValidFramework(framework)) {
@@ -147,23 +193,22 @@ export async function getControlDetails(req: Request, res: Response): Promise<vo
       remediationHint: result.control.remediationGuidance,
       evidenceRequirements: result.control.evidenceRequirements,
       evidence,
-      relatedIssues: result.control.relatedRules.map((ruleId: string) => ({
-        ruleId,
-        severity: result.control.severity,
-        status: 'open',
-      })),
+      regionsEvaluated: result.regionsEvaluated,
+      relatedIssues: await relatedRuleIssues(result.control.relatedRules),
     });
   } catch (error) {
     console.error('Error getting control details:', error);
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to get control details',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
 
-export async function getComplianceReport(req: Request, res: Response): Promise<void> {
+export async function getComplianceReport(
+  req: Request<{ framework: string }>,
+  res: Response
+): Promise<void> {
   try {
     const { framework } = req.params;
     const { format } = req.query;
@@ -202,12 +247,14 @@ export async function getComplianceReport(req: Request, res: Response): Promise<
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to generate compliance report',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
 
-export async function getDriftReport(req: Request, res: Response): Promise<void> {
+export async function getDriftReport(
+  req: Request<{ framework: string }>,
+  res: Response
+): Promise<void> {
   try {
     const { framework } = req.params;
     if (!isValidFramework(framework)) {
@@ -263,7 +310,6 @@ export async function getDriftReport(req: Request, res: Response): Promise<void>
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to get drift report',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
@@ -277,6 +323,7 @@ function generateCSVReport(report: ComplianceReport): string {
     'Automated',
     'Status',
     'Last Evaluated',
+    'Regions Evaluated',
     'Issues',
   ];
   const rows = report.controls.map((c) => [
@@ -287,6 +334,7 @@ function generateCSVReport(report: ComplianceReport): string {
     c.control.automated ? 'Yes' : 'No',
     c.status,
     c.lastEvaluated,
+    c.regionsEvaluated?.join(' ') ?? '',
     c.issues.join('; '),
   ]);
 
