@@ -1,290 +1,167 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { getComplianceReport } from '@/lib/api';
-import type { ComplianceReport, ComplianceReportControlResult } from '@/lib/api';
+import { assessmentCounts, getComplianceReport, getComplianceReportCsv } from '@/lib/api';
+import { useAsyncAction, useRequest } from '@/lib/use-request';
+import { frameworkLabel } from '@/lib/compliance';
+import { EmptyState, ErrorState, LoadingState } from '@/components/states';
+import {
+  Card,
+  PageBody,
+  PageHeader,
+  PRIMARY_BUTTON,
+  SeverityBadge,
+  Spinner,
+  StatusBadge,
+  StatusMessage,
+  SummaryTile,
+  Table,
+  Td,
+  Th,
+} from '@/components/ui';
 
-const frameworkLabels: Record<string, string> = {
-  CIS_AWS_FOUNDATIONS: 'CIS AWS Foundations v3.0',
-  SOC2: 'SOC 2 Type II',
-  ISO27001: 'ISO 27001:2022',
-};
-
-const statusColors: Record<string, string> = {
-  PASS: 'bg-green-100 text-green-800',
-  FAIL: 'bg-red-100 text-red-800',
-  MANUAL: 'bg-yellow-100 text-yellow-800',
-  NOT_EVALUATED: 'bg-gray-100 text-gray-800',
-  NOT_APPLICABLE: 'bg-blue-100 text-blue-800',
-};
-
-const severityColors: Record<string, string> = {
-  critical: 'bg-red-100 text-red-800',
-  high: 'bg-orange-100 text-orange-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  low: 'bg-blue-100 text-blue-800',
-};
+function saveBlob(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(anchor);
+}
 
 export default function ComplianceReportPage() {
-  const params = useParams();
-  const framework = params.framework as string;
-
-  const [report, setReport] = useState<ComplianceReport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [format, setFormat] = useState<'json' | 'csv'>('json');
-
-  useEffect(() => {
-    loadReport();
-  }, [framework]);
-
-  async function loadReport() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getComplianceReport(framework, format);
-      setReport(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load report');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function downloadReport() {
-    try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      const response = await fetch(
-        `${baseUrl}/compliance/frameworks/${framework}/report?format=csv`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('id_token')}`,
-          },
-        }
-      );
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${framework}-compliance-report-${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }
-    } catch (err) {
-      console.error('Download failed:', err);
-    }
-  }
-
-  function getStatusColor(status: string): string {
-    return statusColors[status] || 'bg-gray-100 text-gray-800';
-  }
-
-  function getSeverityColor(severity: string): string {
-    return severityColors[severity] || 'bg-gray-100 text-gray-800';
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500">Loading report...</div>
-      </div>
-    );
-  }
-
-  if (error || !report) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Report Not Available</h1>
-          <p className="mt-2 text-gray-600">{error || 'No report data available'}</p>
-          <Link
-            href={`/compliance/${framework}`}
-            className="mt-4 text-indigo-600 hover:text-indigo-900"
-          >
-            Back to Framework
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  const { framework } = useParams<{ framework: string }>();
+  const report = useRequest((signal) => getComplianceReport(framework, { signal }), [framework]);
+  const [downloaded, setDownloaded] = useState<string | null>(null);
+  const download = useAsyncAction(async () => {
+    setDownloaded(null);
+    const filename = `${framework}-compliance-report-${new Date().toISOString().split('T')[0]}.csv`;
+    saveBlob(await getComplianceReportCsv(framework), filename);
+    setDownloaded(filename);
+  });
+  const back = {
+    backHref: `/compliance/${framework}`,
+    backLabel: `← ${frameworkLabel(framework)}`,
+  };
+  const counts = assessmentCounts(report.status === 'success' ? report.data : null);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <Link
-                href={`/compliance/${framework}`}
-                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium mb-2 inline-block"
-              >
-                ← {frameworkLabels[framework] || framework}
-              </Link>
-              <h1 className="text-3xl font-bold text-gray-900">Compliance Report</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <select
-                value={format}
-                onChange={(e) => setFormat(e.target.value as 'json' | 'csv')}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="json">JSON View</option>
-                <option value="csv">CSV Export</option>
-              </select>
-              <button
-                onClick={downloadReport}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
-              >
-                Download CSV
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <>
+      <PageHeader
+        title="Compliance report"
+        {...back}
+        actions={
+          <button
+            type="button"
+            className={PRIMARY_BUTTON}
+            disabled={download.pending}
+            onClick={() => void download.run()}
+          >
+            {download.pending && <Spinner />}
+            {download.pending ? 'Preparing CSV…' : 'Download CSV'}
+          </button>
+        }
+      />
+      <PageBody>
+        {download.error !== undefined && <ErrorState error={download.error} className="mb-6" />}
+        {downloaded && (
+          <StatusMessage tone="success" className="mb-6">
+            Downloaded {downloaded}.
+          </StatusMessage>
+        )}
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-red-800">{error}</p>
-            </div>
-          )}
-
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Executive Summary</h2>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-              <div className="p-4 bg-white rounded-lg shadow">
-                <div className="text-sm font-medium text-gray-500">Total Controls</div>
-                <div className="mt-1 text-3xl font-bold text-gray-900">
-                  {report.summary.totalControls}
-                </div>
+        {report.status === 'error' ? (
+          <ErrorState error={report.error} onRetry={report.reload} />
+        ) : report.status !== 'success' ? (
+          <LoadingState label="Loading report…" />
+        ) : (
+          <>
+            <section className="mb-8">
+              <h2 className="mb-4 text-xl font-bold text-gray-900">Executive summary</h2>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
+                <SummaryTile label="Total controls" value={counts.totalControls} />
+                <SummaryTile label="Passed" value={counts.passed} tone="success" />
+                <SummaryTile label="Failed" value={counts.failed} tone="danger" />
+                <SummaryTile label="Manual" value={counts.manual} tone="warning" />
+                <SummaryTile label="Not evaluated" value={counts.notEvaluated} />
+                <SummaryTile label="Coverage" value={`${counts.coveragePercent}%`} tone="accent" />
               </div>
-              <div className="p-4 bg-green-50 rounded-lg">
-                <div className="text-sm font-medium text-gray-500">Passed</div>
-                <div className="mt-1 text-3xl font-bold text-green-600">
-                  {report.summary.passed}
-                </div>
-              </div>
-              <div className="p-4 bg-red-50 rounded-lg">
-                <div className="text-sm font-medium text-gray-500">Failed</div>
-                <div className="mt-1 text-3xl font-bold text-red-600">{report.summary.failed}</div>
-              </div>
-              <div className="p-4 bg-yellow-50 rounded-lg">
-                <div className="text-sm font-medium text-gray-500">Manual</div>
-                <div className="mt-1 text-3xl font-bold text-yellow-600">
-                  {report.summary.manual}
-                </div>
-              </div>
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm font-medium text-gray-500">Not Evaluated</div>
-                <div className="mt-1 text-3xl font-bold text-gray-600">
-                  {report.summary.notEvaluated}
-                </div>
-              </div>
-              <div className="p-4 bg-indigo-50 rounded-lg">
-                <div className="text-sm font-medium text-gray-500">Coverage</div>
-                <div className="mt-1 text-3xl font-bold text-indigo-600">
-                  {report.summary.coveragePercent}%
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <p className="text-gray-700">
-                <strong>Assessment Date:</strong> {new Date(report.generatedAt).toLocaleString()} |
-                <strong> Framework:</strong> {frameworkLabels[framework] || framework} |
-                <strong> Coverage:</strong> {report.summary.coveragePercent}% of automated controls
-                evaluated
+              <p className="mt-6 rounded-lg bg-orange-50 p-4 text-sm text-gray-700">
+                <strong>Assessment date:</strong>{' '}
+                {new Date(report.data.generatedAt).toLocaleString()} | <strong>Framework:</strong>{' '}
+                {frameworkLabel(framework)} | <strong>Coverage:</strong> {counts.coveragePercent}%
+                of automated controls evaluated
               </p>
-            </div>
-          </div>
+            </section>
 
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Control ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Title
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Section
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Severity
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Issues
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {report.controls.map((control: ComplianceReportControlResult) => (
-                    <tr key={control.control.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {control.control.id}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div
-                          className="text-sm text-gray-900 max-w-md truncate"
-                          title={control.control.title}
-                        >
-                          {control.control.title}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {control.control.section}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(control.control.severity)}`}
-                        >
-                          {control.control.severity}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {control.control.automated ? 'Automated' : 'Manual'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(control.status)}`}
-                        >
-                          {control.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {control.issues && control.issues.length > 0 ? (
-                          <ul className="list-disc list-inside">
-                            {control.issues.map((issue: string, i: number) => (
-                              <li key={i}>{issue}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
+            <Card flush>
+              {report.data.controls.length === 0 ? (
+                <EmptyState
+                  title="No controls in this report"
+                  description="The assessment has no control results to show."
+                />
+              ) : (
+                <Table caption="Control results">
+                  <thead>
+                    <tr>
+                      <Th>Control ID</Th>
+                      <Th>Title</Th>
+                      <Th>Section</Th>
+                      <Th>Severity</Th>
+                      <Th>Type</Th>
+                      <Th>Status</Th>
+                      <Th>Issues</Th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {report.data.controls.map((result) => (
+                      <tr key={result.control.id} className="hover:bg-gray-50">
+                        <Td className="whitespace-nowrap font-medium text-gray-900">
+                          {result.control.id}
+                        </Td>
+                        <Td>
+                          <div
+                            className="max-w-md truncate text-gray-900"
+                            title={result.control.title}
+                          >
+                            {result.control.title}
+                          </div>
+                        </Td>
+                        <Td className="whitespace-nowrap text-gray-500">
+                          {result.control.section}
+                        </Td>
+                        <Td className="whitespace-nowrap">
+                          <SeverityBadge severity={result.control.severity} tone="soft" />
+                        </Td>
+                        <Td className="whitespace-nowrap text-gray-500">
+                          {result.control.automated ? 'Automated' : 'Manual'}
+                        </Td>
+                        <Td className="whitespace-nowrap">
+                          <StatusBadge status={result.status} />
+                        </Td>
+                        <Td className="text-gray-500">
+                          {result.issues && result.issues.length > 0 ? (
+                            <ul className="list-inside list-disc">
+                              {result.issues.map((issue) => (
+                                <li key={issue}>{issue}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            '—'
+                          )}
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
+            </Card>
+          </>
+        )}
+      </PageBody>
+    </>
   );
 }

@@ -1,0 +1,799 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/khalifa-helm-values.schema.json",
+  "title": "Khalifa Helm values",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "serviceAccounts",
+    "config",
+    "api",
+    "ui",
+    "ruleRunner",
+    "collection",
+    "organizationCollector",
+    "incrementalCollector",
+    "graphWriter",
+    "compliance",
+    "reconciliation",
+    "cloudtrailAnalyzer",
+    "dspmScanner",
+    "policyEvaluator",
+    "leastPrivilegeSweep",
+    "ingress",
+    "externalSecrets",
+    "topologySpread",
+    "networkPolicies"
+  ],
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string", "maxLength": 44 },
+    "commonLabels": { "$ref": "#/definitions/stringMap" },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": { "name": { "$ref": "#/definitions/dnsLabel" } }
+      }
+    },
+    "serviceAccounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api",
+        "ui",
+        "ruleRunner",
+        "organizationCollector",
+        "incrementalCollector",
+        "graphWriter",
+        "compliance",
+        "cloudtrailAnalyzer",
+        "dspmScanner",
+        "policyEvaluator",
+        "leastPrivilegeSweep",
+        "externalSecrets"
+      ],
+      "properties": {
+        "api": { "$ref": "#/definitions/serviceAccount" },
+        "ui": { "$ref": "#/definitions/serviceAccount" },
+        "ruleRunner": { "$ref": "#/definitions/serviceAccount" },
+        "organizationCollector": { "$ref": "#/definitions/serviceAccount" },
+        "incrementalCollector": { "$ref": "#/definitions/serviceAccount" },
+        "graphWriter": { "$ref": "#/definitions/serviceAccount" },
+        "compliance": { "$ref": "#/definitions/serviceAccount" },
+        "cloudtrailAnalyzer": { "$ref": "#/definitions/serviceAccount" },
+        "dspmScanner": { "$ref": "#/definitions/serviceAccount" },
+        "policyEvaluator": { "$ref": "#/definitions/serviceAccount" },
+        "leastPrivilegeSweep": { "$ref": "#/definitions/serviceAccount" },
+        "externalSecrets": { "$ref": "#/definitions/serviceAccount" }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "awsRegion",
+        "neptuneEndpoint",
+        "neptuneQueryTimeoutMs",
+        "neptuneMaxAttempts",
+        "neptuneMaxResults",
+        "issuesTable",
+        "evidenceTable",
+        "reportsTable",
+        "postureTrendsTable",
+        "accessAnalyzerTable",
+        "leastPrivilegeTable",
+        "cognitoUserPoolId",
+        "cognitoClientId",
+        "cognitoRegion",
+        "corsAllowedOrigins",
+        "issueSinks",
+        "issuesTopicArn",
+        "uiBaseUrl"
+      ],
+      "properties": {
+        "awsRegion": { "type": "string", "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$" },
+        "neptuneEndpoint": {
+          "type": "string",
+          "pattern": "^(wss|https)://[A-Za-z0-9.-]+(:[0-9]{1,5})?/gremlin$"
+        },
+        "neptuneQueryTimeoutMs": { "type": "integer", "minimum": 1, "maximum": 120000 },
+        "neptuneMaxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "neptuneMaxResults": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "issuesTable": { "type": "string", "minLength": 1 },
+        "evidenceTable": { "type": "string", "minLength": 1 },
+        "reportsTable": { "type": "string", "minLength": 1 },
+        "postureTrendsTable": { "type": "string", "minLength": 1 },
+        "accessAnalyzerTable": { "type": "string", "minLength": 1 },
+        "leastPrivilegeTable": { "type": "string", "minLength": 1 },
+        "cognitoUserPoolId": {
+          "type": "string",
+          "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+_[A-Za-z0-9]+$"
+        },
+        "cognitoClientId": { "type": "string", "pattern": "^[A-Za-z0-9]+$" },
+        "cognitoRegion": { "type": "string", "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$" },
+        "cloudflareAccessTeamDomain": { "type": "string" },
+        "cloudflareAccessAud": { "type": "string" },
+        "corsAllowedOrigins": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$" }
+        },
+        "issueSinks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "enum": ["sns"] }
+        },
+        "issuesTopicArn": {
+          "type": "string",
+          "pattern": "^$|^arn:(aws|aws-us-gov):sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$"
+        },
+        "uiBaseUrl": { "type": "string", "pattern": "^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$" },
+        "athenaDatabase": { "type": "string" },
+        "athenaWorkgroup": { "type": "string" },
+        "athenaResultsLocation": {
+          "type": "string",
+          "pattern": "^$|^s3://[A-Za-z0-9._-]+(/.*)?$"
+        },
+        "analysisDays": { "type": "integer", "minimum": 1, "maximum": 365 },
+        "dspmScanMode": { "type": "string", "enum": ["tagged-only", "all", "off"] },
+        "macieEnabled": { "type": "boolean" },
+        "rateLimitPerMinute": { "type": "integer", "minimum": 0 },
+        "rateLimitExpensivePerMinute": { "type": "integer", "minimum": 0 },
+        "dspmClassifyBudgetMs": { "type": "integer", "minimum": 0 },
+        "canaryPrincipalArns": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:user/[A-Za-z0-9+=,.@_/-]+$"
+          }
+        }
+      }
+    },
+    "collection": { "$ref": "#/definitions/collection" },
+    "api": { "$ref": "#/definitions/apiWorkload" },
+    "ui": { "$ref": "#/definitions/uiWorkload" },
+    "ruleRunner": { "$ref": "#/definitions/cronJob" },
+    "organizationCollector": { "$ref": "#/definitions/cronJob" },
+    "incrementalCollector": { "$ref": "#/definitions/incrementalCollector" },
+    "graphWriter": { "$ref": "#/definitions/graphWriter" },
+    "compliance": { "$ref": "#/definitions/cronJob" },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "securityHubRoleArn",
+        "securityHubRegion",
+        "minAgreementDays",
+        "publishAllowlist"
+      ],
+      "properties": {
+        "securityHubRoleArn": {
+          "type": "string",
+          "pattern": "^(|arn:aws:iam::[0-9]{12}:role/.+)$"
+        },
+        "securityHubRegion": { "type": "string", "pattern": "^[a-z]{2}-[a-z]+-[0-9]$" },
+        "minAgreementDays": { "type": "integer", "minimum": 1 },
+        "publishAllowlist": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)+$" }
+        },
+        "trustCenterSyncClientId": { "type": "string", "pattern": "^(|[0-9a-f]{32}\\.access)$" }
+      }
+    },
+    "cloudtrailAnalyzer": { "$ref": "#/definitions/cronJob" },
+    "dspmScanner": { "$ref": "#/definitions/cronJob" },
+    "policyEvaluator": { "$ref": "#/definitions/cronJob" },
+    "leastPrivilegeSweep": { "$ref": "#/definitions/cronJob" },
+    "ingress": { "$ref": "#/definitions/ingress" },
+    "externalSecrets": { "$ref": "#/definitions/externalSecrets" },
+    "topologySpread": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "maxSkew", "topologyKey", "whenUnsatisfiable"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "maxSkew": { "type": "integer", "minimum": 1 },
+        "topologyKey": { "type": "string", "minLength": 1 },
+        "whenUnsatisfiable": { "type": "string", "enum": ["DoNotSchedule", "ScheduleAnyway"] }
+      }
+    },
+    "networkPolicies": { "$ref": "#/definitions/networkPolicies" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ingress": {
+            "properties": { "enabled": { "const": true } },
+            "required": ["enabled"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ingress": { "properties": { "hosts": { "minItems": 1 } } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "externalSecrets": {
+            "properties": { "enabled": { "const": true } },
+            "required": ["enabled"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "externalSecrets": {
+            "properties": {
+              "targetName": { "minLength": 1 },
+              "data": { "minItems": 1 },
+              "secretStore": {
+                "properties": { "roleArn": { "minLength": 1 } }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "config": {
+            "properties": { "issueSinks": { "contains": { "const": "sns" } } },
+            "required": ["issueSinks"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "config": { "properties": { "issuesTopicArn": { "minLength": 1 } } }
+        }
+      }
+    },
+    {
+      "if": { "required": ["collection"] },
+      "then": {
+        "properties": {
+          "collection": {
+            "properties": {
+              "homeAccountId": { "minLength": 12 },
+              "incrementalQueueUrl": { "minLength": 1 }
+            },
+            "anyOf": [
+              { "properties": { "accountIds": { "minItems": 1 } } },
+              { "properties": { "parentIds": { "minItems": 1 } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "anyOf": [
+        {
+          "properties": {
+            "externalSecrets": {
+              "properties": { "targetName": { "minLength": 1 } },
+              "required": ["targetName"]
+            }
+          },
+          "required": ["externalSecrets"]
+        }
+      ]
+    }
+  ],
+  "definitions": {
+    "dnsLabel": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "maxLength": 63
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "image": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[a-f0-9]{64}$"
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "name", "annotations", "automountServiceAccountToken"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "maxLength": 63
+        },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "automountServiceAccountToken": { "type": "boolean" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests", "limits"],
+      "properties": {
+        "requests": { "$ref": "#/definitions/resourcePair" },
+        "limits": { "$ref": "#/definitions/resourcePair" }
+      }
+    },
+    "resourcePair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": {
+        "cpu": { "type": "string", "minLength": 1 },
+        "memory": { "type": "string", "minLength": 1 }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "port", "annotations"],
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "annotations": { "$ref": "#/definitions/stringMap" }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "minReplicas",
+        "maxReplicas",
+        "targetCPUUtilizationPercentage",
+        "targetMemoryUtilizationPercentage"
+      ],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minReplicas": { "type": "integer", "minimum": 1 },
+        "maxReplicas": { "type": "integer", "minimum": 1 },
+        "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "targetMemoryUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "minAvailable"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string", "pattern": "^(100|[0-9]{1,2})%$" }
+          ]
+        }
+      }
+    },
+    "baseWorkload": {
+      "type": "object",
+      "required": [
+        "image",
+        "replicaCount",
+        "port",
+        "podAnnotations",
+        "podLabels",
+        "service",
+        "resources",
+        "autoscaling",
+        "pdb"
+      ],
+      "properties": {
+        "image": { "$ref": "#/definitions/image" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "podAnnotations": { "$ref": "#/definitions/stringMap" },
+        "podLabels": { "$ref": "#/definitions/stringMap" },
+        "service": { "$ref": "#/definitions/service" },
+        "resources": { "$ref": "#/definitions/resources" },
+        "autoscaling": { "$ref": "#/definitions/autoscaling" },
+        "pdb": { "$ref": "#/definitions/pdb" }
+      }
+    },
+    "apiWorkload": {
+      "allOf": [
+        { "$ref": "#/definitions/baseWorkload" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "image",
+            "replicaCount",
+            "port",
+            "podAnnotations",
+            "podLabels",
+            "service",
+            "resources",
+            "autoscaling",
+            "pdb",
+            "serviceMonitor"
+          ],
+          "properties": {
+            "image": {},
+            "replicaCount": {},
+            "port": {},
+            "podAnnotations": {},
+            "podLabels": {},
+            "service": {},
+            "resources": {},
+            "autoscaling": {},
+            "pdb": {},
+            "serviceMonitor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "labels", "interval", "scrapeTimeout", "path"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "labels": { "$ref": "#/definitions/stringMap" },
+                "interval": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" },
+                "scrapeTimeout": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" },
+                "path": { "type": "string", "pattern": "^/" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "uiWorkload": {
+      "allOf": [
+        { "$ref": "#/definitions/baseWorkload" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {},
+            "replicaCount": {},
+            "port": {},
+            "podAnnotations": {},
+            "podLabels": {},
+            "service": {},
+            "resources": {},
+            "autoscaling": {},
+            "pdb": {}
+          }
+        }
+      ]
+    },
+    "cronJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image",
+        "schedule",
+        "timeZone",
+        "suspend",
+        "concurrencyPolicy",
+        "successfulJobsHistoryLimit",
+        "failedJobsHistoryLimit",
+        "startingDeadlineSeconds",
+        "activeDeadlineSeconds",
+        "ttlSecondsAfterFinished",
+        "backoffLimit",
+        "podAnnotations",
+        "podLabels",
+        "resources"
+      ],
+      "properties": {
+        "image": { "$ref": "#/definitions/image" },
+        "schedule": { "type": "string", "minLength": 1 },
+        "timeZone": { "type": "string" },
+        "suspend": { "type": "boolean" },
+        "concurrencyPolicy": { "type": "string", "enum": ["Allow", "Forbid", "Replace"] },
+        "successfulJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+        "failedJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+        "startingDeadlineSeconds": { "type": "integer", "minimum": 1 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+        "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 },
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "podAnnotations": { "$ref": "#/definitions/stringMap" },
+        "podLabels": { "$ref": "#/definitions/stringMap" },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "homeAccountId",
+        "accountIds",
+        "parentIds",
+        "regions",
+        "concurrency",
+        "maxAttempts",
+        "retryDelayMs",
+        "graphWriterTimeoutMs",
+        "incrementalQueueUrl"
+      ],
+      "properties": {
+        "homeAccountId": { "type": "string", "pattern": "^$|^[0-9]{12}$" },
+        "accountIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[0-9]{12}$" }
+        },
+        "parentIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(?:r-[a-z0-9]{4,32}|ou-[a-z0-9]{4,32}-[a-z0-9]{8,32})$"
+          }
+        },
+        "regions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$" }
+        },
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "retryDelayMs": { "type": "integer", "minimum": 1, "maximum": 60000 },
+        "graphWriterTimeoutMs": { "type": "integer", "minimum": 1, "maximum": 300000 },
+        "incrementalQueueUrl": {
+          "type": "string",
+          "pattern": "^$|^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/[0-9]{12}/[A-Za-z0-9_.-]+$"
+        },
+        "guardDutyAdministratorAccountId": { "type": "string", "pattern": "^$|^[0-9]{12}$" },
+        "guardDutyFindingRegions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$" }
+        }
+      }
+    },
+    "incrementalCollector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "replicaCount", "podAnnotations", "podLabels", "resources", "pdb"],
+      "properties": {
+        "image": { "$ref": "#/definitions/image" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "podAnnotations": { "$ref": "#/definitions/stringMap" },
+        "podLabels": { "$ref": "#/definitions/stringMap" },
+        "resources": { "$ref": "#/definitions/resources" },
+        "pdb": { "$ref": "#/definitions/pdb" }
+      }
+    },
+    "graphWriter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image",
+        "replicaCount",
+        "port",
+        "maxBodyBytes",
+        "concurrency",
+        "podAnnotations",
+        "podLabels",
+        "service",
+        "resources",
+        "pdb"
+      ],
+      "properties": {
+        "image": { "$ref": "#/definitions/image" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "maxBodyBytes": { "type": "integer", "minimum": 1 },
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "podAnnotations": { "$ref": "#/definitions/stringMap" },
+        "podLabels": { "$ref": "#/definitions/stringMap" },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["port", "annotations"],
+          "properties": {
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "annotations": { "$ref": "#/definitions/stringMap" }
+          }
+        },
+        "resources": { "$ref": "#/definitions/resources" },
+        "pdb": { "$ref": "#/definitions/pdb" }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "className", "annotations", "hosts", "tls"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["host", "paths"],
+            "properties": {
+              "host": { "type": "string", "minLength": 1 },
+              "paths": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["path", "pathType", "component"],
+                  "properties": {
+                    "path": { "type": "string", "pattern": "^/" },
+                    "pathType": {
+                      "type": "string",
+                      "enum": ["Exact", "Prefix", "ImplementationSpecific"]
+                    },
+                    "component": { "type": "string", "enum": ["api", "ui"] }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["hosts", "secretName"],
+            "properties": {
+              "hosts": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "secretName": { "$ref": "#/definitions/dnsLabel" }
+            }
+          }
+        }
+      }
+    },
+    "externalSecrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "refreshInterval", "targetName", "mountIn", "secretStore", "data"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "refreshInterval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$" },
+        "targetName": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "maxLength": 63
+        },
+        "mountIn": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "api",
+              "ui",
+              "ruleRunner",
+              "organizationCollector",
+              "incrementalCollector",
+              "graphWriter",
+              "compliance",
+              "cloudtrailAnalyzer",
+              "policyEvaluator",
+              "leastPrivilegeSweep"
+            ]
+          }
+        },
+        "secretStore": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "service", "region", "roleArn"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+              "maxLength": 63
+            },
+            "service": { "type": "string", "enum": ["SecretsManager", "ParameterStore"] },
+            "region": { "type": "string" },
+            "roleArn": {
+              "type": "string",
+              "pattern": "^$|^arn:(aws|aws-us-gov):iam::[0-9]{12}:role/.+$"
+            }
+          }
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["secretKey", "remoteRef"],
+            "properties": {
+              "secretKey": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+              "remoteRef": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["key"],
+                "properties": {
+                  "key": { "type": "string", "minLength": 1 },
+                  "property": { "type": "string", "minLength": 1 },
+                  "version": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "networkPolicies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "dns", "egressCidrs"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "dns": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespaceSelector", "podSelector"],
+          "properties": {
+            "namespaceSelector": { "type": "object" },
+            "podSelector": { "type": "object" }
+          }
+        },
+        "egressCidrs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cidr", "ports", "components"],
+            "properties": {
+              "cidr": { "type": "string", "pattern": "^[0-9A-Fa-f:.]+/[0-9]{1,3}$" },
+              "except": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^[0-9A-Fa-f:.]+/[0-9]{1,3}$" }
+              },
+              "ports": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["protocol", "port"],
+                  "properties": {
+                    "protocol": { "type": "string", "enum": ["TCP", "UDP", "SCTP"] },
+                    "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+                  }
+                }
+              },
+              "components": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "api",
+                    "ui",
+                    "rule-runner",
+                    "org-collector",
+                    "incremental",
+                    "graph-writer",
+                    "compliance",
+                    "cloudtrail-analyzer",
+                    "dspm-scanner",
+                    "policy-evaluator",
+                    "least-privilege-sweep"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

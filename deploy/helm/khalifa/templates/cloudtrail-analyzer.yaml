@@ -1,0 +1,73 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "khalifa.fullname" . }}-cloudtrail-analyzer
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cloudtrail-analyzer
+spec:
+  schedule: {{ .Values.cloudtrailAnalyzer.schedule | quote }}
+  {{- with .Values.cloudtrailAnalyzer.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.cloudtrailAnalyzer.suspend }}
+  concurrencyPolicy: {{ .Values.cloudtrailAnalyzer.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.cloudtrailAnalyzer.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cloudtrailAnalyzer.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.cloudtrailAnalyzer.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "cloudtrail-analyzer") | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.cloudtrailAnalyzer.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.cloudtrailAnalyzer.ttlSecondsAfterFinished }}
+      backoffLimit: {{ .Values.cloudtrailAnalyzer.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "khalifa.selectorLabels" (dict "root" . "component" "cloudtrail-analyzer") | nindent 12 }}
+            {{- with .Values.cloudtrailAnalyzer.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.cloudtrailAnalyzer.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "cloudtrailAnalyzer" "suffix" "cloudtrail-analyzer") }}
+          automountServiceAccountToken: {{ .Values.serviceAccounts.cloudtrailAnalyzer.automountServiceAccountToken }}
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "khalifa.podSecurityContext" . | nindent 12 }}
+          {{- if .Values.topologySpread.enabled }}
+          topologySpreadConstraints:
+            {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "cloudtrail-analyzer") | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: cloudtrail-analyzer
+              image: {{ required "cloudtrailAnalyzer.image must be an immutable repository@sha256 digest" .Values.cloudtrailAnalyzer.image | quote }}
+              imagePullPolicy: IfNotPresent
+              args: ["cloudtrail-analyzer"]
+              securityContext:
+                {{- include "khalifa.containerSecurityContext" . | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-config
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-collection
+                - secretRef:
+                    name: {{ include "khalifa.graphWriterTokenSecretName" . }}
+                {{- include "khalifa.extraExternalSecretRef" (dict "root" . "component" "cloudtrailAnalyzer" "already" (list (include "khalifa.graphWriterTokenSecretName" .))) | nindent 16 }}
+              resources:
+                {{- toYaml .Values.cloudtrailAnalyzer.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

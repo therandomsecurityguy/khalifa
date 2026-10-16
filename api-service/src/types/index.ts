@@ -39,6 +39,26 @@ export interface Issue {
   remediationHint: string;
   metadata: Record<string, unknown>;
   externalRefs?: ExternalRef[];
+  resolvedAt?: string;
+  resolvedReason?: string;
+  suppression?: Suppression;
+  statusHistory?: StatusChange[];
+}
+
+export interface StatusChange {
+  from: IssueStatus;
+  to: IssueStatus;
+  at: string;
+  by: string;
+  reason: string;
+}
+
+export interface Suppression {
+  by: string;
+  at: string;
+  reason: string;
+  until: string;
+  severity: Severity;
 }
 
 export interface GraphVertex {
@@ -55,41 +75,23 @@ export interface GraphEdge {
   properties?: Record<string, unknown>;
 }
 
-export interface IssueListQuery {
-  severity?: Severity[];
-  team?: string[];
-  env?: Environment[];
-  status?: IssueStatus[];
-  ruleId?: string;
-  limit?: number;
-  nextToken?: string;
-}
-
-export interface AttackPathQuery {
-  fromSelector: string;
-  toSelector: string;
-  maxPathLength?: number;
-}
-
 export interface ResourceQuery {
   arn: string;
   includeNeighbors?: boolean;
   includeIssues?: boolean;
 }
 
-export interface IssueListResponse {
-  items: Issue[];
-  nextToken?: string;
-  totalCount: number;
-}
-
 export interface IssueDetailResponse extends Issue {
   attackPath: AttackPathDetail;
 }
 
+// Where an attacker gets onto the path, when the path itself does not start there.
+export type AttackPathEntry = { kind: 'internet' } | { kind: 'trust'; principals: GraphVertex[] };
+
 export interface AttackPathDetail {
   nodes: GraphVertex[];
   edges: GraphEdge[];
+  entry?: AttackPathEntry;
 }
 
 export interface ResourceResponse {
@@ -123,6 +125,14 @@ export interface TrendPoint {
   value: number;
   accountIds?: string[];
   recordedAt: string;
+  bySeverity?: SeverityCounts;
+}
+
+export interface SeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
 }
 
 export interface TrendResponse {
@@ -265,4 +275,35 @@ export interface RightsizingResponse {
 export interface TrustGraphResponse {
   nodes: GraphVertex[];
   edges: GraphEdge[];
+}
+
+export interface LeastPrivilegeFinding {
+  accountId: string;
+  principalArn: string;
+  principalType: 'role' | 'user';
+  allowedActionCount: number;
+  removedActionCount: number;
+  keptActionCount: number;
+  removedActions: string[];
+  keptActions: string[];
+  recommendedPolicy: IamPolicyStatement[];
+  riskLevel: 'low' | 'medium' | 'high';
+  confidence: number;
+  isAdmin: boolean;
+  blastRadius: number;
+  lastSweptAt: string;
+}
+
+export interface LeastPrivilegeListResponse {
+  items: LeastPrivilegeFinding[];
+  nextToken?: string;
+  totalCount: number;
+}
+
+export interface LeastPrivilegeSummary {
+  accountsSwept: number;
+  principalsSwept: number;
+  byRiskLevel: Record<'low' | 'medium' | 'high', number>;
+  totalRemovedActions: number;
+  lastSweptAt: string | null;
 }

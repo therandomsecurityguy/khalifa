@@ -1,11 +1,13 @@
 {
   "name": "@khalifa/integrations",
   "version": "1.0.0",
+  "private": true,
   "description": "Issue action sinks and auto-remediation for the Khalifa security graph",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",

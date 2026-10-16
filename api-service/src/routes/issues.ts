@@ -1,8 +1,15 @@
 import type { Request, Response } from 'express';
-import { IssueStore } from '../services/issue-store';
-import { NeptuneClient } from '../services/neptune-client';
+import {
+  DynamoDBIssueRepository,
+  PostureTrendStore,
+  type IssueListQuery,
+} from '@khalifa/risk-engine';
+import { parseBoundedInteger } from '../middleware/gremlin-validator';
+import { getApiNeptuneClient } from '../services/api-dependencies';
+import { nextRuns } from '../services/cron';
+import { outsidePrincipals } from './attack-paths';
 import type {
-  IssueListQuery,
+  AttackPathEntry,
   IssueDetailResponse,
   Severity,
   IssueStatus,
@@ -11,14 +18,26 @@ import type {
   GraphEdge,
 } from '../types';
 
-const issueStore = new IssueStore();
-
-const neptuneEndpoint = process.env.NEPTUNE_ENDPOINT || '';
-const neptuneClient = new NeptuneClient({ endpoint: neptuneEndpoint });
+const issueStore = new DynamoDBIssueRepository();
+const trendStore = new PostureTrendStore();
+// Bounds the DynamoDB filter expression; the catalogue has far fewer rules.
+const MAX_RULE_FILTERS = 50;
+const neptuneClient = getApiNeptuneClient();
 
 export async function listIssues(req: Request, res: Response): Promise<void> {
   try {
-    const { severity, team, env, status, ruleId, limit, nextToken } = req.query;
+    const { severity, team, env, status, ruleId, limit, nextToken, order = 'desc' } = req.query;
+
+    const ruleIds = ruleId === undefined ? [] : Array.isArray(ruleId) ? ruleId : [ruleId];
+    if (
+      ruleIds.length > MAX_RULE_FILTERS ||
+      ruleIds.some((value) => typeof value !== 'string' || !value || value.length > 64) ||
+      (nextToken !== undefined && (typeof nextToken !== 'string' || nextToken.length > 2048)) ||
+      (order !== 'asc' && order !== 'desc')
+    ) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid issue query' });
+      return;
+    }
 
     const query: IssueListQuery = {
       severity: severity
@@ -33,29 +52,37 @@ export async function listIssues(req: Request, res: Response): Promise<void> {
           ? (status as IssueStatus[])
           : [status as IssueStatus]
         : undefined,
-      ruleId: ruleId as string | undefined,
-      limit: limit ? Math.min(parseInt(limit as string, 10), 1000) : 50,
-      nextToken: nextToken as string | undefined,
+      ruleId: ruleIds.length === 1 ? (ruleIds[0] as string) : undefined,
+      ruleIds: ruleIds.length > 1 ? (ruleIds as string[]) : undefined,
+      order,
+      limit: parseBoundedInteger(limit, 50, 1, 1000, 'limit'),
+      nextToken,
     };
 
     const response = await issueStore.listIssues(query);
 
     res.json(response);
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith('limit must be') || error.message.includes('pagination token'))
+    ) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: error.message });
+      return;
+    }
     console.error('Error listing issues:', error);
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to list issues',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
 }
 
-export async function getIssue(req: Request, res: Response): Promise<void> {
+export async function getIssue(req: Request<{ id: string }>, res: Response): Promise<void> {
   try {
     const { id } = req.params;
 
-    const issue = await issueStore.getIssue(id);
+    const issue = await issueStore.getIssueById(id);
 
     if (!issue) {
       res.status(404).json({
@@ -67,27 +94,34 @@ export async function getIssue(req: Request, res: Response): Promise<void> {
 
     let attackPathNodes: GraphVertex[] = [];
     let attackPathEdges: GraphEdge[] = [];
+    let entry: AttackPathEntry | undefined;
 
-    if (issue.pathSummary && issue.pathSummary.length > 0) {
+    // Consecutive segments share a vertex; look each one up once, in path order.
+    // A single-resource match has no segments, so its resources stand alone.
+    const orderedIds = issue.pathSummary?.length
+      ? [...new Set(issue.pathSummary.flatMap((segment) => [segment.from, segment.to]))]
+      : [...new Set((issue.resourcesInvolved || []).map((resource) => resource.resourceId))];
+
+    if (orderedIds.length > 0) {
       try {
-        await neptuneClient.connect();
-        const pathNodes: GraphVertex[] = [];
-
-        for (const segment of issue.pathSummary) {
-          const fromNode = await neptuneClient.getResource(segment.from);
-          const toNode = await neptuneClient.getResource(segment.to);
-
-          if (fromNode) pathNodes.push(fromNode);
-          if (toNode) pathNodes.push(toNode);
-        }
-
-        attackPathNodes = pathNodes;
-        attackPathEdges = issue.pathSummary.map((segment) => ({
+        const pathNodes = await Promise.all(orderedIds.map((id) => neptuneClient.getResource(id)));
+        // A vertex gone from the graph stays as a placeholder, so the drawing
+        // never bridges the gap with an edge that does not exist.
+        attackPathNodes = pathNodes.map(
+          (node, index) =>
+            node ?? {
+              id: orderedIds[index],
+              label: 'Missing',
+              properties: { name: orderedIds[index].split(/[:/]/).pop(), missing: true },
+            }
+        );
+        attackPathEdges = (issue.pathSummary || []).map((segment) => ({
           id: `${segment.from}-${segment.to}`,
           label: segment.edgeType,
           from: segment.from,
           to: segment.to,
         }));
+        entry = await pathEntry(attackPathNodes[0]);
       } catch (neptuneError) {
         console.warn('Failed to fetch attack path from Neptune:', neptuneError);
       }
@@ -98,6 +132,7 @@ export async function getIssue(req: Request, res: Response): Promise<void> {
       attackPath: {
         nodes: attackPathNodes,
         edges: attackPathEdges,
+        entry,
       },
     };
 
@@ -107,9 +142,30 @@ export async function getIssue(req: Request, res: Response): Promise<void> {
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to get issue',
-      details: error instanceof Error ? error.message : undefined,
     });
   }
+}
+
+// The internet only when the first resource is actually reachable from it;
+// the trusted outside principals when the path starts at a cross-account role.
+async function pathEntry(first: GraphVertex | undefined): Promise<AttackPathEntry | undefined> {
+  if (!first || first.label === 'Internet') return undefined;
+  const props = first.properties;
+  if (
+    props.is_internet_exposed === true ||
+    props.is_publicly_accessible === true ||
+    props.endpoint_world_open === true
+  ) {
+    return { kind: 'internet' };
+  }
+  if (first.label === 'IamRole' && props.has_cross_account_trust === true) {
+    // An empty list still marks the entry as outside, just not resolved.
+    return {
+      kind: 'trust',
+      principals: outsidePrincipals(first, await neptuneClient.getTrustedPrincipals(first.id)),
+    };
+  }
+  return undefined;
 }
 
 export async function getIssueCounts(req: Request, res: Response): Promise<void> {
@@ -121,29 +177,37 @@ export async function getIssueCounts(req: Request, res: Response): Promise<void>
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to get issue counts',
-      details: error instanceof Error ? error.message : undefined,
+    });
+  }
+}
+
+export async function getIssueSummary(_req: Request, res: Response): Promise<void> {
+  try {
+    res.json({ counts: await issueStore.getSeverityStatusCounts() });
+  } catch (error) {
+    console.error('Error getting issue summary:', error);
+    res.status(500).json({
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to get issue summary',
     });
   }
 }
 
 export async function getIssueStats(req: Request, res: Response): Promise<void> {
   try {
-    const openIssues = await issueStore.listIssues({
-      status: ['open'],
-      limit: 1000,
-    });
+    const openIssues = await issueStore.getOpenIssues();
 
     const stats = {
-      total: openIssues.totalCount,
-      critical: openIssues.items.filter((i) => i.severity === 'critical').length,
-      high: openIssues.items.filter((i) => i.severity === 'high').length,
-      medium: openIssues.items.filter((i) => i.severity === 'medium').length,
-      low: openIssues.items.filter((i) => i.severity === 'low').length,
+      total: openIssues.length,
+      critical: openIssues.filter((i) => i.severity === 'critical').length,
+      high: openIssues.filter((i) => i.severity === 'high').length,
+      medium: openIssues.filter((i) => i.severity === 'medium').length,
+      low: openIssues.filter((i) => i.severity === 'low').length,
       byTeam: {} as Record<string, number>,
       byRule: {} as Record<string, number>,
     };
 
-    for (const issue of openIssues.items) {
+    for (const issue of openIssues) {
       stats.byTeam[issue.owningTeam] = (stats.byTeam[issue.owningTeam] || 0) + 1;
       stats.byRule[issue.ruleId] = (stats.byRule[issue.ruleId] || 0) + 1;
     }
@@ -154,7 +218,33 @@ export async function getIssueStats(req: Request, res: Response): Promise<void> 
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: 'Failed to get issue stats',
-      details: error instanceof Error ? error.message : undefined,
     });
+  }
+}
+
+// When the rule runner last wrote issues and when it runs next. The last run
+// is the trends row every run writes at the end; the next comes from the
+// CronJob schedule and time zone the chart passes in.
+export async function getIssueSchedule(_req: Request, res: Response): Promise<void> {
+  try {
+    const latest = await trendStore.getLatest('openIssuesBySeverity');
+    const schedule = process.env.RULE_RUNNER_SCHEDULE;
+    let nextRunAt: string | null = null;
+    let intervalMinutes: number | null = null;
+    if (schedule) {
+      const [next, after] = nextRuns(
+        schedule,
+        process.env.RULE_RUNNER_TIMEZONE || 'UTC',
+        new Date(),
+        2
+      );
+      nextRunAt = next?.toISOString() ?? null;
+      intervalMinutes =
+        next && after ? Math.round((after.getTime() - next.getTime()) / 60_000) : null;
+    }
+    res.json({ lastRunAt: latest?.recordedAt ?? null, nextRunAt, intervalMinutes });
+  } catch (error) {
+    console.error('Error reading the issue schedule:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to read the issue schedule' });
   }
 }

@@ -1,6 +1,13 @@
 import { RiskRuleRunner } from './runner';
+import type { RuleExecutionResult } from './types';
 
-export interface RunOnceSummary {
+interface Runner {
+  initialize(): Promise<void>;
+  runAllRules(): Promise<RuleExecutionResult[]>;
+  shutdown(): Promise<void>;
+}
+
+export interface RunSummary {
   rulesRun: number;
   issuesCreated: number;
   issuesResolved: number;
@@ -8,11 +15,12 @@ export interface RunOnceSummary {
 
 export async function runOnce(
   neptuneEndpoint: string,
-  createRunner: (endpoint: string) => RiskRuleRunner = (endpoint) => new RiskRuleRunner(endpoint)
-): Promise<RunOnceSummary> {
+  createRunner: (endpoint: string) => Runner = (endpoint) => new RiskRuleRunner(endpoint)
+): Promise<RunSummary> {
   if (!neptuneEndpoint.trim()) {
     throw new Error('NEPTUNE_ENDPOINT is required');
   }
+
   const runner = createRunner(neptuneEndpoint);
   try {
     await runner.initialize();
@@ -20,10 +28,12 @@ export async function runOnce(
     const errors = results.flatMap((result) =>
       (result.errors || []).map((error) => `${result.ruleId}: ${error}`)
     );
+
     if (errors.length > 0) {
       throw new Error(`Risk assessment failed: ${errors.join('; ')}`);
     }
-    return results.reduce(
+
+    return results.reduce<RunSummary>(
       (summary, result) => ({
         rulesRun: summary.rulesRun + 1,
         issuesCreated: summary.issuesCreated + result.issuesCreated,
@@ -34,4 +44,8 @@ export async function runOnce(
   } finally {
     await runner.shutdown();
   }
+}
+
+export async function handler(): Promise<RunSummary> {
+  return runOnce(process.env.NEPTUNE_ENDPOINT || '');
 }

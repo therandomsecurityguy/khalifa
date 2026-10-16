@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import ErrorBoundary from './error-boundary';
+import { ShellFrame } from '@/components/shell-frame';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Khalifa - Security Graph',
@@ -11,7 +12,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className="antialiased">
-        <ErrorBoundary>{children}</ErrorBoundary>
+        <ShellFrame>{children}</ShellFrame>
       </body>
     </html>
   );

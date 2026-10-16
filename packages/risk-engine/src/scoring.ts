@@ -1,10 +1,12 @@
 import type {
+  DataClassification,
+  Environment,
+  ExposureLevel,
+  GraphVertex,
+  IdentityBlastRadius,
   RiskScoreInput,
   RiskScoreOutput,
   Severity,
-  ExposureLevel,
-  DataClassification,
-  Environment,
 } from './types';
 
 const EXPOSURE_WEIGHTS: Record<ExposureLevel, number> = {
@@ -33,6 +35,17 @@ const IDENTITY_BLAST_RADIUS_WEIGHTS = {
   'service-linked': 0.4,
 };
 
+// Factor weights sum to 1.0. CVSS was removed because nothing populates it (no
+// vulnerability source exists; RULE-003 is disabled pending scanning), so it
+// contributed zero to every score while still consuming a share of the range.
+// Its weight is redistributed across the factors that have real data.
+const FACTOR_WEIGHTS = {
+  exposure: 0.3,
+  identity: 0.25,
+  dataClassification: 0.25,
+  environment: 0.2,
+} as const;
+
 const SEVERITY_THRESHOLDS: Record<Severity, number> = {
   critical: 80,
   high: 60,
@@ -41,40 +54,26 @@ const SEVERITY_THRESHOLDS: Record<Severity, number> = {
 };
 
 export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
-  let cvssContribution = 0;
-  let exposureContribution = 0;
+  const exposureContribution =
+    EXPOSURE_WEIGHTS[input.exposureLevel] * 100 * FACTOR_WEIGHTS.exposure;
+
   let identityContribution = 0;
-  let dataClassificationContribution = 0;
-  let environmentContribution = 0;
-  let crownJewelContribution = 0;
-
-  if (input.cvss) {
-    cvssContribution = input.cvss.baseScore * 10 * 0.25;
-  }
-
-  if (input.exploitabilityFlags) {
-    const { hasExploit, hasPublicExploit, malwareAvailable } = input.exploitabilityFlags;
-    if (hasPublicExploit) cvssContribution *= 1.5;
-    else if (hasExploit) cvssContribution *= 1.25;
-    if (malwareAvailable) cvssContribution *= 1.3;
-  }
-
-  exposureContribution = EXPOSURE_WEIGHTS[input.exposureLevel] * 100 * 0.2;
-
   if (input.identityBlastRadius) {
     const blastWeight = IDENTITY_BLAST_RADIUS_WEIGHTS[input.identityBlastRadius.type];
-    identityContribution = blastWeight * input.identityBlastRadius.scope * 100 * 0.2;
+    identityContribution =
+      blastWeight * input.identityBlastRadius.scope * 100 * FACTOR_WEIGHTS.identity;
   }
 
-  dataClassificationContribution =
-    DATA_CLASSIFICATION_WEIGHTS[input.dataClassification] * 100 * 0.2;
+  const dataClassificationContribution =
+    DATA_CLASSIFICATION_WEIGHTS[input.dataClassification] * 100 * FACTOR_WEIGHTS.dataClassification;
 
-  environmentContribution = ENVIRONMENT_WEIGHTS[input.environment] * 100 * 0.15;
+  const environmentContribution =
+    ENVIRONMENT_WEIGHTS[input.environment] * 100 * FACTOR_WEIGHTS.environment;
 
+  let crownJewelContribution = 0;
   if (input.isCrownJewel) {
     crownJewelContribution = 50;
   }
-
   if (input.attackPathLength !== undefined) {
     const pathPenalty = Math.max(0, (6 - input.attackPathLength) * 10);
     crownJewelContribution += pathPenalty;
@@ -82,8 +81,7 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
 
   const totalScore = Math.min(
     100,
-    cvssContribution +
-      exposureContribution +
+    exposureContribution +
       identityContribution +
       dataClassificationContribution +
       environmentContribution +
@@ -96,7 +94,6 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
     score: Math.round(totalScore * 10) / 10,
     severity,
     factors: {
-      cvssContribution: Math.round(cvssContribution * 10) / 10,
       exposureContribution: Math.round(exposureContribution * 10) / 10,
       identityContribution: Math.round(identityContribution * 10) / 10,
       dataClassificationContribution: Math.round(dataClassificationContribution * 10) / 10,
@@ -154,29 +151,119 @@ export function calculatePathSummary(path: any[]): {
 export function getRemediationHint(ruleId: string, _context: Record<string, any>): string {
   const hints: Record<string, string> = {
     'RULE-001':
-      'Restrict IAM role permissions to specific S3 buckets, enable VPC endpoints for S3 access, or move sensitive data to private buckets.',
+      "Scope the instance role's S3 permissions to the buckets the workload needs, require IMDSv2, and remove the instance's public IP or open security group if it does not need internet access.",
     'RULE-002':
-      'Restrict SSH/RDP access to specific IP ranges or VPN endpoints. Implement bastion hosts for administrative access.',
+      'Remove the 0.0.0.0/0 or ::/0 ingress on port 22/3389 from the security group. Use SSM Session Manager, a VPN or a bastion for administration instead.',
     'RULE-003':
-      'Update container images to latest patches, scan for CVEs in CI/CD pipeline, or remove internet exposure from workloads.',
+      "Rebuild the image on a patched base, redeploy, and add CVE scanning to CI. Until then, remove the workload's internet exposure.",
     'RULE-004':
-      'Review IAM role permissions using AWS IAM Access Analyzer, implement least-privilege permissions, and remove unnecessary access.',
+      'Replace the admin policy on this role with one scoped to the actions and resources the workload uses (check IAM last-accessed data), or remove the internet exposure.',
     'RULE-005':
-      'Implement additional network segmentation, add monitoring/alerts on crown jewel resources, and review trust relationships.',
+      "Break the path: remove the entry point's internet exposure, or the permission or trust hop that reaches the crown jewel. Alert on access to the crown-jewel resource.",
     'RULE-006':
-      'Remove cross-account trust relationships unless strictly required, implement AWS Organizations service control policies.',
+      "Scope the role's wildcard-resource statements to specific ARNs, and require sts:ExternalId or aws:PrincipalOrgID in its trust policy.",
     'RULE-007':
-      'Enable S3 block public access, review bucket policies, and move sensitive data to restricted buckets.',
+      'Turn on S3 Block Public Access for the bucket and account, and remove public grants from its bucket policy and ACLs.',
     'RULE-008':
-      'Disable public access on RDS instances, implement VPC endpoints, and review security group rules.',
+      'Make the instance private (aws rds modify-db-instance --no-publicly-accessible) and limit its security group to private sources.',
     'RULE-009':
-      'Review Lambda execution role permissions, implement VPC endpoints without internet access, and use private subnets.',
+      'Scope the function role to the tables and buckets it uses, and reach AWS through VPC endpoints instead of a NAT if it does not need the internet.',
     'RULE-010':
-      'Restrict IAM policy statements to specific secrets, implement resource-based policies, and enable secret rotation.',
+      'Scope the statement to specific secret ARNs, remove cross-account principals unless required, and turn on rotation for the secret.',
+    'RULE-011':
+      'Block public access on the bucket now, then review the objects DSPM classified as restricted or secret and move or delete them.',
+    'RULE-012':
+      'Rotate the exposed secret, remove it from the S3 object or Lambda environment (use Secrets Manager or SSM instead), and scan for other copies.',
+    'RULE-013':
+      'Replace the user with an IAM role (IRSA, an instance role or GitHub OIDC) so no static key is needed. Otherwise rotate: create a new key, switch the workload, then deactivate and delete the old one (aws iam update-access-key --status Inactive).',
+    'RULE-014':
+      'Deactivate the unused key (aws iam update-access-key --status Inactive), confirm nothing breaks, then delete it.',
+    'RULE-015':
+      'Assign an MFA device to the user, or remove its console password (aws iam delete-login-profile). Prefer SSO for human access.',
+    'RULE-016':
+      'Scope GetSecretValue to the specific secret ARNs the principal needs (for example secret:app-name-*). For read-only SSO permission sets, add an explicit Deny on secretsmanager:GetSecretValue.',
+    'RULE-017':
+      'Enable GuardDuty in this region, or have the GuardDuty delegated administrator auto-enable it for the account.',
+    'RULE-018':
+      "Remediate the Security Hub finding using its linked guidance, or remove the resource's internet exposure until it is fixed.",
+    'RULE-019':
+      'Make the EKS endpoint private, or limit public access to known CIDRs (aws eks update-cluster-config --resources-vpc-config publicAccessCidrs=...).',
+    'RULE-020':
+      'Confirm who used root and why. If it was not approved break-glass use, rotate the root password, check root MFA, delete any root access keys and review the session in CloudTrail.',
+    'RULE-021':
+      "Confirm the new source IP belongs to the principal's expected infrastructure. If not, rotate the secrets it read and the principal's credentials, and review its CloudTrail activity.",
+    'RULE-022':
+      "Review the principal's denied calls: a broken deployment or probing with stolen credentials. Disable the credentials if the activity is not expected.",
+    'RULE-023':
+      'Treat as a compromise: the decoy key was used. Find where it was exposed, block the source, and rotate any real credentials stored alongside it.',
+    'RULE-024':
+      'Require IMDSv2 on the instance (aws ec2 modify-instance-metadata-options --http-tokens required) so SSRF cannot steal its role credentials.',
+    'RULE-025':
+      'Re-enable or recreate IAM Access Analyzer in this account and region so external-access findings keep reporting.',
+    'RULE-026':
+      'Enable automatic rotation on the customer-managed key (aws kms enable-key-rotation --key-id ...).',
+    'RULE-027': 'Enable VPC flow logs to the central logging bucket (aws ec2 create-flow-logs).',
+    'RULE-028':
+      'Start the Config recorder (aws configservice start-configuration-recorder) and confirm its delivery channel delivers.',
+    'RULE-029':
+      'Treat as an active intrusion on an internet-facing resource: isolate or restrict its exposure, rotate credentials it holds, and investigate the GuardDuty finding.',
+    'RULE-030':
+      "Narrow the target role's trust policy to the specific roles that need it, not the account root, and add conditions (sts:ExternalId, aws:PrincipalArn). If the access is intended, suppress with the reason.",
   };
 
   return (
     hints[ruleId] ||
     'Review and remediate the identified security issue according to best practices.'
   );
+}
+
+// Scoring inputs read off a path's vertices; shared by the rule runner and the
+// attack-path explorer so both rank the same path the same way.
+export function riskInputFromPath(path: GraphVertex[]): RiskScoreInput {
+  let exposureLevel: 'internet' | 'cross-account' | 'internal' = 'internal';
+  let dataClassification: 'public' | 'internal' | 'restricted' | 'secret' = 'public';
+  let environment: 'prod' | 'staging' | 'dev' = 'dev';
+  let isCrownJewel = false;
+  let identityBlastRadius: IdentityBlastRadius | undefined;
+  const attackPathLength = path.length;
+
+  for (const v of path) {
+    if (v.properties?.is_internet_exposed === true) {
+      exposureLevel = 'internet';
+    }
+    if (
+      v.properties?.data_classification === 'restricted' ||
+      v.properties?.data_classification === 'secret'
+    ) {
+      dataClassification = v.properties.data_classification;
+    }
+    if (v.properties?.crown_jewel === true) {
+      isCrownJewel = true;
+    }
+    if (v.properties?.env === 'prod') {
+      environment = 'prod';
+    } else if (v.properties?.env === 'staging' && environment !== 'prod') {
+      environment = 'staging';
+    }
+    // Identity blast radius from the CIEM properties the collector writes on
+    // IamRole vertices. Admin dominates and cannot be downgraded by a later
+    // cross-account vertex.
+    if (v.properties?.is_admin === true || v.properties?.is_admin_role === true) {
+      identityBlastRadius = { type: 'admin', scope: 1 };
+    } else if (
+      identityBlastRadius?.type !== 'admin' &&
+      (v.properties?.has_cross_account_trust === true || v.properties?.is_cross_account === true)
+    ) {
+      identityBlastRadius = { type: 'cross-account', scope: 1 };
+    }
+  }
+
+  return {
+    exposureLevel,
+    dataClassification,
+    environment,
+    isCrownJewel,
+    attackPathLength,
+    identityBlastRadius,
+  };
 }

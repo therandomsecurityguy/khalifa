@@ -1,384 +1,227 @@
-# Khalifa
+<h1 align="center">
+  <img src="docs/images/khalifa-lockup.png" alt="Khalifa — Agentless security graph for AWS" width="720"/>
+</h1>
 
-Agentless ingestion of AWS Org resources and Security Hub findings into a Neptune-backed security graph, with a risk and attack-path engine to identify security issues.
+<p align="center">
+<strong>Inventory · Attack paths · CIEM · Compliance</strong><br/>
+One member role. Evaluation stays in-account.
+</p>
 
-[Docs](ARCHITECTURE.md) · [Operations](OPERATIONAL.md)
+<p align="center">
+<a href="ARCHITECTURE.md">Docs</a> · <a href="OPERATIONAL.md">Operations</a> · <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
-[![CI](https://github.com/therandomsecurityguy/khalifa/actions/workflows/ci.yml/badge.svg)](https://github.com/therandomsecurityguy/khalifa/actions/workflows/ci.yml) [![License: BSD 3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![Built with TypeScript](https://img.shields.io/badge/Built_with-TypeScript-3178c6.svg)](https://www.typescriptlang.org) [![Built with Node.js](https://img.shields.io/badge/Built_with-Node.js-339933.svg)](https://nodejs.org)
+<p align="center">
+<a href="https://github.com/therandomsecurityguy/khalifa/actions/workflows/ci.yml"><img src="https://github.com/therandomsecurityguy/khalifa/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/License-BSD_3--Clause-blue.svg" alt="BSD 3-Clause"></a>
+<a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-24-339933.svg" alt="Node.js 24"></a>
+<a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-3178C6.svg?logo=typescript&logoColor=white" alt="TypeScript"></a>
+</p>
+
+---
+
+## Features
+
+| Surface             | What you get                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Collection**      | 30+ AWS services via [`SecurityGraphCollectorRole`](templates/SecurityGraphCollectorRole.yaml). A hub account collects; each member account gets the spoke role.                                                                                                                                                                                                                                            |
+| **Graph**           | Typed vertices and edges in Neptune. Same input, same Gremlin traversal.                                                                                                                                                                                                                                                                                                                                    |
+| **CIEM**            | IAM decomposition, effective permissions, escalation paths, CloudTrail-grounded rightsizing.                                                                                                                                                                                                                                                                                                                |
+| **Least privilege** | Sweep of roles and users. Deployable policy recommendations.                                                                                                                                                                                                                                                                                                                                                |
+| **Risk**            | Scheduled rules and attack-path traversals on the live graph.                                                                                                                                                                                                                                                                                                                                               |
+| **Detection**       | GuardDuty detector coverage per region (including `MISSING`), Security Hub findings joined to internet-exposed resources (RULE-017, RULE-018), CloudTrail anomaly signals: root activity, secret reads from unseen IPs, AccessDenied bursts (RULE-020 to RULE-022), canary credential tripwires (RULE-023), and secret scanning of Lambda environment variables plus IMDSv1-with-role detection (RULE-024). |
+| **Exposure**        | Public EKS control planes (RULE-019) plus public S3/RDS and world-open security groups, derived from collected endpoint and network config.                                                                                                                                                                                                                                                                 |
+| **Compliance**      | CIS AWS Foundations v3.0, SOC 2 Type II, ISO 27001:2022, per-control evidence.                                                                                                                                                                                                                                                                                                                              |
+| **Runtime**         | EKS Helm + `khalifa-eks` / `khalifa-data` / `khalifa-registry`. CDK Lambda remains for the in-repo pipeline.                                                                                                                                                                                                                                                                                                |
+
+---
 
 ## Architecture
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system diagram and design.
+| Workload                                               | Where  | Role                                                                                                           |
+| ------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------- |
+| [Collector](lambdas/collector)                         | EKS    | Per-account, per-region inventory. Organization and incremental commands reuse this runtime.                   |
+| [Graph writer](lambdas/graph-writer)                   | EKS    | Bounded Neptune upserts. ClusterIP-only, token-gated.                                                          |
+| [Rule runner](packages/risk-engine)                    | EKS    | Scheduled Gremlin rules and scoring on the live graph.                                                         |
+| [Compliance](packages/risk-engine)                     | EKS    | CIS / SOC 2 / ISO evidence CronJob.                                                                            |
+| [API](api-service) / [UI](ui)                          | EKS    | Cognito or Cloudflare Access JWT. Issues, attack paths, compliance, identity.                                  |
+| [Policy evaluator](lambdas/policy-evaluator)           | Lambda | Effective permissions, trust edges, rightsizing.                                                               |
+| [CloudTrail analyzer](lambdas/cloudtrail-analyzer)     | EKS    | Athena over CloudTrail → AccessAnalyzerCache and anomaly signals written to the graph.                         |
+| [Least-privilege sweep](lambdas/least-privilege-sweep) | Lambda | Daily rightsizing vs CloudTrail usage.                                                                         |
+| [DSPM scanner](lambdas/dspm-scanner)                   | EKS    | Secret scanning of S3 objects and Lambda environment variables into the graph (Macie primary, regex fallback). |
 
-## 1. What is Khalifa?
+Full topology: [ARCHITECTURE.md](ARCHITECTURE.md). IRSA and runbooks: [OPERATIONAL.md](OPERATIONAL.md).
 
-[](#1-what-is-khalifa)
+---
 
-Khalifa is an agentless ingestion pipeline that sits between your AWS Organization and a Neptune-backed security graph. Every account, resource, and finding gets collected on a schedule, normalized into a graph model you own, and evaluated locally against risk rules, attack-path traversals, and CIEM effective-permission logic.
+## Install
 
-**Why it was built:** Cloud estates grow faster than any team can review them. A misconfigured S3 bucket, an over-privileged IAM role, or a publicly exposed RDS instance turns into a real finding before anyone notices. Khalifa gives those resources a graph: collected, scored, joined to attack paths, and rendered as issues you can act on.
-
-**How it works:** Collectors run on an EventBridge schedule (or as Kubernetes CronJobs) and assume into every account in the AWS Organization via a cross-account role. They inventory 30+ AWS services, decompose IAM into policy statements + effective permissions, pull Security Hub and GuardDuty findings, and stream everything into Neptune. The Risk Engine then runs Gremlin traversals against the live graph to produce prioritized issues, attack paths, and compliance evaluations against CIS, SOC 2, and ISO 27001 — without ever moving data out of your AWS account.
-
-## 2. Run your security pipeline with Khalifa
-
-[](#2-run-your-security-pipeline-with-khalifa)
-
-### Install
-
-[](#install)
-
-**Prerequisites:** Node.js 20+, AWS CDK CLI, an AWS Organization with a delegated admin account, and a Neptune cluster reachable from your compute.
+Node.js 24, npm 11.
 
 ```bash
-git clone https://github.com/therandomsecurityguy/khalifa
+git clone https://github.com/therandomsecurityguy/khalifa.git
 cd khalifa
-npm ci --workspaces
+npm ci
+npm run ci:quality
 ```
 
-Deploy the cross-account collector role into every member account from the `templates/SecurityGraphCollectorRole.yaml` template, then bootstrap the ingestion stack.
+```bash
+npm test
+bash scripts/validate-deployment-modules.sh
+```
 
-### Quickstart
+Member-account access is hub-and-spoke from a dedicated collector account, not the organization management account. The hub IRSA roles (`khalifa-organization-collector` and `khalifa-incremental-collector`) assume `SecurityGraphCollectorRole` in each member account with ExternalId. The member template is [`templates/SecurityGraphCollectorRole.yaml`](templates/SecurityGraphCollectorRole.yaml). In the hub account it runs with `CreateCollectorRole=false` and attaches the collection policy to the two IRSA roles.
 
-[](#quickstart)
+---
 
-There are two ways to run Khalifa. Both end up in the same place (a populated security graph with risk findings) but the first is faster to try, the second is the production setup.
+## Deploy
 
-**Option A: Lambda + EventBridge (development / small scale)**
+Reusable packaging is in this repo. Environment wiring is not.
 
-The Lambda stack uses EventBridge schedules, Step Functions for parallel account fan-out, and a separate daily CloudTrail analyzer. It scales to roughly 20 accounts without tuning.
+| Module                                                                   | Creates                                                                                       |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| [`deploy/terraform/khalifa-registry`](deploy/terraform/khalifa-registry) | Immutable ECR + GitHub OIDC publish role                                                      |
+| [`deploy/terraform/khalifa-data`](deploy/terraform/khalifa-data)         | CMK, Neptune, DynamoDB, SQS/SNS, Cognito, secrets, IRSA                                       |
+| [`deploy/terraform/khalifa-eks`](deploy/terraform/khalifa-eks)           | Helm release into an existing namespace                                                       |
+| [`deploy/helm/khalifa`](deploy/helm/khalifa)                             | API, UI, rule-runner, collectors, graph-writer, compliance, CloudTrail analyzer, DSPM scanner |
+
+A deployment repository pins a release tag, creates namespace `khalifa`, and passes cluster / VPC / account inputs. `helm_values` from `khalifa-data` is non-secret. Runtime credentials stay in Secrets Manager and land as `khalifa-runtime` (`externalSecrets.targetName`).
+
+> [!IMPORTANT]
+> Do not copy ExternalId or the graph-writer token into Helm values or Terraform state. `khalifa-eks` will not create the namespace (`create_namespace = false`).
+
+Collection and compliance share the rule-runner image. Command selects the entrypoint:
+
+| Command                  | Model      | Required configuration                                                                                               | Retry owner                                                                  |
+| ------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `organization-collector` | CronJob    | `AWS_REGION`, collection scope, `HOME_ACCOUNT_ID`, `COLLECTOR_EXTERNAL_ID`, `GRAPH_WRITER_URL`, `GRAPH_WRITER_TOKEN` | batch retries on 503, account retries for transient failures, then Job retry |
+| `incremental-collector`  | Deployment | organization settings + `SQS_QUEUE_URL`                                                                              | SQS visibility + DLQ                                                         |
+| `graph-writer`           | Deployment | `AWS_REGION`, `NEPTUNE_ENDPOINT`, `GRAPH_WRITER_TOKEN`                                                               | Neptune retries                                                              |
+| `compliance`             | CronJob    | `NEPTUNE_ENDPOINT`, `COMPLIANCE_EVIDENCE_TABLE`, `COMPLIANCE_REPORTS_TABLE`                                          | Job retry                                                                    |
+| `cloudtrail-analyzer`    | CronJob    | `ATHENA_DATABASE`, `ATHENA_WORKGROUP`, `ATHENA_RESULTS_S3_LOCATION`, `ACCESS_ANALYZER_TABLE`                         | Job retry                                                                    |
+| `risk`                   | CronJob    | `NEPTUNE_ENDPOINT`                                                                                                   | Job retry                                                                    |
+
+`COLLECTION_CONCURRENCY` is capped at 20. Every command supports `--check`. Workers drain on `SIGINT` / `SIGTERM`. Graph-writer mutations need a bearer token; NetworkPolicy allows collector pods only.
+
+Release tags publish digest-only ECR images, Lambda archives, the Helm chart, Terraform modules, an npm SBOM, and SHA-256 checksums.
+
+### CDK / Lambda
+
+[`cdk/`](cdk) is the EventBridge + Step Functions + Lambda path. Use it for synthesis and small-scale runs, not as a second production owner.
 
 ```bash
 cd cdk
 npm install
 npm run build
-
-cdk deploy KhalifaStack \
-  --neptune-endpoint neptune-cluster.us-east-1.amazonaws.com \
-  --issues-table-name SecurityIssues \
-  --access-analyzer-table AccessAnalyzerCache \
-  --athena-database khalifa_cloudtrail_db \
-  --cloudtrail-s3-location s3://cloudtrail-logs/AWSLogs/
+HOME_ACCOUNT_ID=111122223333 \
+NEPTUNE_CLUSTER_RESOURCE_ID=cluster-12345678901234567890123456789012 \
+COLLECTION_ACCOUNT_IDS=111122223333,222233334444 \
+AWS_REGION=us-east-1 \
+cdk deploy SecurityGraphIngestionStack
 ```
 
-Every two hours the collector ingests all member accounts. CloudTrail analysis runs daily at 02:00 UTC. The policy evaluator runs every six hours and after each collector pass. The risk engine runs hourly.
+`npm run package:lambdas` writes nine archives under `artifacts/lambdas/`. `npm run smoke:lambdas` checks `index.handler`. `npm run smoke:containers` builds the API, UI, and runtime images.
 
-**Option B: EKS + CronJob (production / >20 accounts)**
+---
 
-The EKS stack runs the API service, rule runner, and UI as Kubernetes workloads. It is built for sustained load across hundreds of accounts and gives you a UI plus a REST API.
+## Configuration
+
+EKS uses [`deploy/helm/khalifa/values.yaml`](deploy/helm/khalifa/values.yaml). The UI proxies `/api` to the in-cluster API Service. Lambda uses:
+
+| Variable                          | Description                                                                       | Default                         |
+| --------------------------------- | --------------------------------------------------------------------------------- | ------------------------------- |
+| `NEPTUNE_ENDPOINT`                | Neptune Gremlin endpoint                                                          | —                               |
+| `NEPTUNE_ENDPOINT` (auth)         | Graph access uses SigV4 from the execution role; no Neptune auth secret is read   | —                               |
+| `ISSUES_TABLE`                    | DynamoDB issues table                                                             | `SecurityIssues`                |
+| `ACCESS_ANALYZER_TABLE`           | CloudTrail usage cache                                                            | `AccessAnalyzerCache`           |
+| `ATHENA_DATABASE`                 | Glue database for CloudTrail                                                      | `khalifa_cloudtrail_db`         |
+| `ATHENA_WORKGROUP`                | Athena workgroup                                                                  | `khalifa-cloudtrail-analysis`   |
+| `CLOUDTRAIL_S3_LOCATION`          | CloudTrail S3 prefix                                                              | `s3://cloudtrail-logs/AWSLogs/` |
+| `ANALYSIS_DAYS`                   | CloudTrail lookback                                                               | `90`                            |
+| `AWS_REGION`                      | AWS region                                                                        | `us-east-1`                     |
+| `HOME_ACCOUNT_ID`                 | Account that uses ambient credentials                                             | —                               |
+| `COLLECTOR_EXTERNAL_ID`           | Member-role ExternalId                                                            | —                               |
+| `GRAPH_WRITER_TOKEN`              | Bearer token for `/mutations`                                                     | —                               |
+| `COLLECTION_ACCOUNT_IDS`          | Approved account IDs; names come from `ListAccounts` when the hub may call it | —                               |
+| `COLLECTION_PARENT_IDS`           | Approved org root or OU IDs (still requires Organizations APIs)                   | —                               |
+| `COLLECTION_REGIONS`              | Approved Regions                                                                  | —                               |
+| `GRAPH_WRITER_FUNCTION_NAME`      | Graph-writer Lambda for analyzer anomalies                                        | —                               |
+| `CANARY_PRINCIPAL_ARNS`           | Comma-separated canary IAM user ARNs; any CloudTrail activity becomes RULE-023    | —                               |
+| `RATE_LIMIT_PER_MINUTE`           | Per-identity API request limit per minute                                         | 600                             |
+| `RATE_LIMIT_EXPENSIVE_PER_MINUTE` | Per-identity limit on expensive endpoints (attack paths, resource graph, reports) | 60                              |
+| `DSPM_CLASSIFY_BUDGET_MS`         | Hard CPU budget (ms) for classifying untrusted S3 content per scan                | 30000                           |
+| `NEPTUNE_MUTATION_CHUNK`          | Mutations per Gremlin write traversal (1-200)                                     | 25                              |
+| `COLLECTION_STAGE_CONCURRENCY`    | Independent collection stages in flight (1-20)                                    | 4                               |
+| `COLLECTION_RESOURCE_CONCURRENCY` | Per-resource fan-out within a stage, e.g. S3 buckets and tag chunks (1-20)        | 5                               |
+
+Canary credentials are deployed with `ENABLE_CANARIES=true` in the CDK environment (`cdk/bin/khalifa.ts`): two permission-less IAM users (`khalifa-canary-1/2`) whose access keys are stored in Secrets Manager (`khalifa-canary/credentials-1/2`). The keys have no legitimate use, so any CloudTrail activity from them is treated as a security incident. Off by default.
+
+The DSPM scanner reads object content only from buckets in `DSPM_BUCKET_ALLOWLIST` (Terraform: `dspm_bucket_allowlist`); with none configured it can list bucket names but read no objects. Its `DSPM_SCAN_MODE` defaults to `tagged-only`, which samples object content only from buckets tagged `dspm-scan=true`; `all` samples every bucket and `off` disables sampling. Macie-covered buckets are never downloaded in any mode.
+
+The DSPM scanner can be isolated in a VPC with no internet egress by setting `SCANNER_VPC_ID`, `SCANNER_PRIVATE_SUBNET_IDS`, and `SCANNER_AVAILABILITY_ZONES` (optionally `SCANNER_SECURITY_GROUP_ID`) in the CDK environment. When set, the scanner reaches S3, Macie, Lambda, and CloudWatch Logs through interface endpoints only. Off by default.
+
+Event-driven scanning is opt-in via `ENABLE_DSPM_EVENT_TRIGGER=true`: an SQS queue plus a `sqsHandler` Lambda scan individual objects on S3 events for near-real-time detection, in addition to the daily schedule. Point buckets at the queue with an S3 event notification.
+
+> [!NOTE]
+> Cross-account trust is the two hub collector IRSA roles plus ExternalId. In the hub account, deploy the member template with `CreateCollectorRole=false` so home-account collection uses the same policy without self-assumption.
+
+---
+
+## API
+
+Unauthenticated: `/health`, `/livez`, `/readyz`. Everything else needs a Cognito JWT. Groups: `khalifa-admin`, `khalifa-analyst`, `khalifa-viewer`.
+
+| Endpoint                                         | Description                                                           |
+| ------------------------------------------------ | --------------------------------------------------------------------- |
+| `GET /issues`                                    | Filters: `severity`, `team`, `status`, `ruleId`, `limit`, `nextToken`; `order` = `desc` (default) or `asc` by creation time |
+| `GET /issues/:id`                                | Issue plus attack path                                                |
+| `GET /issues/counts` · `/issues/stats`           | Severity counts                                                       |
+| `GET /attack-paths/search`                       | Presets or a resource to start/end at, `account`, `maxPathLength`     |
+| `GET /accounts`                                  | Account IDs and names                                                 |
+| `GET /resources/:arn`                            | Resource, neighbors, issues                                           |
+| `GET /resources/search`                          | `label=`                                                              |
+| `GET /compliance/frameworks`                     | List, `/:framework`, `/controls`, `/report`, `/drift`                 |
+| `GET /identity/effective-permissions/:principal` | Computed effective permissions                                        |
+| `GET /identity/escalation-paths`                 | Escalation paths                                                      |
+| `GET /identity/unused-permissions`               | Effective perms vs CloudTrail                                         |
+| `GET /identity/rightsizing/:principal`           | Least-privilege recommendation                                        |
+| `GET /identity/trust-graph`                      | Cross-account trust                                                   |
+| `GET /identity/least-privilege`                  | Sweep findings and `/summary`                                         |
 
 ```bash
-# 1. Build and push images
-cd api-service && docker build -t security-graph-api:latest . && docker push <ecr>/security-graph-api:v1.0.0
-cd ../packages/risk-engine && docker build -t security-graph-rule-runner:latest . && docker push <ecr>/security-graph-rule-runner:v1.0.0
-
-# 2. Deploy CDK
-cd ../../cdk
-cdk deploy SecurityGraphEksStack \
-  --vpc-id vpc-12345678 \
-  --neptune-endpoint neptune-cluster.us-east-1.amazonaws.com \
-  --issues-table-name SecurityIssues \
-  --certificate-arn arn:aws:acm:us-east-1:... \
-  --cognito-user-pool-id us-east-1_xxxxx \
-  --cognito-client-id xxxxx
-
-# 3. Apply manifests
-kubectl apply -f eks-manifests/
-```
-
-Use this when you want to serve a UI to analysts, expose a stable REST API, or run the rule runner on a schedule that survives control-plane hiccups.
-
-### Two deployment options
-
-[](#two-deployment-options)
-
-| Approach | Use Case | Complexity |
-|----------|----------|------------|
-| Lambda + EventBridge | Development / small scale (<20 accounts) | Lower |
-| EKS + CronJob | Production (>20 accounts, multi-tenant API) | Higher |
-
-### Configuration
-
-[](#configuration)
-
-Environment variables are shared across both stacks. The CDK stack wires sane defaults; override at deploy time or via the Kubernetes `ConfigMap` (`eks-manifests/01-configmap.yaml`).
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NEPTUNE_ENDPOINT` | Neptune cluster endpoint | — |
-| `NEPTUNE_AUTH_SECRET_ARN` | Secrets Manager ARN for Neptune auth | — |
-| `ISSUES_TABLE` | DynamoDB table for issues | `SecurityIssues` |
-| `ACCESS_ANALYZER_TABLE` | DynamoDB table for CloudTrail usage cache | `AccessAnalyzerCache` |
-| `ATHENA_DATABASE` | Glue database for CloudTrail logs | `khalifa_cloudtrail_db` |
-| `ATHENA_WORKGROUP` | Athena workgroup | `khalifa-cloudtrail-analysis` |
-| `CLOUDTRAIL_S3_LOCATION` | S3 prefix for CloudTrail logs | `s3://cloudtrail-logs/AWSLogs/` |
-| `ANALYSIS_DAYS` | CloudTrail lookback window | `90` |
-| `AWS_REGION` | AWS region | `us-east-1` |
-| `LOG_LEVEL` | Logging level | `info` |
-| `RULE_RUNNER_SCHEDULE` | Cron schedule | `0 */6 * * *` (every 6h) |
-
-> Cross-account access is granted via the IAM role defined in `templates/SecurityGraphCollectorRole.yaml`. Deploy it once per member account with a unique external ID per deployment.
-
-### API reference
-
-[](#api-reference)
-
-All routes except `/health` require a valid Cognito bearer JWT. RBAC roles are mapped from Cognito groups: `khalifa-admin` → Admin, `khalifa-analyst` → Analyst, `khalifa-viewer` → Viewer.
-
-**Issues & risk**
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check (unauthenticated) |
-| `GET /issues` | List issues with filters (Viewer+) |
-| `GET /issues/:id` | Get issue details with attack path (Viewer+) |
-| `GET /issues/counts` | Get issue counts by severity (Viewer+) |
-| `GET /issues/stats` | Get detailed statistics (Viewer+) |
-| `GET /attack-paths?fromSelector=X&toSelector=Y` | Find attack paths (Viewer+) |
-| `GET /resources/:arn` | Get resource with neighbors and issues (Viewer+) |
-| `GET /resources/search?label=EC2Instance` | Search resources (Viewer+) |
-
-**Compliance**
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /compliance/frameworks` | List available compliance frameworks (Viewer+) |
-| `GET /compliance/frameworks/:framework` | Get framework overview with control summaries (Viewer+) |
-| `GET /compliance/frameworks/:framework/controls` | List all controls for a framework (Viewer+) |
-| `GET /compliance/frameworks/:framework/controls/:controlId` | Get control details with evidence (Viewer+) |
-| `GET /compliance/frameworks/:framework/report` | Generate compliance report (Viewer+) |
-| `GET /compliance/frameworks/:framework/drift` | Detect configuration drift since last evaluation (Viewer+) |
-
-**CIEM / Identity**
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /identity/effective-permissions/:principal` | Get computed effective permissions for a principal |
-| `GET /identity/escalation-paths` | List detected escalation paths with filters |
-| `GET /identity/unused-permissions?principal=X&days=90` | Find unused permissions by comparing effective perms vs CloudTrail usage |
-| `GET /identity/rightsizing/:principal?safetyMarginDays=7` | Generate least-privilege policy recommendation |
-| `GET /identity/trust-graph?account=X` | Retrieve cross-account trust relationships as a graph |
-
-**Query parameters for `/issues`**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `severity` | string[] | Filter by severity (critical, high, medium, low) |
-| `team` | string[] | Filter by owning team |
-| `status` | string[] | Filter by status (open, resolved, suppressed) |
-| `ruleId` | string | Filter by rule ID |
-| `limit` | number | Max results (default: 50, max: 1000) |
-| `nextToken` | string | Pagination token |
-
-**Examples**
-
-```bash
-# Get critical issues
-curl "https://api.example.com/issues?severity=critical&status=open&limit=100" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Find attack paths
-curl "https://api.example.com/attack-paths?fromSelector=Internet&toSelector=S3Bucket&maxPathLength=4" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Get CIS compliance report
-curl "https://api.example.com/compliance/CIS_AWS_FOUNDATIONS/report" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Get effective permissions for a role
-curl "https://api.example.com/identity/effective-permissions/arn:aws:iam::123456:role/AdminRole" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Get rightsizing recommendation
-curl "https://api.example.com/identity/rightsizing/arn:aws:iam::123456:role/DataRole?safetyMarginDays=7&includeReadonlySafe=true" \
+curl "https://api.example.com/api/issues?severity=critical&status=open&limit=100" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Different operating models
-
-[](#different-operating-models)
-
-**1. Single-account dev (like Quickstart Option A)**
-
-The Lambda stack fans out from a single delegated admin account, assumes into each member account via the collector role, and writes directly to a Neptune cluster in the same VPC. Step Functions parallelize the per-account work.
-
-```bash
-cdk deploy KhalifaStack
-```
-
-**2. Multi-account org with EKS backend (like Quickstart Option B)**
-
-The EKS stack adds an API service, a UI, and a Kubernetes CronJob for the rule runner. The API is fronted by an ALB with Cognito OIDC, and the rule runner executes Gremlin traversals on the same Neptune cluster.
-
-```bash
-cdk deploy SecurityGraphEksStack
-kubectl apply -f eks-manifests/
-```
-
-**3. Multi-account org with read replicas**
-
-Run collectors in each region and replicate into a single Neptune cluster via Neptune Streams. Use this when accounts are concentrated in specific regions or you need to keep data residency boundaries.
-
-> Full deployment reference: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`OPERATIONAL.md`](OPERATIONAL.md)
-
-### Compliance frameworks
-
-[](#compliance-frameworks)
-
-Khalifa includes automated compliance evaluation against three industry-standard frameworks with 124 controls and 40+ automated evaluators that run Gremlin graph queries against your security data.
-
-**CIS AWS Foundations Benchmark v3.0 (78 controls)**
-
-Covers the foundational security configurations for AWS accounts:
-
-| Section | Controls | Focus |
-|---------|----------|-------|
-| 1. IAM | 18 | Root account, MFA, password policy, access keys |
-| 2. Logging | 10 | CloudTrail, Config, S3 logging |
-| 3. Monitoring | 28 | CloudWatch alarms, GuardDuty, Config rules |
-| 4. Networking | 12 | VPC flow logs, security groups, NACLs |
-| 5. Data Protection | 10 | Encryption, KMS rotation, backup |
-
-**SOC 2 Type II (22 controls)**
-
-Maps to Trust Services Criteria:
-
-| Section | Controls | Focus |
-|---------|----------|-------|
-| CC6 | 8 | Logical access, authentication, authorization |
-| CC7 | 6 | Monitoring, incident response, change management |
-| CC8 | 4 | Risk mitigation, system boundaries |
-| CC9 | 4 | Additional criteria |
-
-**ISO 27001:2022 (24 controls)**
-
-Based on Annex A controls:
-
-| Section | Controls | Focus |
-|---------|----------|-------|
-| A.5 | 4 | Organizational controls, policies |
-| A.6 | 4 | People controls, onboarding, training |
-| A.8 | 6 | Technological controls, encryption, logging |
-| A.9 | 4 | Physical and environmental security |
-| A.12 | 3 | Operations security, vulnerability management |
-| A.13 | 3 | Communications security, network controls |
-
-The compliance engine runs Gremlin evaluators that query the live graph, produce per-control evidence (pass/fail/manual), and write results to DynamoDB for the UI to render.
-
-## 3. Architecture
-
-[](#3-architecture)
-
-[Khalifa flow diagram](ARCHITECTURE.md)
-
-**[Collector](lambdas/collector):** runs in a delegated admin account, assumes into every member account via the cross-account role, and inventories 30+ AWS services per pass. Writes raw resource nodes to Neptune.
-
-**[Policy Evaluator](lambdas/policy-evaluator):** resolves IAM identity + resource + boundary + SCP policies into net effective permissions per principal, and traverses cross-account trust edges up to 3 hops to surface escalation paths.
-
-**[CloudTrail Analyzer](lambdas/cloudtrail-analyzer):** runs Athena queries against the CloudTrail S3 logs on a daily schedule, with a 90-day lookback window. Writes usage data to the `AccessAnalyzerCache` DynamoDB table for the rightsizer.
-
-**[Risk Engine](packages/risk-engine):** runs Gremlin traversals against the live graph on a schedule, producing prioritized issues, attack paths, and compliance evaluations. Each rule ships with severity, scoring, and remediation guidance.
-
-**[API Service](api-service):** REST API fronted by ALB + Cognito OIDC. Exposes issues, attack paths, resources, compliance reports, and CIEM identity endpoints. RBAC enforced from Cognito groups.
-
-**[UI](ui):** Next.js dashboard for issues, attack paths, and compliance. Renders control-level evidence, drift detection, and CSV export.
-
-### Features
-
-[](#features)
-
-- **Agentless ingestion:** no agents to install in member accounts; collectors assume via a single cross-account role defined in [`templates/SecurityGraphCollectorRole.yaml`](templates/SecurityGraphCollectorRole.yaml)
-- **Deterministic graph model:** every resource, IAM statement, and finding becomes a typed node with explicit edges; Gremlin returns the same traversal for the same input every time
-- **30+ AWS services collected:** compute, storage, database, identity, network, security, logging, serverless, secrets, and backup
-- **Risk + attack path + CIEM in one pass:** rules, traversals, and effective-permission evaluation all run against the same live graph
-- **CIEM with CloudTrail grounding:** effective permissions are joined to actual usage from Athena over CloudTrail, with rightsizing recommendations and a configurable safety margin
-- **Compliance built in:** CIS v3.0, SOC 2 Type II, and ISO 27001:2022 evaluated by automated Gremlin queries with per-control evidence
-- **Two deployment modes:** Lambda + EventBridge for development, EKS + CronJob for production — same data model, same graph, same API
-
-## 4. Repo structure
-
-[](#4-repo-structure)
-
-**Infrastructure**
-
-[`cdk/`](cdk)
-
-CDK stacks: `KhalifaStack` (Lambda + EventBridge) and `SecurityGraphEksStack` (EKS + ALB + Cognito)
-
-[`templates/`](templates)
-
-Cross-account IAM role template deployed once per member account
-
-**Collectors**
-
-[`lambdas/list-accounts`](lambdas/list-accounts)
-
-Lists org accounts from AWS Organizations
-
-[`lambdas/collector`](lambdas/collector)
-
-Per-account collector: 30+ AWS services + enhanced IAM decomposition
-
-[`lambdas/graph-writer`](lambdas/graph-writer)
-
-Neptune writer for raw resource nodes
-
-[`lambdas/incremental-collector`](lambdas/incremental-collector)
-
-Event-driven updates via EventBridge → SQS
-
-[`lambdas/policy-evaluator`](lambdas/policy-evaluator)
-
-CIEM engine: effective permissions, escalation paths, rightsizing
-
-[`lambdas/cloudtrail-analyzer`](lambdas/cloudtrail-analyzer)
-
-Athena queries over CloudTrail S3 logs → DynamoDB cache
-
-**Engine**
-
-[`packages/risk-engine`](packages/risk-engine)
-
-Risk rules, attack-path traversals, scoring, compliance evaluators
-
-**Service**
-
-[`api-service/`](api-service)
-
-REST API (Express) — issues, attack paths, resources, compliance, identity
-
-[`ui/`](ui)
-
-Next.js dashboard — issues, attack paths, compliance
-
-**Deploy**
-
-[`eks-manifests/`](eks-manifests)
-
-Kubernetes manifests for API service, rule runner CronJob, HPA, NetworkPolicy
-
-**Docs**
-
-[`ARCHITECTURE.md`](ARCHITECTURE.md)
-
-System architecture, data model, ingestion topology
-
-[`OPERATIONAL.md`](OPERATIONAL.md)
-
-Runbooks for the rule runner, Neptune, IRSA, and incident response
-
-[`CONTRIBUTING.md`](CONTRIBUTING.md)
-
-Local development, workspaces, CI conventions
-
-[`CHANGELOG.md`](CHANGELOG.md)
-
-Release history
+---
+
+## Compliance
+
+Gremlin evaluators write pass / fail / manual evidence to DynamoDB. 97 controls, 35 automated.
+
+| Framework                | Controls | Focus                                                     |
+| ------------------------ | -------: | --------------------------------------------------------- |
+| CIS AWS Foundations v3.0 |       65 | IAM, logging, monitoring, networking, data protection     |
+| SOC 2 Type II            |       14 | CC6–CC9 access, monitoring, change, risk                  |
+| ISO 27001:2022           |       18 | Annex A organizational, people, technological, operations |
+
+---
+
+## Repository
+
+| Path                                                                                                       | Contents                                                                                           |
+| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [`lambdas/`](lambdas)                                                                                      | Collector, incremental, graph-writer, policy-evaluator, CloudTrail, least-privilege, DSPM, runtime |
+| [`packages/risk-engine`](packages/risk-engine)                                                             | Rules, scoring, compliance                                                                         |
+| [`api-service/`](api-service) · [`ui/`](ui)                                                                | REST API and Next.js UI                                                                            |
+| [`deploy/`](deploy)                                                                                        | Helm chart, Terraform modules, fixtures                                                            |
+| [`templates/`](templates)                                                                                  | Member collection role (`SecurityGraphCollectorRole`)                                              |
+| [`scripts/`](scripts)                                                                                      | Helm/Terraform validation, Helm kind smoke, container smoke, Lambda package/smoke, npm audit       |
+| [`cdk/`](cdk)                                                                                              | Lambda + EventBridge stack                                                                         |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`OPERATIONAL.md`](OPERATIONAL.md) · [`CHANGELOG.md`](CHANGELOG.md) | Design, runbooks, history                                                                          |
 
 ---
 
 ## License
-
-[](#license)
 
 BSD 3-Clause. See [LICENSE](LICENSE).

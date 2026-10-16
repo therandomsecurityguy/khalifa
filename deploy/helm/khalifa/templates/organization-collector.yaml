@@ -1,0 +1,72 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "khalifa.fullname" . }}-org-collector
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: org-collector
+spec:
+  schedule: {{ .Values.organizationCollector.schedule | quote }}
+  {{- with .Values.organizationCollector.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.organizationCollector.suspend }}
+  concurrencyPolicy: {{ .Values.organizationCollector.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.organizationCollector.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.organizationCollector.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.organizationCollector.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "org-collector") | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.organizationCollector.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.organizationCollector.ttlSecondsAfterFinished }}
+      backoffLimit: {{ .Values.organizationCollector.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "khalifa.selectorLabels" (dict "root" . "component" "org-collector") | nindent 12 }}
+            {{- with .Values.organizationCollector.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.organizationCollector.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "organizationCollector" "suffix" "org-collector") }}
+          automountServiceAccountToken: {{ .Values.serviceAccounts.organizationCollector.automountServiceAccountToken }}
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "khalifa.podSecurityContext" . | nindent 12 }}
+          {{- if .Values.topologySpread.enabled }}
+          topologySpreadConstraints:
+            {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "org-collector") | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: org-collector
+              image: {{ required "organizationCollector.image must be an immutable repository@sha256 digest" .Values.organizationCollector.image | quote }}
+              imagePullPolicy: IfNotPresent
+              args: ["organization-collector"]
+              securityContext:
+                {{- include "khalifa.containerSecurityContext" . | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-config
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-collection
+                {{- include "khalifa.collectionEnvSecrets" . | nindent 16 }}
+                {{- include "khalifa.extraExternalSecretRef" (dict "root" . "component" "organizationCollector" "already" (list (include "khalifa.collectorSecretName" .) (include "khalifa.graphWriterTokenSecretName" .))) | nindent 16 }}
+              resources:
+                {{- toYaml .Values.organizationCollector.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

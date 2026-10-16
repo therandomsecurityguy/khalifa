@@ -1,149 +1,207 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Role for Security Graph ingestion - deployed via StackSet'
+Description: 'Khalifa least-privilege AWS resource collection policy and member role'
 Parameters:
   TrustedPrincipalArn:
     Type: String
-    Description: 'ARN of the hub principal that assumes this role'
+    AllowedPattern: '^arn:aws(-[a-z]+)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$'
+    Description: 'Exact hub organization-collector IRSA role allowed to collect member accounts'
   AdditionalTrustedPrincipalArn:
     Type: String
     Default: ''
-    Description: 'Optional second hub principal trusted to assume this role'
+    AllowedPattern: '^$|^arn:aws(-[a-z]+)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$'
+    Description: 'Optional second hub IRSA role, typically incremental-collector'
   ExternalId:
     Type: String
+    NoEcho: true
     MinLength: 16
-    Description: 'External ID the hub must present when assuming this role'
-Conditions:
-  HasAdditionalTrustedPrincipal: !Not [!Equals [!Ref AdditionalTrustedPrincipalArn, '']]
-Resources:
+    MaxLength: 1224
+  CollectorRoleName:
+    Type: String
+    Default: SecurityGraphCollectorRole
+    AllowedPattern: '^[A-Za-z0-9+=,.@_-]{1,64}$'
   CreateCollectorRole:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  ExistingRoleName:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[A-Za-z0-9+=,.@_-]{1,64}$'
+  AdditionalExistingRoleName:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[A-Za-z0-9+=,.@_-]{1,64}$'
+Rules:
+  ExistingRoleRequired:
+    RuleCondition: !Equals [!Ref CreateCollectorRole, 'false']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ExistingRoleName, '']]
+        AssertDescription: 'ExistingRoleName is required when CreateCollectorRole is false'
+Conditions:
+  ShouldCreateCollectorRole: !Equals [!Ref CreateCollectorRole, 'true']
+  HasAdditionalTrustedPrincipal: !Not [!Equals [!Ref AdditionalTrustedPrincipalArn, '']]
+  HasAdditionalExistingRole: !Not [!Equals [!Ref AdditionalExistingRoleName, '']]
+Resources:
+  CollectorRole:
     Type: AWS::IAM::Role
+    Condition: ShouldCreateCollectorRole
     Properties:
-      RoleName: SecurityGraphCollectorRole
+      RoleName: !Ref CollectorRoleName
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Ref TrustedPrincipalArn
+              AWS: !If
+                - HasAdditionalTrustedPrincipal
+                - - !Ref TrustedPrincipalArn
+                  - !Ref AdditionalTrustedPrincipalArn
+                - !Ref TrustedPrincipalArn
             Action: sts:AssumeRole
             Condition:
               StringEquals:
                 sts:ExternalId: !Ref ExternalId
-          - !If
-            - HasAdditionalTrustedPrincipal
-            - Effect: Allow
-              Principal:
-                AWS: !Ref AdditionalTrustedPrincipalArn
-              Action: sts:AssumeRole
-              Condition:
-                StringEquals:
-                  sts:ExternalId: !Ref ExternalId
-            - !Ref AWS::NoValue
       Path: /
-      Policies:
-        - PolicyName: CollectionPolicyV3
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - access-analyzer:ListAnalyzers
-                  - apigateway:GET
-                  - backup:ListBackupPlans
-                  - backup:ListBackupVaults
-                  - cloudtrail:DescribeTrails
-                  - cloudtrail:GetTrailStatus
-                  - cloudtrail:GetEventSelectors
-                  - cloudwatch:DescribeAlarms
-                  - config:DescribeConfigRules
-                  - config:DescribeConfigurationRecorders
-                  - config:DescribeConfigurationRecorderStatus
-                  - config:DescribeDeliveryChannels
-                  - dynamodb:DescribeTable
-                  - dynamodb:ListTables
-                  - ec2:Describe*
-                  - ec2:DescribeFlowLogs
-                  - ec2:DescribeVolumes
-                  - ec2:GetEbsEncryptionByDefault
-                  - ecr:DescribeRepositories
-                  - ecr:ListImages
-                  - eks:DescribeCluster
-                  - eks:ListClusters
-                  - elasticache:DescribeCacheClusters
-                  - elasticfilesystem:DescribeFileSystems
-                  - elasticloadbalancing:DescribeLoadBalancers
-                  - es:DescribeDomain
-                  - es:ListDomainNames
-                  - events:ListEventBuses
-                  - guardduty:GetAdministratorAccount
-                  - guardduty:GetDetector
-                  - guardduty:GetFindings
-                  - guardduty:ListDetectors
-                  - guardduty:ListFindings
-                  - iam:GenerateCredentialReport
-                  - iam:GetAccessKeyLastUsed
-                  - iam:GetAccountPasswordPolicy
-                  - iam:GetAccountSummary
-                  - iam:GetCredentialReport
-                  - iam:GetGroupPolicy
-                  - iam:GetLoginProfile
-                  - iam:GetPolicy
-                  - iam:GetPolicyVersion
-                  - iam:GetRole
-                  - iam:GetRolePolicy
-                  - iam:GetUser
-                  - iam:GetUserPolicy
-                  - iam:ListAccessKeys
-                  - iam:ListAttachedGroupPolicies
-                  - iam:ListAttachedRolePolicies
-                  - iam:ListAttachedUserPolicies
-                  - iam:ListGroupPolicies
-                  - iam:ListGroups
-                  - iam:ListGroupsForUser
-                  - iam:ListInstanceProfiles
-                  - iam:ListMFADevices
-                  - iam:ListPolicies
-                  - iam:ListPolicyVersions
-                  - iam:ListRolePolicies
-                  - iam:ListRoles
-                  - iam:ListServerCertificates
-                  - iam:ListUserPolicies
-                  - iam:ListUsers
-                  - iam:ListVirtualMFADevices
-                  - kms:DescribeKey
-                  - kms:GetKeyRotationStatus
-                  - kms:ListKeys
-                  - lambda:ListAliases
-                  - lambda:ListFunctions
-                  - logs:DescribeLogGroups
-                  - logs:DescribeMetricFilters
-                  - rds:DescribeDBInstances
-                  - redshift:DescribeClusters
-                  - route53:ListHostedZones
-                  - s3:GetAccountPublicAccessBlock
-                  - s3:GetBucketAcl
-                  - s3:GetBucketLogging
-                  - s3:GetBucketPolicy
-                  - s3:GetBucketPolicyStatus
-                  - s3:GetBucketPublicAccessBlock
-                  - s3:GetBucketTagging
-                  - s3:GetBucketVersioning
-                  - s3:GetEncryptionConfiguration
-                  - s3:ListAllMyBuckets
-                  - secretsmanager:DescribeSecret
-                  - secretsmanager:GetResourcePolicy
-                  - secretsmanager:ListSecrets
-                  - securityhub:DescribeHub
-                  - securityhub:GetEnabledStandards
-                  - securityhub:GetFindings
-                  - securityhub:ListFindings
-                  - ssm:DescribeParameters
-                  - states:ListStateMachines
-                  - tag:GetResources
-                Resource: '*'
+  CollectionPolicyV3:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: 'Khalifa resource collection policy version 3'
+      Roles: !If
+        - ShouldCreateCollectorRole
+        - - !Ref CollectorRole
+        - !If
+          - HasAdditionalExistingRole
+          - - !Ref ExistingRoleName
+            - !Ref AdditionalExistingRoleName
+          - - !Ref ExistingRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ComputeNetworkRead
+            Effect: Allow
+            Action:
+              - ec2:DescribeFlowLogs
+              - ec2:DescribeInstances
+              - ec2:DescribeInternetGateways
+              - ec2:DescribeNatGateways
+              - ec2:DescribeNetworkAcls
+              - ec2:DescribeRouteTables
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeTransitGateways
+              - ec2:DescribeVolumes
+              - ec2:DescribeVpcEndpoints
+              - ec2:DescribeVpcs
+              - ec2:GetEbsEncryptionByDefault
+              - ecr:DescribeRepositories
+              - ecr:ListImages
+              - eks:DescribeCluster
+              - eks:ListClusters
+              - elasticloadbalancing:DescribeLoadBalancers
+              - tag:GetResources
+            Resource: '*'
+          - Sid: IdentityRead
+            Effect: Allow
+            Action:
+              - access-analyzer:ListAnalyzers
+              - access-analyzer:ListFindings
+              - iam:GenerateCredentialReport
+              - iam:GetAccessKeyLastUsed
+              - iam:GetAccountPasswordPolicy
+              - iam:GetAccountSummary
+              - iam:GetCredentialReport
+              - iam:GetGroupPolicy
+              - iam:GetLoginProfile
+              - iam:GetPolicyVersion
+              - iam:GetRolePolicy
+              - iam:GetUser
+              - iam:GetUserPolicy
+              - iam:ListAccessKeys
+              - iam:ListAttachedGroupPolicies
+              - iam:ListAttachedRolePolicies
+              - iam:ListAttachedUserPolicies
+              - iam:ListGroupPolicies
+              - iam:ListGroupsForUser
+              - iam:ListGroups
+              - iam:ListInstanceProfiles
+              - iam:ListMFADevices
+              - iam:ListPolicies
+              - iam:ListPolicyVersions
+              - iam:ListRolePolicies
+              - iam:ListRoles
+              - iam:ListServerCertificates
+              - iam:ListUserPolicies
+              - iam:ListUsers
+              - iam:ListVirtualMFADevices
+              - kms:DescribeKey
+              - kms:GetKeyRotationStatus
+              - kms:ListKeys
+            Resource: '*'
+          - Sid: DataRead
+            Effect: Allow
+            Action:
+              - backup:ListBackupPlans
+              - backup:ListBackupVaults
+              - dynamodb:DescribeTable
+              - dynamodb:ListTables
+              - elasticache:DescribeCacheClusters
+              - elasticfilesystem:DescribeFileSystems
+              - es:DescribeDomain
+              - es:ListDomainNames
+              - rds:DescribeDBInstances
+              - redshift:DescribeClusters
+              - s3:GetBucketPolicy
+              - s3:GetEncryptionConfiguration
+              - s3:GetBucketLogging
+              - s3:GetBucketPolicyStatus
+              - s3:GetBucketPublicAccessBlock
+              - s3:GetAccountPublicAccessBlock
+              - s3:GetBucketVersioning
+              - s3:ListAllMyBuckets
+              - secretsmanager:DescribeSecret
+              - secretsmanager:GetResourcePolicy
+              - secretsmanager:ListSecrets
+              - ssm:DescribeParameters
+            Resource: '*'
+          - Sid: PlatformRead
+            Effect: Allow
+            Action:
+              - apigateway:GET
+              - cloudtrail:DescribeTrails
+              - cloudtrail:GetTrailStatus
+              - cloudwatch:DescribeAlarms
+              - config:DescribeConfigurationRecorders
+              - config:DescribeConfigRules
+              - cloudtrail:GetEventSelectors
+              - cloudtrail:GetInsightSelectors
+              - config:DescribeConfigurationRecorderStatus
+              - config:DescribeDeliveryChannels
+              - config:DescribeDeliveryChannelStatus
+              - events:ListEventBuses
+              - guardduty:GetAdministratorAccount
+              - guardduty:GetDetector
+              - guardduty:GetFindings
+              - guardduty:ListDetectors
+              - guardduty:ListFindings
+              - guardduty:ListMembers
+              - guardduty:ListPublishingDestinations
+              - lambda:ListAliases
+              - lambda:ListFunctions
+              - logs:DescribeLogGroups
+              - logs:DescribeMetricFilters
+              - route53:ListHostedZones
+              - securityhub:DescribeHub
+              - securityhub:DescribeStandards
+              - securityhub:GetEnabledStandards
+              - securityhub:GetFindings
+              - securityhub:ListEnabledProductsForImport
+              - states:ListStateMachines
+            Resource: '*'
 Outputs:
   CollectorRoleArn:
-    Description: 'ARN of the Collector Role'
-    Value: !GetAtt CreateCollectorRole.Arn
-    Export:
-      Name: !Sub '${AWS::StackName}-CollectorRoleArn'
+    Condition: ShouldCreateCollectorRole
+    Value: !GetAtt CollectorRole.Arn
+  CollectionPolicyArn:
+    Value: !Ref CollectionPolicyV3

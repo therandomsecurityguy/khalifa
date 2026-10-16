@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "khalifa.fullname" . }}-incremental
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: incremental
+spec:
+  replicas: {{ .Values.incrementalCollector.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "khalifa.selectorLabels" (dict "root" . "component" "incremental") | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "incremental") | nindent 8 }}
+        {{- with .Values.incrementalCollector.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.incrementalCollector.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "incrementalCollector" "suffix" "incremental") }}
+      automountServiceAccountToken: {{ .Values.serviceAccounts.incrementalCollector.automountServiceAccountToken }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "khalifa.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "incremental") | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: incremental
+          image: {{ required "incrementalCollector.image must be an immutable repository@sha256 digest" .Values.incrementalCollector.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args: ["incremental-collector"]
+          securityContext:
+            {{- include "khalifa.containerSecurityContext" . | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "khalifa.fullname" . }}-config
+            - configMapRef:
+                name: {{ include "khalifa.fullname" . }}-collection
+            {{- include "khalifa.collectionEnvSecrets" . | nindent 12 }}
+            {{- include "khalifa.extraExternalSecretRef" (dict "root" . "component" "incrementalCollector" "already" (list (include "khalifa.collectorSecretName" .) (include "khalifa.graphWriterTokenSecretName" .))) | nindent 12 }}
+          resources:
+            {{- toYaml .Values.incrementalCollector.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

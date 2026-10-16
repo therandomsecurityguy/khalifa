@@ -12,9 +12,14 @@ cdk/dist/
 
 # Lambda deployment packages
 *.zip
+artifacts/
 
 # CDK
 cdk.out/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
 
 # Test outputs
 coverage/
@@ -48,6 +53,9 @@ awslogs/
 
 # Local planning
 plan.md
+/tasks/
+/ui/CLAUDE.md
+/ui/AGENTS.md
 
 # Compiled JS — keep source .ts, ignore .js (but allow config)
 *.js

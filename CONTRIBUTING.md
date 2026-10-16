@@ -15,8 +15,8 @@ npm test
 - `packages/risk-engine/` — Gremlin-based risk rules + compliance evaluators
 - `api-service/` — REST API (Express on EKS or Lambda)
 - `ui/` — Next.js dashboard
-- `cdk/` — AWS CDK infrastructure
-- `eks-manifests/` — Kubernetes manifests for EKS deployment
+- `cdk/` — Lambda ingestion infrastructure
+- `deploy/` — Helm chart and Terraform wrapper for existing EKS environments
 
 ## Adding a New Risk Rule
 
@@ -38,8 +38,11 @@ npm test
    ```
 3. Add a remediation hint in `packages/risk-engine/src/scoring.ts` (`getRemediationHint`)
 4. Add a test in `packages/risk-engine/src/rules.test.ts`
+5. Map it to at least one control by adding the rule to that control's `relatedRules`, and add an entry to `REVIEWED_MAPPING` in `control-rule-mapping.test.ts` saying why. **A rule maps to a control when every finding it raises is a violation of that control.** Catching only a narrower slice is fine; detecting something merely adjacent is not -- finding root activity is not evidence that a root-activity alarm is missing. Mapping is per rule, not per finding: a rule that starts from several resource types can only map to controls covering all of them, so split it rather than map it to a single-resource CIS control. If no control fits, add a `KH-` control stated as the outcome the rule measures, rather than attaching the rule to the nearest one.
 
 ## Adding a New Compliance Control
+
+**CIS v3.0.0 source of truth:** `packages/risk-engine/benchmarks/cis-aws-foundations-3.0.0/`, AWS Security Hub's CIS page stored verbatim. It decides which requirements are automated and which Security Hub control implements each one. Evaluator logic follows that control's page (e.g. `iam-controls.md#iam-9`): its scope (per account, per bucket…) and its pass/fail definition. Automating a requirement Security Hub leaves manual needs an entry in `KHALIFA_AUTOMATED_BEYOND_SECURITY_HUB` with the reason; `cis-v3-source-of-truth.test.ts` enforces both.
 
 1. Edit `packages/risk-engine/src/compliance-types.ts` to add the control to the framework array (e.g., `CIS_AWS_FOUNDATIONS_V3_CONTROLS`)
 2. If automated, add an evaluator in `packages/risk-engine/src/compliance-rules.ts`:
@@ -52,7 +55,13 @@ npm test
      },
    }
    ```
-3. Test it: `cd packages/risk-engine && npm test`
+3. Add a test in `packages/risk-engine/src/compliance-rules.test.ts` asserting what the
+   query targets: the labels and properties it filters on, the ports or thresholds it
+   applies, and the direction it traverses any edge. Two suite-wide tests run every
+   evaluator, so a new one goes green without a test of its own -- which is how most
+   evaluators ended up with no coverage.
+4. If a risk rule detects violations of it, list the rule in `relatedRules` under the same criterion as step 5 above, and update `REVIEWED_MAPPING`. A control with no fitting rule is fine; a control given an unrelated one is not.
+5. Test it: `cd packages/risk-engine && npm test`
 
 ## Adding a New Collector Service
 

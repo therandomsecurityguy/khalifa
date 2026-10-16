@@ -1,8 +1,10 @@
 import type { Request } from 'express';
 import { hasRole, requireRole, Role } from '../middleware/rbac';
 
-function makeReq(groups: string[]): Request {
-  return { user: { sub: 'user', groups, tokenUse: 'id' as const } } as unknown as Request;
+function makeReq(groups: string[], email?: string): Request {
+  return {
+    user: { sub: email || 'user', email, groups, tokenUse: 'id' as const },
+  } as unknown as Request;
 }
 
 describe('RBAC', () => {
@@ -28,6 +30,20 @@ describe('RBAC', () => {
     expect(hasRole(makeReq([]), Role.Viewer)).toBe(false);
     expect(hasRole(makeReq([]), Role.Analyst)).toBe(false);
     expect(hasRole(makeReq([]), Role.Admin)).toBe(false);
+  });
+
+  it('A verified email grants Viewer only without an explicit Cognito group', () => {
+    expect(hasRole(makeReq([], 'analyst@example.com'), Role.Viewer)).toBe(true);
+    expect(hasRole(makeReq([], 'analyst@example.com'), Role.Analyst)).toBe(false);
+    expect(hasRole(makeReq([], 'analyst@example.com'), Role.Admin)).toBe(false);
+  });
+
+  it('A verified email with khalifa-analyst still has Analyst', () => {
+    expect(hasRole(makeReq(['khalifa-analyst'], 'analyst@example.com'), Role.Analyst)).toBe(true);
+  });
+
+  it('A verified email with khalifa-admin still has Admin', () => {
+    expect(hasRole(makeReq(['khalifa-admin'], 'analyst@example.com'), Role.Admin)).toBe(true);
   });
 
   it('requireRole rejects without role', () => {
@@ -58,5 +74,24 @@ describe('RBAC', () => {
     };
     middleware(makeReq(['khalifa-admin']), res, next);
     expect(next).toHaveBeenCalled();
+  });
+
+  it('requireAdmin rejects a verified email without khalifa-admin', () => {
+    const middleware = requireRole(Role.Admin);
+    const next = jest.fn();
+    const res: any = {
+      statusCode: 200,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(b: any) {
+        this.body = b;
+        return this;
+      },
+    };
+    middleware(makeReq([], 'analyst@example.com'), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
   });
 });

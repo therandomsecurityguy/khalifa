@@ -18,7 +18,5 @@
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
-  "references": [
-    { "path": "../packages/risk-engine" }
-  ]
+  "references": [{ "path": "../packages/risk-engine" }]
 }

@@ -1,0 +1,5 @@
+# Overlay on eks-deployment-values.yaml. Pins the runtime-secret contract:
+# COLLECTOR_EXTERNAL_ID and GRAPH_WRITER_TOKEN come from the External Secrets
+# target, never from chart values.
+externalSecrets:
+  targetName: khalifa-runtime

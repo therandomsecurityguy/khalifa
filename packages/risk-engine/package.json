@@ -1,13 +1,17 @@
 {
   "name": "@khalifa/risk-engine",
   "version": "1.0.0",
+  "private": true,
   "description": "Risk, attack-path, and compliance engine for the Khalifa security graph",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc && npm run build:lambda && npm run build:compliance-lambda",
-    "build:lambda": "esbuild src/lambda.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/lambda/index.js",
-    "build:compliance-lambda": "esbuild src/compliance-lambda.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/compliance-lambda/index.js",
+    "build": "tsc",
+    "build:lambda": "npm run build:risk-lambda && npm run build:compliance-lambda",
+    "build:risk-lambda": "esbuild src/run-once.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/lambda/index.js --sourcemap --sources-content=false",
+    "build:compliance-lambda": "esbuild src/run-compliance-once.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/compliance-lambda/index.js --sourcemap --sources-content=false",
+    "typecheck": "tsc --noEmit",
+    "start:runner": "node dist/run-once.js",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
@@ -16,13 +20,15 @@
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.400.0",
-    "@aws-sdk/credential-provider-node": "^3.972.0",
+    "@aws-sdk/client-securityhub": "^3.1131.0",
+    "@aws-sdk/client-sts": "^3.400.0",
+    "@aws-sdk/credential-provider-node": "^3.972.83",
     "@aws-sdk/lib-dynamodb": "^3.400.0",
     "@aws-sdk/util-dynamodb": "^3.996.2",
-    "@smithy/core": "^3.29.0",
-    "@smithy/signature-v4": "^5.6.0",
-    "gremlin": "^3.7.0",
-    "@khalifa/integrations": "*"
+    "@khalifa/integrations": "*",
+    "@smithy/core": "^3.33.3",
+    "@smithy/signature-v4": "^5.7.3",
+    "gremlin": "^3.8.2"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.131",

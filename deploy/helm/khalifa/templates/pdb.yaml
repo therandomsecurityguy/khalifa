@@ -1,0 +1,19 @@
+{{- range $item := list (dict "key" "api" "component" "api") (dict "key" "ui" "component" "ui") (dict "key" "incrementalCollector" "component" "incremental") (dict "key" "graphWriter" "component" "graph-writer") }}
+{{- $workload := index $.Values $item.key }}
+{{- if $workload.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "khalifa.fullname" $ }}-{{ $item.component }}
+  labels:
+    {{- include "khalifa.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $item.component }}
+spec:
+  minAvailable: {{ $workload.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "khalifa.selectorLabels" (dict "root" $ "component" $item.component) | nindent 6 }}
+---
+{{- end }}
+{{- end }}
+

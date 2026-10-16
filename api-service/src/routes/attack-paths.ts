@@ -1,131 +1,171 @@
 import type { Request, Response } from 'express';
-import { NeptuneClient } from '../services/neptune-client';
-import type { NeptunePathResult, NeptuneRawVertex } from '../services/neptune-client';
-import type { GraphVertex, GraphEdge } from '../types';
+import { parseBoundedInteger } from '../middleware/gremlin-validator';
+import { hasRole, Role } from '../middleware/rbac';
+import { computeRiskScore, riskInputFromPath } from '@khalifa/risk-engine';
+import { getApiNeptuneClient } from '../services/api-dependencies';
+import type { AttackPathStart, AttackPathTarget } from '../services/neptune-client';
+import type { AttackPathEntry, GraphVertex } from '../types';
 
-const neptuneEndpoint = process.env.NEPTUNE_ENDPOINT || '';
-const neptuneClient = new NeptuneClient({ endpoint: neptuneEndpoint });
+const neptuneClient = getApiNeptuneClient();
 
-export async function findAttackPath(req: Request, res: Response): Promise<void> {
+const START_VALUES: AttackPathStart[] = ['any', 'internet', 'outside', 'resource'];
+const TARGET_VALUES: AttackPathTarget[] = ['restricted', 'crown', 'secrets', 'admin', 'resource'];
+const MAX_TRUST_LOOKUPS = 10;
+// A managed-policy grant is four graph steps (attached to, contains, contains,
+// grants) but one drawn hop; search this much deeper so two grants still fit.
+const POLICY_HOP_SLACK = 6;
+const POLICY_LABELS = new Set(['IamPolicy', 'IamPolicyDocument', 'IamPolicyStatement']);
+
+// Hops as the graph draws them: a whole policy chain counts once.
+// Our client's own deadline, or Neptune's evaluation timeout.
+function isSearchTimeout(error: unknown): boolean {
+  const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+  return /timeout after \d+ms|TimeLimitExceeded/i.test(text);
+}
+
+export function drawnHops(path: { nodes: GraphVertex[] }): number {
+  const policyNodes = path.nodes.filter((node) => POLICY_LABELS.has(node.label)).length;
+  return Math.max(0, path.nodes.length - 1 - policyNodes);
+}
+
+export function outsidePrincipals(role: GraphVertex, principals: GraphVertex[]): GraphVertex[] {
+  return principals.filter(
+    (principal) =>
+      principal.label === 'ExternalAccount' ||
+      (principal.properties.account_id !== undefined &&
+        principal.properties.account_id !== role.properties.account_id)
+  );
+}
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | null {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : null;
+}
+
+// Only resource ARNs can be a start or target.
+const VERTEX_ID = /^arn:[\w-]{1,20}:[\w-]{0,40}:[\w-]{0,30}:\d{0,12}:[\x21-\x7e]{1,400}$/;
+
+function optional<T>(value: unknown, parse: (text: string) => T | null): T | null | undefined {
+  if (value === undefined || value === '') return undefined;
+  return typeof value === 'string' ? parse(value) : null;
+}
+
+export async function searchAttackPaths(req: Request, res: Response): Promise<void> {
   try {
-    const { fromSelector, toSelector, maxPathLength } = req.query;
-
-    if (!fromSelector || !toSelector) {
-      res.status(400).json({
-        code: 'BAD_REQUEST',
-        message: 'fromSelector and toSelector are required',
-      });
+    const q = req.query;
+    const from = oneOf(q.from ?? 'any', START_VALUES);
+    const to = oneOf(q.to, TARGET_VALUES);
+    const account = optional(q.account, (v) => (/^\d{12}$/.test(v) ? v : null));
+    const fromResource = optional(q.fromResource, (v) => (VERTEX_ID.test(v) ? v : null));
+    const toResource = optional(q.toResource, (v) => (VERTEX_ID.test(v) ? v : null));
+    const invalid =
+      !from ||
+      !to ||
+      [account, fromResource, toResource].includes(null) ||
+      (from === 'resource') !== (fromResource !== undefined) ||
+      (to === 'resource') !== (toResource !== undefined);
+    if (invalid) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid attack path search' });
       return;
     }
+    const maxAllowed = hasRole(req, Role.Analyst) ? 10 : 4;
+    const maxLen = parseBoundedInteger(q.maxPathLength, 4, 1, maxAllowed, 'maxPathLength');
+    const limit = parseBoundedInteger(q.limit, 50, 1, 100, 'limit');
 
-    await neptuneClient.connect();
+    // "Any" runs the internet and outside searches side by side: one query over
+    // both starts did not complete on Neptune. A search that times out drops out
+    // and marks the result truncated; if every search times out, the request does.
+    const starts = from === 'any' ? (['internet', 'outside'] as const) : [from];
+    const settled = await Promise.allSettled(
+      starts.map((start) =>
+        neptuneClient.searchAttackPaths({
+          from: start,
+          to,
+          fromResource: fromResource ?? undefined,
+          toResource: toResource ?? undefined,
+          maxPathLength: maxLen + POLICY_HOP_SLACK,
+          limit,
+          account: account ?? undefined,
+        })
+      )
+    );
+    const failures = settled.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
+    const results = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+    const hard = failures.find((reason) => !isSearchTimeout(reason));
+    if (hard !== undefined) throw hard;
+    if (results.length === 0) throw failures[0];
+    const seen = new Set<string>();
+    const found = results.flat().filter((path) => {
+      const key = path.nodes.map((node) => node.id).join('>');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    let truncated = failures.length > 0 || results.some((result) => result.length >= limit);
+    // Same scoring as the rule runner, so the explorer and Issues agree on severity.
+    const paths = found
+      .filter((path) => drawnHops(path) <= maxLen)
+      .map((path) => {
+        const { score, severity } = computeRiskScore(riskInputFromPath(path.nodes));
+        return { ...path, score, severity };
+      })
+      .sort((a, b) => b.score - a.score);
+    if (paths.length > limit) {
+      paths.length = limit;
+      truncated = true;
+    }
 
-    const path = await neptuneClient.findAttackPath(
-      fromSelector as string,
-      toSelector as string,
-      maxPathLength ? parseInt(maxPathLength as string, 10) : 4
+    // Each path's real entry: the internet for exposed starts, the trusted
+    // outside accounts for cross-account roles.
+    const entries: Record<string, AttackPathEntry> = {};
+    const trustRoles = new Set<string>();
+    for (const path of paths) {
+      const first = path.nodes[0];
+      // The collector's own Internet vertex is already the entry.
+      if (!first || entries[first.id] || first.label === 'Internet') continue;
+      if (first.properties.is_internet_exposed === true) entries[first.id] = { kind: 'internet' };
+      else if (first.properties.has_cross_account_trust === true) trustRoles.add(first.id);
+    }
+    // Roles past the lookup cap, or whose principals cannot be resolved, still
+    // get an outside entry (with no principals) so the path never looks internal.
+    if (trustRoles.size > MAX_TRUST_LOOKUPS) truncated = true;
+    const lookups = [...trustRoles].slice(0, MAX_TRUST_LOOKUPS);
+    for (const roleId of trustRoles) entries[roleId] = { kind: 'trust', principals: [] };
+    await Promise.all(
+      lookups.map(async (roleId) => {
+        const role = paths.find((path) => path.nodes[0]?.id === roleId)!.nodes[0];
+        entries[roleId] = {
+          kind: 'trust',
+          principals: outsidePrincipals(role, await neptuneClient.getTrustedPrincipals(roleId)),
+        };
+      })
     );
 
-    res.json({
-      from: fromSelector,
-      to: toSelector,
-      maxPathLength: maxPathLength || 4,
-      nodes: path.nodes,
-      edges: path.edges,
-    });
+    res.json({ from, to, maxPathLength: maxLen, paths, entries, truncated });
   } catch (error) {
-    console.error('Error finding attack path:', error);
-    res.status(500).json({
-      code: 'INTERNAL_ERROR',
-      message: 'Failed to find attack path',
-      details: error instanceof Error ? error.message : undefined,
-    });
-  }
-}
-
-export async function findAllAttackPaths(req: Request, res: Response): Promise<void> {
-  try {
-    const { maxPathLength } = req.query;
-    const maxLen = maxPathLength ? parseInt(maxPathLength as string, 10) : 4;
-
-    await neptuneClient.connect();
-
-    const query = `
-      g.V().has('is_internet_exposed', true)
-        .as('start')
-        .repeat(
-          out().simplePath()
-        ).times(P.maxLen)
-        .until(
-          has('crown_jewel', true)
-        )
-        .has('crown_jewel', true)
-        .as('target')
-        .path()
-          .by(valueMap(true))
-    `;
-
-    const results = await neptuneClient.executeQuery(query, { maxLen });
-
-    const paths = (results as NeptunePathResult[]).map((result) => {
-      const nodes: GraphVertex[] = [];
-      const edges: GraphEdge[] = [];
-
-      if (result && result.objects) {
-        for (const obj of result.objects) {
-          if (obj) {
-            const vertex: GraphVertex = {
-              id: typeof obj.id === 'object' ? obj.id.value : obj.id,
-              label: obj.label,
-              properties: extractProperties(obj),
-            };
-            nodes.push(vertex);
-          }
-        }
-
-        for (let i = 0; i < nodes.length - 1; i++) {
-          edges.push({
-            id: `${nodes[i].id}-${nodes[i + 1].id}`,
-            label: 'CONNECTED',
-            from: nodes[i].id,
-            to: nodes[i + 1].id,
-          });
-        }
-      }
-
-      return { nodes, edges };
-    });
-
-    res.json({
-      total: paths.length,
-      maxPathLength: maxLen,
-      paths: paths.slice(0, 100),
-    });
-  } catch (error) {
-    console.error('Error finding all attack paths:', error);
-    res.status(500).json({
-      code: 'INTERNAL_ERROR',
-      message: 'Failed to find attack paths',
-      details: error instanceof Error ? error.message : undefined,
-    });
-  }
-}
-
-function extractProperties(obj: NeptuneRawVertex): Record<string, unknown> {
-  const properties: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(obj)) {
-    if (key !== 'id' && key !== 'label') {
-      properties[key] = unwrapGremlinValue(value);
+    if (
+      error instanceof Error &&
+      (error.message.startsWith('maxPathLength must be') ||
+        error.message.startsWith('limit must be'))
+    ) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: error.message });
+      return;
     }
+    if (isSearchTimeout(error)) {
+      res.status(504).json({ code: 'SEARCH_TIMEOUT', message: 'Attack path search timed out' });
+      return;
+    }
+    console.error('Error searching attack paths:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to search attack paths' });
   }
-
-  return properties;
 }
 
-function unwrapGremlinValue(val: unknown): unknown {
-  if (val && typeof val === 'object' && 'value' in val) {
-    return (val as { value: unknown }).value ?? val;
+export async function listAccounts(_req: Request, res: Response): Promise<void> {
+  try {
+    res.json({ accounts: await neptuneClient.listAccounts() });
+  } catch (error) {
+    console.error('Error listing accounts:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to list accounts' });
   }
-  return val;
 }

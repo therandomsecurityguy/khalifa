@@ -27,6 +27,10 @@ export interface RiskRule {
   ownerTeam: string;
   enabled: boolean;
   autoTicketConfig: AutoTicketConfig;
+  // Vertex labels that are how a match was reached rather than the problem
+  // itself (a finding, a security group rule, a policy statement). Matches
+  // that differ only in these become one issue listing all of them.
+  routeLabels?: string[];
 }
 
 export interface ResourceInvolved {
@@ -51,6 +55,22 @@ export interface ExternalRef {
   emittedAt: string;
 }
 
+export interface StatusChange {
+  from: IssueStatus;
+  to: IssueStatus;
+  at: string;
+  by: string;
+  reason: string;
+}
+
+export interface Suppression {
+  by: string;
+  at: string;
+  reason: string;
+  until: string;
+  severity: Severity;
+}
+
 export interface Issue {
   id: string;
   ruleId: string;
@@ -65,6 +85,10 @@ export interface Issue {
   remediationHint: string;
   metadata: Record<string, any>;
   externalRefs?: ExternalRef[];
+  resolvedAt?: string;
+  resolvedReason?: string;
+  suppression?: Suppression;
+  statusHistory?: StatusChange[];
 }
 
 export interface RuleExecutionResult {
@@ -95,25 +119,12 @@ export interface GraphEdge {
   properties?: Record<string, any>;
 }
 
-export interface CvssScore {
-  baseScore: number;
-  exploitabilitySubScore: number;
-  impactSubScore: number;
-  vectorString: string;
-}
-
 export interface IdentityBlastRadius {
   type: 'admin' | 'wildcard' | 'cross-account' | 'service-linked';
   scope: number;
 }
 
 export interface RiskScoreInput {
-  cvss?: CvssScore;
-  exploitabilityFlags?: {
-    hasExploit: boolean;
-    hasPublicExploit: boolean;
-    malwareAvailable: boolean;
-  };
   exposureLevel: ExposureLevel;
   identityBlastRadius?: IdentityBlastRadius;
   dataClassification: DataClassification;
@@ -126,7 +137,6 @@ export interface RiskScoreOutput {
   score: number;
   severity: Severity;
   factors: {
-    cvssContribution: number;
     exposureContribution: number;
     identityContribution: number;
     dataClassificationContribution: number;
