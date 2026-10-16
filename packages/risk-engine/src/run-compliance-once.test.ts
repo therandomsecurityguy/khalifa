@@ -1,64 +1,56 @@
 import type { ComplianceReport } from './compliance-types';
-import { runComplianceOnce, type ComplianceRuntime } from './run-compliance-once';
+import { runComplianceOnce } from './run-compliance-once';
 
-function report(
-  framework: ComplianceReport['framework'],
-  failed: number,
-  notEvaluated: number
-): ComplianceReport {
-  const totalControls = failed + notEvaluated + 1;
-  return {
-    framework,
-    generatedAt: '2026-10-15T00:00:00.000Z',
-    summary: {
-      totalControls,
-      passed: 1,
-      failed,
-      manual: 0,
-      notApplicable: 0,
-      notEvaluated,
-      coveragePercent: 100 * (1 / totalControls),
-    },
-    controls: [],
-  };
-}
+const report = {
+  summary: { totalControls: 3, passed: 1, failed: 1, notEvaluated: 1 },
+} as ComplianceReport;
 
-function fakeRuntime(runAllAssessments: jest.Mock): ComplianceRuntime & {
-  connect: jest.Mock;
-  close: jest.Mock;
-} {
+function runtime(runAllAssessments: jest.Mock) {
   return {
-    connect: jest.fn(async () => undefined),
+    connect: jest.fn().mockResolvedValue(undefined),
     runAllAssessments,
-    close: jest.fn(async () => undefined),
+    close: jest.fn().mockResolvedValue(undefined),
   };
 }
 
 describe('runComplianceOnce', () => {
-  it('rejects an empty endpoint', async () => {
-    await expect(runComplianceOnce('')).rejects.toThrow('NEPTUNE_ENDPOINT is required');
-  });
+  it('summarizes a run and always closes its client', async () => {
+    const instance = runtime(jest.fn().mockResolvedValue([report]));
 
-  it('aggregates the assessment summaries', async () => {
-    const reports = [report('CIS_AWS_FOUNDATIONS', 2, 1), report('SOC2', 1, 3)];
-    const runtime = fakeRuntime(jest.fn(async () => reports));
-
-    await expect(runComplianceOnce('wss://cluster/gremlin', () => runtime)).resolves.toEqual({
-      frameworksRun: 2,
-      controlsAssessed: 4 + 5,
-      failedControls: 3,
-      notEvaluatedControls: 4,
+    await expect(runComplianceOnce('neptune:8182', () => instance)).resolves.toEqual({
+      frameworksRun: 1,
+      controlsAssessed: 3,
+      failedControls: 1,
+      notEvaluatedControls: 1,
+      // RECONCILIATION_SECURITY_HUB_ROLE_ARN is unset in tests.
+      reconciliation: 'DISABLED',
     });
-    expect(runtime.connect).toHaveBeenCalledTimes(1);
-    expect(runtime.close).toHaveBeenCalledTimes(1);
+    expect(instance.close).toHaveBeenCalledTimes(1);
   });
 
-  it('closes the runtime when the assessment fails', async () => {
-    const runtime = fakeRuntime(jest.fn(async () => Promise.reject(new Error('neptune down'))));
+  it('hands the reports from the run to CIS reconciliation and reports its status', async () => {
+    const instance = runtime(jest.fn().mockResolvedValue([report]));
+    const reconcile = jest.fn().mockResolvedValue('STALE');
 
-    await expect(runComplianceOnce('wss://cluster/gremlin', () => runtime)).rejects.toThrow(
-      'neptune down'
+    const summary = await runComplianceOnce('neptune:8182', () => instance, reconcile);
+
+    expect(reconcile).toHaveBeenCalledWith([report]);
+    expect(summary.reconciliation).toBe('STALE');
+    expect(instance.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates failures and still closes its client', async () => {
+    const instance = runtime(jest.fn().mockRejectedValue(new Error('persistence failed')));
+
+    await expect(runComplianceOnce('neptune:8182', () => instance)).rejects.toThrow(
+      'persistence failed'
     );
-    expect(runtime.close).toHaveBeenCalledTimes(1);
+    expect(instance.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a missing endpoint before creating a client', async () => {
+    const factory = jest.fn();
+    await expect(runComplianceOnce(' ', factory)).rejects.toThrow('NEPTUNE_ENDPOINT is required');
+    expect(factory).not.toHaveBeenCalled();
   });
 });

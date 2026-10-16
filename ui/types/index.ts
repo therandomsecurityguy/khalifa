@@ -14,6 +14,26 @@ export interface Issue {
   owningTeam: string;
   remediationHint: string;
   metadata: Record<string, unknown>;
+  resolvedAt?: string;
+  resolvedReason?: string;
+  suppression?: Suppression;
+  statusHistory?: StatusChange[];
+}
+
+export interface StatusChange {
+  from: IssueStatus;
+  to: IssueStatus;
+  at: string;
+  by: string;
+  reason: string;
+}
+
+export interface Suppression {
+  by: string;
+  at: string;
+  reason: string;
+  until: string;
+  severity: Severity;
 }
 
 export interface ResourceInvolved {
@@ -51,10 +71,13 @@ export interface GraphEdge {
   properties?: Record<string, unknown>;
 }
 
+export type AttackPathEntry = { kind: 'internet' } | { kind: 'trust'; principals: GraphVertex[] };
+
 export interface IssueDetail extends Issue {
   attackPath: {
     nodes: GraphVertex[];
     edges: GraphEdge[];
+    entry?: AttackPathEntry;
   };
 }
 
@@ -66,12 +89,7 @@ export interface IssueFilters {
   nextToken?: string;
 }
 
-export interface SeverityCounts {
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-}
+export type SeverityStatusCounts = Record<Severity, Record<IssueStatus, number>>;
 
 export interface IssueStats {
   total: number;
@@ -81,4 +99,228 @@ export interface IssueStats {
   low: number;
   byTeam: Record<string, number>;
   byRule: Record<string, number>;
+}
+
+export interface IamPolicyStatement {
+  sid?: string;
+  effect: 'Allow' | 'Deny';
+  actions: string[];
+  resources: string[];
+}
+
+export interface LeastPrivilegeFinding {
+  accountId: string;
+  principalArn: string;
+  principalType: 'role' | 'user';
+  allowedActionCount: number;
+  removedActionCount: number;
+  keptActionCount: number;
+  removedActions: string[];
+  keptActions: string[];
+  recommendedPolicy: IamPolicyStatement[];
+  riskLevel: 'low' | 'medium' | 'high';
+  confidence: number;
+  isAdmin: boolean;
+  blastRadius: number;
+  lastSweptAt: string;
+}
+
+export interface LeastPrivilegeListResponse {
+  items: LeastPrivilegeFinding[];
+  nextToken?: string;
+  totalCount: number;
+}
+
+export interface LeastPrivilegeSummary {
+  accountsSwept: number;
+  principalsSwept: number;
+  byRiskLevel: Record<'low' | 'medium' | 'high', number>;
+  totalRemovedActions: number;
+}
+
+export interface Session {
+  email: string | null;
+  role: 'Admin' | 'Analyst' | 'Viewer' | null;
+  canManageIssues: boolean;
+}
+
+export interface ResourceLabelCount {
+  label: string;
+  count: number;
+}
+
+export interface ResourceSearchResponse {
+  label: string;
+  resources: GraphVertex[];
+  nextToken?: string;
+}
+
+export interface ResourceDetail {
+  resource: GraphVertex;
+  neighbors: GraphVertex[];
+  edges: GraphEdge[];
+  issues: Issue[];
+}
+
+export type AttackPathStart = 'any' | 'internet' | 'outside' | 'resource';
+export type AttackPathTarget = 'restricted' | 'crown' | 'secrets' | 'admin' | 'resource';
+
+export interface AttackPathSearchParams {
+  from: AttackPathStart;
+  to: AttackPathTarget;
+  fromResource?: string;
+  toResource?: string;
+  account?: string;
+  maxPathLength?: number;
+}
+
+export interface ScoredPath {
+  nodes: GraphVertex[];
+  edges: GraphEdge[];
+  score: number;
+  severity: Severity;
+}
+
+export interface AttackPathSearchResponse {
+  from: AttackPathStart;
+  to: AttackPathTarget;
+  maxPathLength: number;
+  paths: ScoredPath[];
+  entries: Record<string, AttackPathEntry>;
+  truncated: boolean;
+}
+
+export interface ServiceCoverage {
+  service: string;
+  region: string;
+  status: string;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  error: string | null;
+  failureType: string | null;
+  nodes: number | null;
+}
+
+export type DetectionState = 'on' | 'truncated' | 'off' | 'missing' | 'unknown';
+
+export interface DetectionCoverage {
+  securityHub: DetectionState;
+  guardDuty: DetectionState;
+  config: DetectionState;
+  accessAnalyzer: DetectionState;
+}
+
+export interface JobOutput {
+  id: string;
+  name: string;
+  everyHours: number;
+  lastOutputAt: string | null;
+  produced: string;
+  quietWhenClean: boolean;
+}
+
+export interface AccountCoverage {
+  id: string;
+  name: string;
+  resources: number | null;
+  prod: number;
+  collectedAt: string | null;
+  status: 'ok' | 'failing' | 'not-collected';
+  services: ServiceCoverage[];
+  detection: DetectionCoverage;
+}
+
+export interface AccountSummary {
+  id: string;
+  name: string;
+}
+
+export interface ResourceGraph {
+  nodes: GraphVertex[];
+  edges: GraphEdge[];
+}
+
+export interface ConditionalGrant {
+  action: string;
+  resource: string;
+  conditions: Record<string, unknown>;
+}
+
+export interface EffectivePermissions {
+  principal: string;
+  allowedActions: string[];
+  deniedActions: string[];
+  conditionalGrants: ConditionalGrant[];
+  policiesEvaluated: string[];
+  isAdmin: boolean;
+  blastRadius: number;
+  evaluatedAt: string;
+}
+
+export interface EscalationPath {
+  id: string;
+  sourceArn: string;
+  targetArn: string;
+  path: PathSegment[];
+  pathLength: number;
+  riskLevel: Severity;
+  escalationType: string;
+  conditions: Record<string, unknown>;
+  detectedAt: string;
+}
+
+export interface ServiceActions {
+  service: string;
+  actions: string[];
+}
+
+export interface UnusedPermissions {
+  principalArn: string;
+  unusedActions: ServiceActions[];
+  usedActions: ServiceActions[];
+  lastAnalyzed: string;
+}
+
+export interface RightsizingRecommendation {
+  principalArn: string;
+  currentPolicy: IamPolicyStatement[];
+  recommendedPolicy: IamPolicyStatement[];
+  removedActions: string[];
+  keptActions: string[];
+  riskLevel: 'low' | 'medium' | 'high';
+  confidence: number;
+}
+
+export interface TrendPoint {
+  date: string;
+  value: number;
+  accountIds?: string[];
+  recordedAt?: string;
+  bySeverity?: Record<'critical' | 'high' | 'medium' | 'low', number>;
+}
+
+export interface TrendSeries {
+  metric: string;
+  points: TrendPoint[];
+}
+
+export interface IntegrationsStatus {
+  configuredSinks: string[];
+  health: Record<string, boolean>;
+}
+
+export interface IssueLifecycleResponse {
+  id: string;
+  status: IssueStatus;
+  reason?: string;
+  expiresAt?: string;
+}
+
+export interface CatalogRule {
+  id: string;
+  name: string;
+  description: string;
+  severityHint: Severity;
+  ownerTeam: string;
+  enabled: boolean;
 }

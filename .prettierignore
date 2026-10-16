@@ -10,3 +10,6 @@ coverage/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+# Stored verbatim from AWS as the CIS v3.0.0 source of truth; reformatting would
+# change its hash and break the provenance in its README.
+packages/risk-engine/benchmarks/**/aws-*.md

@@ -38,10 +38,10 @@ export interface SecurityGraphIngestionStackProps extends cdk.StackProps {
 }
 
 export class SecurityGraphIngestionStack extends cdk.Stack {
-  public readonly issuesTable: dynamodb.Table;
-  public readonly evidenceTable: dynamodb.Table;
-  public readonly reportsTable: dynamodb.Table;
-  public readonly leastPrivilegeFindingsTable: dynamodb.Table;
+  public readonly issuesTable!: dynamodb.Table;
+  public readonly evidenceTable!: dynamodb.Table;
+  public readonly reportsTable!: dynamodb.Table;
+  public readonly leastPrivilegeFindingsTable!: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: SecurityGraphIngestionStackProps) {
     super(scope, id, props);
@@ -54,7 +54,6 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       parentIds,
       collectionRegions,
     } = props;
-
     const neptuneResource = `arn:aws:neptune-db:${this.region}:${this.account}:${neptuneClusterResourceId}/*`;
 
     // One customer-managed key for every table below. Using a CMK means the
@@ -97,14 +96,13 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     // very different needs: list-accounts never touches Neptune, yet it used to
     // inherit the right to read the Neptune auth secret. Each function now
     // starts from the logging baseline and receives only what it uses.
-    const lambdaRole = (id: string): iam.Role =>
+    const lambdaRole = (id: string) =>
       new iam.Role(this, id, {
         assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
         managedPolicies: [
           iam.ManagedPolicy.fromAwsManagedPolicyName('servicerole/AWSLambdaBasicExecutionRole'),
         ],
       });
-
     const listAccountsRole = lambdaRole('ListAccountsRole');
 
     // The CIEM lambdas sign Neptune requests with SigV4 like graph-writer and
@@ -117,7 +115,6 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         resources: [neptuneResource],
       })
     );
-
     const leastPrivilegeSweepRole = lambdaRole('LeastPrivilegeSweepRole');
     // The sweep only reads the graph; its findings go to DynamoDB.
     leastPrivilegeSweepRole.addToPolicy(
@@ -165,7 +162,6 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
           : [`arn:aws:iam::*:role/${COLLECTOR_ROLE_NAME}`],
       conditions: { StringEquals: { 'sts:ExternalId': collectorExternalIdRef } },
     });
-
     const collectorRole = lambdaRole('CollectorRole');
     collectorRole.addToPolicy(assumeMemberCollector);
     runtimeSecret.grantRead(collectorRole);
@@ -173,18 +169,15 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     // not infer that the policy needs the secret to exist first. Make it
     // explicit or the policy can be created before the secret has a value.
     collectorRole.node.addDependency(runtimeSecret);
-
     const incrementalCollectorRole = lambdaRole('IncrementalCollectorRole');
     incrementalCollectorRole.addToPolicy(assumeMemberCollector);
     runtimeSecret.grantRead(incrementalCollectorRole);
     incrementalCollectorRole.node.addDependency(runtimeSecret);
-
     const organizationsReadActions = [
       'organizations:ListAccounts',
       'organizations:ListAccountsForParent',
       'organizations:ListOrganizationalUnitsForParent',
     ];
-
     const listAccountsFn = new lambda.Function(this, 'ListAccountsFn', {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
@@ -272,12 +265,13 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       messageGroupId: 'security-graph-changes',
     });
 
-    const logGroup = (fn: lambda.Function, name: string): void => {
+    const logGroup = (fn: lambda.Function, name: string) => {
       new logs.LogGroup(this, `${name}Logs`, {
         logGroupName: `/aws/lambda/${fn.functionName}`,
         retention: logs.RetentionDays.ONE_WEEK,
       });
     };
+
     logGroup(listAccountsFn, 'ListAccounts');
     logGroup(collectorFn, 'Collector');
     logGroup(graphWriterFn, 'GraphWriter');
@@ -329,6 +323,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         NEPTUNE_ENDPOINT: neptuneEndpoint,
       },
     });
+
     logGroup(policyEvaluatorFn, 'PolicyEvaluator');
 
     const leastPrivilegeSweepFn = new lambda.Function(this, 'LeastPrivilegeSweepFn', {
@@ -362,6 +357,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         ],
       })
     );
+
     logGroup(leastPrivilegeSweepFn, 'LeastPrivilegeSweep');
     tableKey.grantEncryptDecrypt(leastPrivilegeSweepRole);
 
@@ -460,6 +456,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         resources: ['*'],
       })
     );
+
     logGroup(cloudTrailAnalyzerFn, 'CloudTrailAnalyzer');
     tableKey.grantEncryptDecrypt(cloudTrailAnalyzerFn);
 
@@ -485,6 +482,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         scannerSg.connections.allowInternally(ec2.Port.tcp(443));
       }
       scannerSecurityGroups = [scannerSg];
+
       for (const service of [
         ec2.InterfaceVpcEndpointAwsService.S3,
         ec2.InterfaceVpcEndpointAwsService.MACIE,
@@ -506,12 +504,11 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     // S3 objects are not tag-conditioned by aws:ResourceTag, and the opt-in
     // dspm-scan tag lives on the bucket, so the tag gate stays as runtime
     // defence in depth.
-    const dspmBucketAllowlist = props.dspmBucketAllowlist ?? [];
-    const dspmReadResources: string[] | undefined =
-      dspmBucketAllowlist.length > 0
+    const dspmReadResources =
+      (props.dspmBucketAllowlist?.length ?? 0) > 0
         ? [
-            ...dspmBucketAllowlist.map((bucket) => `arn:aws:s3:::${bucket}`),
-            ...dspmBucketAllowlist.map((bucket) => `arn:aws:s3:::${bucket}/*`),
+            ...props.dspmBucketAllowlist!.map((bucket) => `arn:aws:s3:::${bucket}`),
+            ...props.dspmBucketAllowlist!.map((bucket) => `arn:aws:s3:::${bucket}/*`),
           ]
         : undefined;
 
@@ -565,6 +562,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         })
       );
     }
+
     logGroup(dspmScannerFn, 'DspmScanner');
 
     if (props.enableDspmEventTrigger) {
@@ -604,6 +602,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       lambdaFunction: listAccountsFn,
       outputPath: '$.Payload',
     });
+
     const mapAccounts = new stepfunctions.Map(this, 'MapAccounts', {
       itemsPath: stepfunctions.JsonPath.stringAt('$.workItems'),
       itemSelector: {
@@ -614,35 +613,42 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       maxConcurrency: 20,
       resultPath: stepfunctions.JsonPath.DISCARD,
     });
+
     const collector = new tasks.LambdaInvoke(this, 'Collector', {
       lambdaFunction: collectorFn,
       inputPath: '$',
       outputPath: '$.Payload',
     });
+
     const collectorWithRetry = collector.addRetry({
       maxAttempts: 3,
       interval: cdk.Duration.seconds(30),
       backoffRate: 2,
       jitterStrategy: stepfunctions.JitterType.FULL,
     });
+
     const policyEvaluator = new tasks.LambdaInvoke(this, 'PolicyEvaluator', {
       lambdaFunction: policyEvaluatorFn,
       outputPath: '$.Payload',
     });
+
     mapAccounts.itemProcessor(collectorWithRetry);
+
     const definition = listAccounts.next(mapAccounts).next(policyEvaluator);
+
     const stateMachine = new stepfunctions.StateMachine(this, 'SecurityGraphIngestion', {
       definitionBody: stepfunctions.DefinitionBody.fromChainable(definition),
       timeout: cdk.Duration.hours(2),
       tracingEnabled: true,
     });
+
     new events.Rule(this, 'ScheduledTrigger', {
       ruleName: 'security-graph-scheduled-trigger',
       schedule: events.Schedule.rate(cdk.Duration.hours(2)),
       targets: [new targets.SfnStateMachine(stateMachine)],
     });
 
-    const eventRules: { name: string; source: string; events: string[] }[] = [
+    const eventRules = [
       {
         name: 'SecurityGroupChange',
         source: 'aws.ec2',
@@ -692,6 +698,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         events: ['CreateCluster', 'DeleteCluster', 'UpdateCluster'],
       },
     ];
+
     eventRules.forEach(({ name, source, events: eventNames }) => {
       new events.Rule(this, name, {
         ruleName: `security-graph-${name.toLowerCase()}`,
@@ -733,6 +740,11 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       indexName: 'StatusIndex',
       partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING },
+    });
+    this.issuesTable.addGlobalSecondaryIndex({
+      indexName: 'StatusCreatedIndex',
+      partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
     });
 
     this.evidenceTable = new dynamodb.Table(this, 'ComplianceEvidenceTable', {
@@ -821,6 +833,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         resources: [issuesTopic.topicArn],
       })
     );
+
     logGroup(riskEngineFn, 'RiskEngine');
     tableKey.grantEncryptDecrypt(riskEngineFn);
 
@@ -843,6 +856,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     );
     this.evidenceTable.grantReadWriteData(complianceEngineFn);
     this.reportsTable.grantReadWriteData(complianceEngineFn);
+
     logGroup(complianceEngineFn, 'ComplianceEngine');
     tableKey.grantEncryptDecrypt(complianceEngineFn);
 
@@ -851,26 +865,31 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       schedule: events.Schedule.rate(cdk.Duration.hours(1)),
       targets: [new targets.LambdaFunction(riskEngineFn)],
     });
+
     new events.Rule(this, 'ComplianceEngineScheduledTrigger', {
       ruleName: 'compliance-engine-scheduled-trigger',
       schedule: events.Schedule.rate(cdk.Duration.hours(6)),
       targets: [new targets.LambdaFunction(complianceEngineFn)],
     });
+
     new events.Rule(this, 'PolicyEvaluatorScheduledTrigger', {
       ruleName: 'policy-evaluator-scheduled-trigger',
       schedule: events.Schedule.rate(cdk.Duration.hours(6)),
       targets: [new targets.LambdaFunction(policyEvaluatorFn)],
     });
+
     new events.Rule(this, 'CloudTrailAnalyzerScheduledTrigger', {
       ruleName: 'cloudtrail-analyzer-scheduled-trigger',
       schedule: events.Schedule.cron({ minute: '0', hour: '2' }),
       targets: [new targets.LambdaFunction(cloudTrailAnalyzerFn)],
     });
+
     new events.Rule(this, 'DspmScannerScheduledTrigger', {
       ruleName: 'dspm-scanner-scheduled-trigger',
       schedule: events.Schedule.cron({ minute: '0', hour: '3' }),
       targets: [new targets.LambdaFunction(dspmScannerFn)],
     });
+
     new events.Rule(this, 'LeastPrivilegeSweepScheduledTrigger', {
       ruleName: 'least-privilege-sweep-scheduled-trigger',
       schedule: events.Schedule.cron({ minute: '0', hour: '3' }),

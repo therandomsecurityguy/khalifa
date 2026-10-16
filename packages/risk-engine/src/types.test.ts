@@ -10,7 +10,6 @@ import type {
   RuleExecutionResult,
   GraphVertex,
   GraphEdge,
-  CvssScore,
   IdentityBlastRadius,
   RiskScoreInput,
   RiskScoreOutput,
@@ -65,13 +64,13 @@ describe('Types', () => {
   describe('RiskFactor interface', () => {
     test('should create valid RiskFactor object', () => {
       const riskFactor: RiskFactor = {
-        name: 'cvss',
-        weight: 0.25,
-        value: 9.8,
+        name: 'exposure',
+        weight: 0.3,
+        value: 1,
       };
-      expect(riskFactor.name).toBe('cvss');
-      expect(riskFactor.weight).toBe(0.25);
-      expect(riskFactor.value).toBe(9.8);
+      expect(riskFactor.name).toBe('exposure');
+      expect(riskFactor.weight).toBe(0.3);
+      expect(riskFactor.value).toBe(1);
     });
   });
 
@@ -168,19 +167,6 @@ describe('Types', () => {
     });
   });
 
-  describe('CvssScore interface', () => {
-    test('should create valid CvssScore object', () => {
-      const cvss: CvssScore = {
-        baseScore: 9.8,
-        exploitabilitySubScore: 3.9,
-        impactSubScore: 5.9,
-        vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
-      };
-      expect(cvss.baseScore).toBe(9.8);
-      expect(cvss.vectorString).toContain('CVSS:3.1');
-    });
-  });
-
   describe('IdentityBlastRadius interface', () => {
     test('should create valid IdentityBlastRadius object', () => {
       const blastRadius: IdentityBlastRadius = {
@@ -195,13 +181,6 @@ describe('Types', () => {
   describe('RiskScoreInput interface', () => {
     test('should create valid RiskScoreInput object', () => {
       const input: RiskScoreInput = {
-        cvss: {
-          baseScore: 9.0,
-          exploitabilitySubScore: 3.0,
-          impactSubScore: 5.0,
-          vectorString: 'test',
-        },
-        exploitabilityFlags: { hasExploit: true, hasPublicExploit: false, malwareAvailable: false },
         exposureLevel: 'internet',
         identityBlastRadius: { type: 'admin', scope: 1 },
         dataClassification: 'restricted',
@@ -230,8 +209,7 @@ describe('Types', () => {
         score: 85,
         severity: 'high',
         factors: {
-          cvssContribution: 22.5,
-          exposureContribution: 20,
+          exposureContribution: 30,
           identityContribution: 20,
           dataClassificationContribution: 16,
           environmentContribution: 15,
@@ -240,7 +218,7 @@ describe('Types', () => {
       };
       expect(output.score).toBe(85);
       expect(output.severity).toBe('high');
-      expect(output.factors.cvssContribution).toBe(22.5);
+      expect(output.factors.exposureContribution).toBe(30);
     });
   });
 });

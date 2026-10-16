@@ -1,24 +1,35 @@
 import type { Issue, RiskRule, GraphVertex } from './types';
 
+const mockRecordMany = jest.fn();
+const mockIncrement = jest.fn();
+const mockIntegrationEmit = jest.fn();
+
 jest.mock('./posture-trend-store', () => ({
   PostureTrendStore: jest.fn().mockImplementation(() => ({
     record: jest.fn().mockResolvedValue(undefined),
-    recordMany: jest.fn().mockResolvedValue(undefined),
+    recordMany: mockRecordMany,
+    increment: mockIncrement,
     getSeries: jest.fn().mockResolvedValue([]),
   })),
 }));
 
 jest.mock('@khalifa/integrations', () => ({
   IssueIntegrationsOrchestrator: jest.fn().mockImplementation(() => ({
-    emit: jest.fn().mockResolvedValue([]),
+    emit: mockIntegrationEmit,
     healthCheck: jest.fn().mockResolvedValue({}),
     configuredSinks: [],
   })),
 }));
 
+import Gremlin from 'gremlin';
 import { RiskRuleRunner } from './runner';
 
 describe('RiskRuleRunner stale-issue fix', () => {
+  beforeEach(() => {
+    mockRecordMany.mockReset().mockResolvedValue(undefined);
+    mockIncrement.mockReset().mockResolvedValue(undefined);
+    mockIntegrationEmit.mockReset().mockResolvedValue([]);
+  });
   const rule: RiskRule = {
     id: 'RULE-001',
     name: 'Test Rule',
@@ -54,17 +65,18 @@ describe('RiskRuleRunner stale-issue fix', () => {
     },
   ];
 
-  const resources = [{ resourceId: 'arn:aws:s3:::bucket', resourceType: 'S3Bucket' }];
-
   test('refreshExistingIssue re-derives riskScore and updates fields', async () => {
     const runner = new RiskRuleRunner('localhost:8182');
     const store = (runner as any).issueStore;
-    store.updateIssueFields = jest.fn().mockResolvedValue(undefined);
+    store.updateIssue = jest.fn().mockResolvedValue(true);
 
-    await (runner as any).refreshExistingIssue(existingIssue, rule, newPath, resources);
+    await (runner as any).refreshExistingIssue(existingIssue, rule, {
+      vertices: newPath,
+      edges: [],
+    });
 
-    expect(store.updateIssueFields).toHaveBeenCalledTimes(1);
-    const updated = store.updateIssueFields.mock.calls[0][0] as Issue;
+    expect(store.updateIssue).toHaveBeenCalledTimes(1);
+    const updated = store.updateIssue.mock.calls[0][0] as Issue;
     expect(updated.id).toBe('RULE-001-abc');
     expect(updated.createdAt).toBe('2024-01-01T00:00:00Z');
     expect(updated.owningTeam).toBe('cloud-security');
@@ -73,22 +85,8 @@ describe('RiskRuleRunner stale-issue fix', () => {
     expect(updated.riskScore).not.toBe(50);
     expect(updated.severity).not.toBe('medium');
     expect(updated.metadata.lastRefreshedAt).toBeDefined();
-  });
-
-  test('refreshExistingIssue preserves id and createdAt but updates updatedAt', async () => {
-    const runner = new RiskRuleRunner('localhost:8182');
-    const store = (runner as any).issueStore;
-    store.updateIssueFields = jest.fn().mockResolvedValue(undefined);
-
-    await (runner as any).refreshExistingIssue(existingIssue, rule, newPath, resources);
-
-    const updated = store.updateIssueFields.mock.calls[0][0] as Issue;
-    expect(updated.id).toBe(existingIssue.id);
-    expect(updated.createdAt).toBe(existingIssue.createdAt);
-    expect(updated.owningTeam).toBe(existingIssue.owningTeam);
-    expect(new Date(updated.updatedAt).getTime()).toBeGreaterThan(
-      new Date(existingIssue.updatedAt).getTime()
-    );
+    // Hints are re-derived, so an improved hint reaches issues opened before it.
+    expect(updated.remediationHint).not.toBe('old hint');
   });
 
   test('emitToIntegrations skips when autoTicketConfig disabled', async () => {
@@ -111,5 +109,498 @@ describe('RiskRuleRunner stale-issue fix', () => {
     await (runner as any).emitToIntegrations(suppressedIssue, rule);
 
     expect(store.updateExternalRefs).not.toHaveBeenCalled();
+  });
+
+  test('runRule waits out a Neptune memory-limit storm and then continues', async () => {
+    const waits: number[] = [];
+    const runner = new RiskRuleRunner('localhost:8182', undefined, undefined, async (ms) => {
+      waits.push(ms);
+    });
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    const storm = {
+      message:
+        'Server error: {"code":"MemoryLimitExceededException","message":"Query cannot be completed due to memory limitations."} (500)',
+      statusCode: 500,
+    };
+    neptune.executeQuery = jest
+      .fn()
+      .mockRejectedValueOnce(storm)
+      .mockRejectedValueOnce(storm)
+      .mockResolvedValueOnce([]);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(runner.runRule(rule)).resolves.toEqual(
+      expect.objectContaining({ issuesCreated: 0, errors: undefined })
+    );
+    expect(waits).toEqual([5_000, 15_000]);
+    expect(neptune.executeQuery).toHaveBeenCalledTimes(3);
+    warn.mockRestore();
+  });
+
+  test('runRule gives up on a non-retryable Neptune error without waiting', async () => {
+    const waits: number[] = [];
+    const runner = new RiskRuleRunner('localhost:8182', undefined, undefined, async (ms) => {
+      waits.push(ms);
+    });
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest
+      .fn()
+      .mockRejectedValue(
+        new Error('Server error: {"code":"InternalFailureException","message":"bad step"} (500)')
+      );
+
+    const result = await runner.runRule(rule);
+    expect(result.errors).toHaveLength(1);
+    expect(waits).toEqual([]);
+    expect(neptune.executeQuery).toHaveBeenCalledTimes(1);
+  });
+
+  test('runRule reads driver Path elements (Maps keyed by T enums, list values, edges between vertices)', async () => {
+    const { Path } = Gremlin.structure;
+    const { t } = Gremlin.process;
+    const findingArn = 'arn:aws:securityhub:us-west-2:401311973745:finding/f9c2';
+    const instanceArn = 'arn:aws:ec2:us-west-2:401311973745:instance/i-0599';
+    const element = (id: string, label: string, props: Record<string, unknown[]> = {}) =>
+      new Map<unknown, unknown>([[t.id, id], [t.label, label], ...Object.entries(props)]);
+    const path = new Path(
+      ['finding', 'target'],
+      [
+        element(findingArn, 'SecurityHubFinding', { arn: [findingArn], name: ['Exposed'] }),
+        element('edge-1', 'DETECTS_ON'),
+        element(instanceArn, 'Ec2Instance', {
+          arn: [instanceArn],
+          env: ['prod'],
+          is_internet_exposed: [true],
+        }),
+      ]
+    );
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest.fn().mockResolvedValue([path]);
+    store.getIssueByRuleAndResources = jest.fn().mockResolvedValue(null);
+    store.createIssue = jest.fn().mockResolvedValue(true);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+
+    await expect(runner.runRule(rule)).resolves.toEqual(
+      expect.objectContaining({ issuesCreated: 1, errors: undefined })
+    );
+    const issue = store.createIssue.mock.calls[0][0] as Issue;
+    expect(issue.resourcesInvolved).toEqual([
+      { resourceId: findingArn, resourceType: 'SecurityHubFinding', resourceName: 'Exposed' },
+      { resourceId: instanceArn, resourceType: 'Ec2Instance', resourceName: undefined },
+    ]);
+    expect(issue.pathSummary).toEqual([
+      { from: findingArn, to: instanceArn, edgeType: 'DETECTS_ON' },
+    ]);
+    expect(issue.metadata.environment).toBe('prod');
+  });
+
+  test('runRule reports a path whose vertex has no id as malformed instead of skipping it', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest
+      .fn()
+      .mockResolvedValue([{ objects: [{ label: 'EksCluster', arn: 'arn:aws:eks:::x' }] }]);
+
+    await expect(runner.runRule(rule)).resolves.toEqual(
+      expect.objectContaining({
+        issuesCreated: 0,
+        errors: ['Neptune returned a malformed risk-rule path'],
+      })
+    );
+  });
+
+  test('runRule reopens and refreshes a resolved issue that becomes active again', async () => {
+    const resolvedIssue: Issue = { ...existingIssue, status: 'resolved' };
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest.fn().mockResolvedValue([
+      {
+        objects: [
+          {
+            id: 'neptune-generated-id',
+            label: 'S3Bucket',
+            arn: 'arn:aws:s3:::bucket',
+            name: 'bucket',
+          },
+        ],
+      },
+    ]);
+    store.getIssueByRuleAndResources = jest.fn().mockResolvedValue(resolvedIssue);
+    store.reopenIssue = jest.fn().mockResolvedValue(true);
+    store.updateIssue = jest.fn().mockResolvedValue(true);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+
+    await expect(runner.runRule(rule)).resolves.toEqual(
+      expect.objectContaining({ issuesCreated: 0, issuesResolved: 0, errors: undefined })
+    );
+    expect(store.getIssueByRuleAndResources).toHaveBeenCalledWith('RULE-001', [
+      'arn:aws:s3:::bucket',
+    ]);
+    expect(store.reopenIssue).toHaveBeenCalledWith(resolvedIssue, {
+      by: 'khalifa',
+      reason: 'Matched again by RULE-001',
+    });
+    expect(store.updateIssue).toHaveBeenCalledWith(expect.objectContaining({ status: 'open' }));
+  });
+
+  test('runRule resolves inactive open and suppressed issues with a reason', async () => {
+    const suppressedIssue: Issue = { ...existingIssue, id: 'RULE-001-def', status: 'suppressed' };
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest.fn().mockResolvedValue([]);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([existingIssue, suppressedIssue]);
+    store.resolveIssue = jest.fn().mockResolvedValue(true);
+
+    await expect(runner.runRule(rule)).resolves.toEqual(
+      expect.objectContaining({ issuesCreated: 0, issuesResolved: 2, errors: undefined })
+    );
+    const change = { by: 'khalifa', reason: 'No longer matched by RULE-001' };
+    expect(store.resolveIssue).toHaveBeenCalledWith(existingIssue, change);
+    expect(store.resolveIssue).toHaveBeenCalledWith(suppressedIssue, change);
+  });
+
+  describe('a suppressed issue that still matches', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const matchingPath = [
+      {
+        objects: [
+          {
+            id: 'v',
+            label: 'S3Bucket',
+            arn: 'arn:aws:s3:::bucket',
+            env: 'prod',
+            is_internet_exposed: true,
+            data_classification: 'restricted',
+          },
+        ],
+      },
+    ];
+
+    async function runWith(suppression: Issue['suppression']) {
+      const runner = new RiskRuleRunner('localhost:8182');
+      const store = (runner as any).issueStore;
+      (runner as any).neptuneClient.executeQuery = jest.fn().mockResolvedValue(matchingPath);
+      store.getIssueByRuleAndResources = jest
+        .fn()
+        .mockResolvedValue({ ...existingIssue, status: 'suppressed', suppression });
+      store.updateIssue = jest.fn().mockResolvedValue(true);
+      store.reopenIssue = jest.fn().mockResolvedValue(true);
+      store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+      await runner.runRule(rule);
+      return store.reopenIssue as jest.Mock;
+    }
+
+    const active = (overrides: Partial<NonNullable<Issue['suppression']>> = {}) => ({
+      by: 'analyst@example.com',
+      at: new Date(Date.now() - DAY).toISOString(),
+      reason: 'accepted',
+      until: new Date(Date.now() + 30 * DAY).toISOString(),
+      severity: 'critical' as const,
+      ...overrides,
+    });
+
+    test('stays suppressed before its expiry', async () => {
+      expect(await runWith(active())).not.toHaveBeenCalled();
+    });
+
+    test('reopens once its expiry passes', async () => {
+      const reopen = await runWith(active({ until: new Date(Date.now() - 1).toISOString() }));
+      expect(reopen).toHaveBeenCalledWith(expect.objectContaining({ status: 'suppressed' }), {
+        by: 'khalifa',
+        reason: 'Suppression by analyst@example.com expired',
+      });
+    });
+
+    test('reopens early when its severity rises above what was accepted', async () => {
+      const reopen = await runWith(active({ severity: 'low' }));
+      expect(reopen).toHaveBeenCalledWith(expect.anything(), {
+        by: 'khalifa',
+        reason: expect.stringMatching(/^Severity rose from low to (medium|high|critical)/),
+      });
+    });
+
+    test('reopens a legacy suppression with no recorded reason or expiry', async () => {
+      const reopen = await runWith(undefined);
+      expect(reopen).toHaveBeenCalledWith(expect.anything(), {
+        by: 'khalifa',
+        reason: 'Suppression had no recorded reason or expiry',
+      });
+    });
+  });
+
+  test('does not resolve issues when Neptune returns a malformed path', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest.fn().mockResolvedValue([{}]);
+    store.resolveIssue = jest.fn();
+
+    await expect(runner.runRule(rule)).resolves.toEqual(
+      expect.objectContaining({ errors: ['Neptune returned a malformed risk-rule path'] })
+    );
+    expect(store.resolveIssue).not.toHaveBeenCalled();
+  });
+
+  test('snapshotTrends records rule series and the open total split by severity', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    store.getOpenIssuesByRule = jest.fn().mockImplementation(async (ruleId: string) => {
+      if (ruleId === 'RULE-007') return [{ id: 'pub', severity: 'low' }];
+      if (ruleId === 'RULE-006')
+        return [
+          { id: 'trust', severity: 'low' },
+          { id: 'trust-2', severity: 'low' },
+        ];
+      if (ruleId === 'RULE-015') return [];
+      return [{ id: 'other', severity: 'critical' }];
+    });
+
+    await (runner as any).snapshotTrends([
+      { ruleId: 'RULE-001', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
+      { ruleId: 'RULE-006', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
+      { ruleId: 'RULE-007', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
+      { ruleId: 'RULE-015', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
+    ]);
+
+    expect(mockRecordMany).toHaveBeenCalledWith([
+      {
+        metric: 'openIssuesBySeverity',
+        value: 4,
+        accountIds: [],
+        sample: { bySeverity: { critical: 1, high: 0, medium: 0, low: 3 } },
+      },
+      { metric: 'publicBuckets', value: 1, accountIds: [] },
+      { metric: 'crossAccountTrusts', value: 2, accountIds: [] },
+      { metric: 'usersWithoutMfa', value: 0, accountIds: [] },
+    ]);
+  });
+
+  test('snapshotTrends adds the run’s created and resolved totals to the day', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    (runner as any).issueStore.getOpenIssuesByRule = jest.fn().mockResolvedValue([]);
+
+    await (runner as any).snapshotTrends([
+      { ruleId: 'RULE-001', executionTime: 1, matches: [], issuesCreated: 3, issuesResolved: 1 },
+      { ruleId: 'RULE-006', executionTime: 1, matches: [], issuesCreated: 2, issuesResolved: 4 },
+    ]);
+
+    expect(mockIncrement).toHaveBeenCalledTimes(2);
+    expect(mockIncrement).toHaveBeenCalledWith('issuesCreated', 5);
+    expect(mockIncrement).toHaveBeenCalledWith('issuesResolved', 5);
+  });
+
+  test('snapshotTrends increments by zero on a quiet run so the day still has a row', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    (runner as any).issueStore.getOpenIssuesByRule = jest.fn().mockResolvedValue([]);
+
+    await (runner as any).snapshotTrends([
+      { ruleId: 'RULE-001', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
+    ]);
+
+    expect(mockIncrement).toHaveBeenCalledWith('issuesCreated', 0);
+    expect(mockIncrement).toHaveBeenCalledWith('issuesResolved', 0);
+  });
+
+  test('snapshotTrends propagates persistence failures', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    store.getOpenIssuesByRule = jest.fn().mockResolvedValue([]);
+    mockRecordMany.mockRejectedValue(new Error('trend write failed'));
+
+    await expect(
+      (runner as any).snapshotTrends([
+        {
+          ruleId: rule.id,
+          executionTime: 1,
+          matches: [],
+          issuesCreated: 0,
+          issuesResolved: 0,
+        },
+      ])
+    ).rejects.toThrow('trend write failed');
+  });
+
+  test('emitToIntegrations propagates external-reference persistence failures', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    store.updateExternalRefs = jest.fn().mockRejectedValue(new Error('reference write failed'));
+    mockIntegrationEmit.mockResolvedValue([
+      { system: 'linear', id: 'ENG-1', url: 'https://example.com/ENG-1' },
+    ]);
+
+    await expect(
+      (runner as any).emitToIntegrations(existingIssue, {
+        ...rule,
+        autoTicketConfig: { enabled: true },
+      })
+    ).rejects.toThrow('reference write failed');
+  });
+});
+
+describe('RiskRuleRunner identity blast radius', () => {
+  const build = (vertices: GraphVertex[]) =>
+    (new RiskRuleRunner('localhost:8182') as any).buildRiskInput(vertices);
+
+  test('an admin IAM role in the path yields an admin identity factor', () => {
+    const input = build([{ id: 'r1', label: 'IamRole', properties: { is_admin_role: true } }]);
+    expect(input.identityBlastRadius).toEqual({ type: 'admin', scope: 1 });
+  });
+
+  test('the CIEM is_admin property also yields an admin factor', () => {
+    const input = build([{ id: 'r1', label: 'IamRole', properties: { is_admin: true } }]);
+    expect(input.identityBlastRadius).toEqual({ type: 'admin', scope: 1 });
+  });
+
+  test('cross-account trust yields a cross-account factor', () => {
+    const input = build([
+      { id: 'r1', label: 'IamRole', properties: { has_cross_account_trust: true } },
+    ]);
+    expect(input.identityBlastRadius).toEqual({ type: 'cross-account', scope: 1 });
+  });
+
+  test('a later cross-account vertex does not downgrade admin', () => {
+    const input = build([
+      { id: 'r1', label: 'IamRole', properties: { is_admin_role: true } },
+      { id: 'r2', label: 'IamRole', properties: { has_cross_account_trust: true } },
+    ]);
+    expect(input.identityBlastRadius).toEqual({ type: 'admin', scope: 1 });
+  });
+
+  test('no identity properties leaves the factor absent, not zeroed', () => {
+    const input = build([
+      { id: 'i1', label: 'Ec2Instance', properties: { is_internet_exposed: true } },
+    ]);
+    expect(input.identityBlastRadius).toBeUndefined();
+  });
+});
+
+describe('RiskRuleRunner one issue per problem', () => {
+  const host = (n: string) => `arn:aws:ec2:us-west-2:111122223333:instance/i-${n}`;
+  const finding = (n: string) => `arn:aws:securityhub:us-west-2:111122223333:finding/${n}`;
+  const vertex = (id: string, label: string, props: Record<string, unknown> = {}) => ({
+    id,
+    label,
+    properties: { arn: id, ...props },
+  });
+  const match = (findingId: string, hostId: string) => [
+    vertex(finding(findingId), 'SecurityHubFinding'),
+    { id: `e-${findingId}`, label: 'DETECTS_ON', properties: {} },
+    vertex(host(hostId), 'Ec2Instance', { is_internet_exposed: true }),
+  ];
+  const rule: RiskRule = {
+    id: 'RULE-018',
+    name: 'Finding on exposed resource',
+    description: 'test',
+    severityHint: 'critical',
+    riskFactors: [],
+    gremlinQueryTemplate: 'g.V()',
+    ownerTeam: 'detection-response',
+    enabled: true,
+    autoTicketConfig: { enabled: false },
+    routeLabels: ['SecurityHubFinding'],
+  };
+
+  function runnerWith(matches: unknown[], active: Issue[] = [], existing: Issue | null = null) {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    (runner as any).neptuneClient.executeQuery = jest.fn().mockResolvedValue(matches);
+    store.getIssueByRuleAndResources = jest.fn().mockResolvedValue(existing);
+    store.createIssue = jest.fn().mockResolvedValue(true);
+    store.updateIssue = jest.fn().mockResolvedValue(true);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue(active);
+    store.resolveIssue = jest.fn().mockResolvedValue(true);
+    return { runner, store };
+  }
+
+  beforeEach(() => mockIntegrationEmit.mockReset().mockResolvedValue([]));
+
+  test('findings on one resource become one issue that lists them all', async () => {
+    const { runner, store } = runnerWith([match('f1', 'a'), match('f2', 'a'), match('f3', 'b')]);
+
+    await expect(runner.runRule(rule)).resolves.toEqual(
+      expect.objectContaining({ issuesCreated: 2, errors: undefined })
+    );
+    const [onA, onB] = store.createIssue.mock.calls.map((call: [Issue]) => call[0]);
+    expect(onA.id).toBe(store.generateIssueId('RULE-018', [host('a')]));
+    expect(onA.resourcesInvolved.map((r: { resourceId: string }) => r.resourceId)).toEqual([
+      host('a'),
+      finding('f1'),
+      finding('f2'),
+    ]);
+    expect(onA.metadata.matchCount).toBe(2);
+    expect(onB.metadata.matchCount).toBe(1);
+    expect(store.getIssueByRuleAndResources).toHaveBeenCalledWith('RULE-018', [host('a')]);
+  });
+
+  test('a resource keeps its issue while any finding remains, and old per-finding rows resolve', async () => {
+    const grouped = { id: 'RULE-018-v2-grouped', ruleId: 'RULE-018', status: 'open' } as Issue;
+    const legacy = { id: 'RULE-018-v2-perfinding', ruleId: 'RULE-018', status: 'open' } as Issue;
+    const { runner, store } = runnerWith([match('f2', 'a')], [grouped, legacy], {
+      ...grouped,
+      resourcesInvolved: [],
+      metadata: {},
+    } as unknown as Issue);
+
+    await runner.runRule(rule);
+
+    const refreshed = store.updateIssue.mock.calls[0][0] as Issue;
+    expect(refreshed.resourcesInvolved.map((r) => r.resourceId)).toEqual([
+      host('a'),
+      finding('f2'),
+    ]);
+    expect(refreshed.metadata.matchCount).toBe(1);
+    expect(store.resolveIssue).toHaveBeenCalledTimes(1);
+    expect(store.resolveIssue.mock.calls[0][0].id).toBe('RULE-018-v2-perfinding');
+  });
+
+  test('a rule without route labels still opens one issue per distinct path', async () => {
+    const { runner, store } = runnerWith([match('f1', 'a'), match('f2', 'a')]);
+
+    await runner.runRule({ ...rule, routeLabels: undefined });
+
+    expect(store.createIssue).toHaveBeenCalledTimes(2);
+    expect(store.createIssue.mock.calls[0][0].id).toBe(
+      store.generateIssueId('RULE-018', [finding('f1'), host('a')])
+    );
+  });
+
+  test('a suppressed issue reopens when a new finding joins it, not for the ones it accepted', async () => {
+    const suppressed = {
+      id: 'RULE-018-v2-grouped',
+      ruleId: 'RULE-018',
+      status: 'suppressed',
+      severity: 'low',
+      resourcesInvolved: [
+        { resourceId: host('a'), resourceType: 'Ec2Instance' },
+        { resourceId: finding('f1'), resourceType: 'SecurityHubFinding' },
+      ],
+      suppression: {
+        by: 'analyst@example.com',
+        at: '2026-10-01T00:00:00Z',
+        reason: 'accepted',
+        until: '2099-01-01T00:00:00Z',
+        severity: 'critical',
+      },
+      metadata: {},
+    } as unknown as Issue;
+
+    const same = runnerWith([match('f1', 'a')], [suppressed], suppressed);
+    same.store.reopenIssue = jest.fn().mockResolvedValue(true);
+    await same.runner.runRule(rule);
+    expect(same.store.reopenIssue).not.toHaveBeenCalled();
+
+    const grown = runnerWith([match('f1', 'a'), match('f2', 'a')], [suppressed], suppressed);
+    grown.store.reopenIssue = jest.fn().mockResolvedValue(true);
+    await grown.runner.runRule(rule);
+    expect(grown.store.reopenIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'RULE-018-v2-grouped' }),
+      expect.objectContaining({ reason: 'New SecurityHubFinding matched while suppressed' })
+    );
   });
 });

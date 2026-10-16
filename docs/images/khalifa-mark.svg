@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Khalifa">
+  <circle cx="128" cy="128" r="118" fill="none" stroke="#111" stroke-width="8"/>
+  <g fill="none" stroke="#111" stroke-width="6" stroke-linecap="round">
+    <line x1="128" y1="58" x2="188" y2="98"/>
+    <line x1="128" y1="58" x2="68" y2="98"/>
+    <line x1="68" y1="98" x2="80" y2="168"/>
+    <line x1="188" y1="98" x2="176" y2="168"/>
+    <line x1="80" y1="168" x2="176" y2="168"/>
+    <line x1="128" y1="58" x2="128" y2="128"/>
+    <line x1="68" y1="98" x2="128" y2="128"/>
+    <line x1="188" y1="98" x2="128" y2="128"/>
+    <line x1="80" y1="168" x2="128" y2="128"/>
+    <line x1="176" y1="168" x2="128" y2="128"/>
+  </g>
+  <g fill="#111">
+    <circle cx="128" cy="58" r="11"/>
+    <circle cx="68" cy="98" r="11"/>
+    <circle cx="188" cy="98" r="11"/>
+    <circle cx="80" cy="168" r="11"/>
+    <circle cx="176" cy="168" r="11"/>
+    <circle cx="128" cy="128" r="14"/>
+  </g>
+</svg>

@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Organizations StackSet for the Khalifa member-account collection role'
+Parameters:
+  StackSetName:
+    Type: String
+    Default: khalifa-security-graph-collector
+    AllowedPattern: '^[A-Za-z][A-Za-z0-9-]{0,127}$'
+  MemberRoleTemplateUrl:
+    Type: String
+    AllowedPattern: '^https://.+$'
+    Description: 'Versioned S3 URL for SecurityGraphCollectorRole.yaml'
+  OrganizationalUnitIds:
+    Type: CommaDelimitedList
+    Description: 'Approved organization root or OU IDs'
+  DeploymentRegion:
+    Type: String
+    Description: 'Single Region used to create the account-global IAM role'
+  TrustedPrincipalArn:
+    Type: String
+    AllowedPattern: '^arn:aws(-[a-z]+)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$'
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    MaxLength: 1224
+  CollectorRoleName:
+    Type: String
+    Default: SecurityGraphCollectorRole
+    AllowedPattern: '^[A-Za-z0-9+=,.@_-]{1,64}$'
+  CallAs:
+    Type: String
+    Default: DELEGATED_ADMIN
+    AllowedValues:
+      - SELF
+      - DELEGATED_ADMIN
+Resources:
+  CollectorRoleStackSet:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      StackSetName: !Ref StackSetName
+      Description: 'Khalifa least-privilege resource collection role'
+      PermissionModel: SERVICE_MANAGED
+      CallAs: !Ref CallAs
+      Capabilities:
+        - CAPABILITY_NAMED_IAM
+      AutoDeployment:
+        Enabled: true
+        RetainStacksOnAccountRemoval: false
+      ManagedExecution:
+        Active: true
+      OperationPreferences:
+        FailureTolerancePercentage: 0
+        MaxConcurrentPercentage: 10
+        RegionConcurrencyType: SEQUENTIAL
+      Parameters:
+        - ParameterKey: TrustedPrincipalArn
+          ParameterValue: !Ref TrustedPrincipalArn
+        - ParameterKey: ExternalId
+          ParameterValue: !Ref ExternalId
+        - ParameterKey: CollectorRoleName
+          ParameterValue: !Ref CollectorRoleName
+      StackInstancesGroup:
+        - DeploymentTargets:
+            OrganizationalUnitIds: !Ref OrganizationalUnitIds
+          Regions:
+            - !Ref DeploymentRegion
+      TemplateURL: !Ref MemberRoleTemplateUrl
+Outputs:
+  StackSetId:
+    Value: !Ref CollectorRoleStackSet

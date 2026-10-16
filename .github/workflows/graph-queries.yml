@@ -1,0 +1,116 @@
+name: Graph queries
+
+# Runs rule queries against a throwaway Gremlin Server, only when graph code changes.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'packages/risk-engine/**'
+      - 'lambdas/collector/**'
+      - 'lambdas/graph-writer/**'
+      - 'lambdas/shared/**'
+      - 'lambdas/policy-evaluator/**'
+      - 'api-service/src/services/neptune-client.ts'
+      - 'test/gremlin/**'
+      - 'jest.config.js'
+      - '.github/workflows/graph-queries.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/risk-engine/**'
+      - 'lambdas/collector/**'
+      - 'lambdas/graph-writer/**'
+      - 'lambdas/shared/**'
+      - 'lambdas/policy-evaluator/**'
+      - 'api-service/src/services/neptune-client.ts'
+      - 'test/gremlin/**'
+      - 'jest.config.js'
+      - '.github/workflows/graph-queries.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: graph-queries-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Neptune engine 1.4.7.0 supports Gremlin 3.7.1 only, pinned by digest from
+  # tinkerpop/gremlin-server. Point the GREMLIN_SERVER_IMAGE repository
+  # variable at a mirror (mirror-gremlin-server.yml publishes one to GHCR) to
+  # avoid Docker Hub pull rate limits.
+  GREMLIN_SERVER_IMAGE: ${{ vars.GREMLIN_SERVER_IMAGE || 'docker.io/tinkerpop/gremlin-server@sha256:911e27acc8a43209fee272408fa99045f5ba48ae410c8cef6da8c500eca42416' }}
+
+jobs:
+  graph-queries:
+    name: Rule queries on Gremlin Server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Pin npm
+        run: |
+          npm install --global npm@11.19.1
+          test "$(npm --version)" = "11.19.1"
+
+      - name: Install dependencies
+        # Only what the graph tests need; no package install scripts.
+        run: npm ci --workspace packages/integrations --workspace packages/risk-engine --include-workspace-root --ignore-scripts
+
+      - name: Build packages
+        run: npm run build:packages
+
+      - name: Log in to GHCR
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+
+      - name: Start Gremlin Server
+        run: |
+          docker run --detach --rm --name gremlin \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --publish 127.0.0.1:8182:8182 \
+            --volume "$PWD/test/gremlin/tinkergraph.properties:/opt/gremlin-server/conf/tinkergraph-empty.properties:ro" \
+            "$GREMLIN_SERVER_IMAGE"
+          # Docker opens the port before the server is ready; wait for its own log line.
+          for _ in $(seq 1 60); do
+            if docker logs gremlin 2>&1 | grep -q 'Channel started at port 8182'; then exit 0; fi
+            sleep 2
+          done
+          docker logs gremlin
+          exit 1
+
+      - name: Run rule queries
+        env:
+          GREMLIN_TEST_ENDPOINT: ws://127.0.0.1:8182/gremlin
+          # The real gremlin driver loads modules dynamically, which Jest blocks by default.
+          NODE_OPTIONS: --experimental-vm-modules
+        run: npx jest --config packages/risk-engine/jest.graph.config.js --runInBand
+
+      - name: Server logs
+        if: failure()
+        run: docker logs gremlin || true
+
+      - name: Stop Gremlin Server
+        if: always()
+        run: |
+          docker rm --force gremlin || true
+          docker logout ghcr.io

@@ -17,308 +17,161 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-and-format:
-    name: Lint & Format
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  quality:
+    name: Quality and artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            api-service/package-lock.json
-            packages/risk-engine/package-lock.json
-            packages/integrations/package-lock.json
-            lambdas/collector/package-lock.json
-            lambdas/incremental-collector/package-lock.json
-            lambdas/list-accounts/package-lock.json
-            lambdas/graph-writer/package-lock.json
-            lambdas/dspm-scanner/package-lock.json
-            ui/package-lock.json
-            cdk/package-lock.json
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Install all workspace deps
-        run: npm ci --workspaces --include-workspace-root
-
-      - name: Check formatting (API service)
-        working-directory: api-service
-        run: npx prettier --check "src/**/*.ts"
-
-      - name: Check formatting (UI)
-        working-directory: ui
-        run: npx prettier --check "app/**/*.tsx" "lib/**/*.ts" "types/**/*.ts"
-
-      - name: Check formatting (CDK)
-        working-directory: cdk
-        run: npx prettier --check "lib/**/*.ts" "bin/**/*.ts"
-
-      - name: Check formatting (Risk Engine)
-        working-directory: packages/risk-engine
-        run: npx prettier --check "src/**/*.ts"
-
-      - name: Check formatting (Integrations)
-        working-directory: packages/integrations
-        run: npx prettier --check "src/**/*.ts"
-
-      - name: Check formatting (Lambdas)
+      - name: Pin npm
         run: |
-          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer lambdas/policy-evaluator lambdas/cloudtrail-analyzer lambdas/least-privilege-sweep lambdas/runtime lambdas/dspm-scanner; do
-            if [ -f "$dir/package.json" ]; then
-              echo "Checking $dir..."
-              npx prettier --check "$dir/**/*.ts" || exit 1
-            fi
-          done
+          npm install --global npm@11.19.1
+          test "$(npm --version)" = "11.19.1"
 
-      - name: Lint API service
-        working-directory: api-service
-        run: npx eslint src --ext .ts
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Lint UI
-        working-directory: ui
-        run: npx eslint app --ext .ts,.tsx
+      - name: Run quality gates
+        run: npm run ci:quality
 
-      - name: Lint CDK
+      - name: Audit dependency regressions
+        run: npm run ci:audit
+
+      - name: Synthesize CDK
         working-directory: cdk
-        run: npx eslint lib bin --ext .ts
+        env:
+          COLLECTION_ACCOUNT_IDS: '111122223333'
+          COLLECTOR_EXTERNAL_ID: ci-collector-external-id
+          HOME_ACCOUNT_ID: '111122223333'
+          NEPTUNE_CLUSTER_RESOURCE_ID: cluster-ci
+        run: npm exec -- cdk synth --no-lookups
 
-      - name: Lint Risk Engine
-        working-directory: packages/risk-engine
-        run: npx eslint src --ext .ts || true
+      - name: Generate dependency SBOM
+        run: npm sbom --sbom-format=cyclonedx --omit=dev > artifacts/npm.cdx.json
 
-      - name: Lint Integrations
-        working-directory: packages/integrations
-        run: npx eslint src --ext .ts || true
+      - name: Upload build evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: khalifa-build-${{ github.sha }}
+          path: |
+            artifacts/lambdas
+            artifacts/npm.cdx.json
+            cdk/cdk.out
+          if-no-files-found: error
+          retention-days: 14
 
-      - name: Lint Lambdas
-        run: |
-          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer lambdas/policy-evaluator lambdas/cloudtrail-analyzer lambdas/least-privilege-sweep lambdas/runtime lambdas/dspm-scanner; do
-            if [ -f "$dir/package.json" ] && [ -f "$dir/.eslintrc.js" -o -f "$dir/.eslintrc.json" ]; then
-              echo "Linting $dir..."
-              (cd "$dir" && npx eslint . --ext .ts) || exit 1
-            fi
-          done
+  containers:
+    name: Container smoke tests
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-  typecheck:
-    name: Type Check
-    runs-on: ubuntu-latest
+      - name: Build and smoke test
+        run: bash scripts/smoke-containers.sh
+
+  deployment:
+    name: Deployment modules
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            api-service/package-lock.json
-            packages/risk-engine/package-lock.json
-            packages/integrations/package-lock.json
-            lambdas/collector/package-lock.json
-            lambdas/incremental-collector/package-lock.json
-            lambdas/list-accounts/package-lock.json
-            lambdas/graph-writer/package-lock.json
-            lambdas/dspm-scanner/package-lock.json
-            ui/package-lock.json
-            cdk/package-lock.json
+          terraform_version: 1.14.6
+          terraform_wrapper: false
 
-      - name: Install all workspace deps
-        run: npm ci --workspaces --include-workspace-root
+      - name: Setup Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.4
 
-      - name: Build Integrations (required by risk-engine & api-service)
-        working-directory: packages/integrations
-        run: npm run build
+      - name: Setup kind
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64 \
+            --output /tmp/kind-linux-amd64
+          echo 'aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  /tmp/kind-linux-amd64' | sha256sum --check
+          sudo install /tmp/kind-linux-amd64 /usr/local/bin/kind
+          kind version
 
-      - name: Build Risk Engine (required by api-service & CDK)
-        working-directory: packages/risk-engine
-        run: npm run build
+      - name: Install kubeconform
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz \
+            --output /tmp/kubeconform.tar.gz
+          echo '9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883  /tmp/kubeconform.tar.gz' | sha256sum --check
+          tar --extract --gzip --file /tmp/kubeconform.tar.gz --directory /tmp kubeconform
+          sudo install /tmp/kubeconform /usr/local/bin/kubeconform
 
-      - name: Type check API service
-        working-directory: api-service
-        run: npx tsc --noEmit
+      - name: Validate modules
+        run: bash scripts/validate-deployment-modules.sh
 
-      - name: Type check Collector
-        working-directory: lambdas/collector
-        run: npx tsc --noEmit
+      - name: Exercise Helm lifecycle
+        run: bash scripts/smoke-helm-lifecycle.sh
 
-      - name: Type check Incremental Collector
-        working-directory: lambdas/incremental-collector
-        run: npx tsc --noEmit
-
-      - name: Type check List Accounts
-        working-directory: lambdas/list-accounts
-        run: npx tsc --noEmit
-
-      - name: Type check Graph Writer
-        working-directory: lambdas/graph-writer
-        run: npx tsc --noEmit
-
-      - name: Type check DSPM Scanner
-        working-directory: lambdas/dspm-scanner
-        run: npx tsc --noEmit
-
-      - name: Type check Policy Evaluator
-        working-directory: lambdas/policy-evaluator
-        run: npx tsc --noEmit
-
-      - name: Type check CloudTrail Analyzer
-        working-directory: lambdas/cloudtrail-analyzer
-        run: npx tsc --noEmit
-
-      - name: Type check Least Privilege Sweep
-        working-directory: lambdas/least-privilege-sweep
-        run: npx tsc --noEmit
-
-      - name: Type check Runtime
-        working-directory: lambdas/runtime
-        run: npx tsc --noEmit
-
-      - name: Type check UI
-        working-directory: ui
-        run: npx tsc --noEmit
-
-      - name: Type check CDK
-        working-directory: cdk
-        run: npx tsc --noEmit
-
-  build:
-    name: Build
+  tag:
+    name: Auto tag release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [containers, deployment]
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    needs: [lint-and-format, typecheck]
     steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            api-service/package-lock.json
-            packages/risk-engine/package-lock.json
-            packages/integrations/package-lock.json
-            lambdas/collector/package-lock.json
-            lambdas/incremental-collector/package-lock.json
-            lambdas/list-accounts/package-lock.json
-            lambdas/graph-writer/package-lock.json
-            lambdas/dspm-scanner/package-lock.json
-            ui/package-lock.json
-            cdk/package-lock.json
-
-      - name: Install all workspace deps
-        run: npm ci --workspaces --include-workspace-root
-
-      - name: Build Integrations (must build first — risk-engine imports it)
-        working-directory: packages/integrations
-        run: npm run build
-
-      - name: Build Risk Engine (must build before API service)
-        working-directory: packages/risk-engine
-        run: npm run build
-
-      - name: Build Collector
-        working-directory: lambdas/collector
-        run: npm run build
-
-      - name: Build Incremental Collector
-        working-directory: lambdas/incremental-collector
-        run: npm run build
-
-      - name: Build List Accounts
-        working-directory: lambdas/list-accounts
-        run: npm run build
-
-      - name: Build Graph Writer
-        working-directory: lambdas/graph-writer
-        run: npm run build
-
-      - name: Build DSPM Scanner
-        working-directory: lambdas/dspm-scanner
-        run: npm run build
-
-      - name: Build Policy Evaluator
-        working-directory: lambdas/policy-evaluator
-        run: npm run build
-
-      - name: Build CloudTrail Analyzer
-        working-directory: lambdas/cloudtrail-analyzer
-        run: npm run build
-
-      - name: Build Least Privilege Sweep
-        working-directory: lambdas/least-privilege-sweep
-        run: npm run build
-
-      - name: Build Runtime
-        working-directory: lambdas/runtime
-        run: npm run build
-
-      - name: Build API service
-        working-directory: api-service
-        run: npm run build
-
-      - name: Build UI
-        working-directory: ui
-        run: npm run build
-
-      - name: Build CDK
-        working-directory: cdk
-        run: npm run build
-
-      - name: Synthesize CDK (dry-run)
-        working-directory: cdk
+      - name: Validate tag token
         env:
-          AWS_REGION: us-east-1
-          CDK_DEFAULT_ACCOUNT: '111122223333'
-          CDK_DEFAULT_REGION: us-east-1
-          COLLECTION_ACCOUNT_IDS: '111122223333'
-          NEPTUNE_CLUSTER_RESOURCE_ID: cluster-00000000000000000000000000000000
-          HOME_ACCOUNT_ID: '111122223333'
-        run: npx cdk synth --no-lookups --app "npx ts-node --prefer-ts-exts bin/khalifa.ts"
+          GH_KHALIFA: ${{ secrets.GH_KHALIFA }}
+        run: |
+          if [[ -z "$GH_KHALIFA" ]]; then
+            echo "GH_KHALIFA is required to create release tags" >&2
+            exit 1
+          fi
 
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [lint-and-format, typecheck]
-    steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            api-service/package-lock.json
-            packages/risk-engine/package-lock.json
-            packages/integrations/package-lock.json
-            lambdas/collector/package-lock.json
-            lambdas/incremental-collector/package-lock.json
-            lambdas/list-accounts/package-lock.json
-            lambdas/graph-writer/package-lock.json
-            lambdas/dspm-scanner/package-lock.json
-            ui/package-lock.json
-            cdk/package-lock.json
+          fetch-depth: 0
+          token: ${{ secrets.GH_KHALIFA }}
 
-      - name: Install all workspace deps
-        run: npm ci --workspaces --include-workspace-root
+      - name: Bump version and push tag
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          existing="$(git tag --points-at "$GITHUB_SHA" --sort=-version:refname | sed -nE '/^v[0-9]+\.[0-9]+\.[0-9]+$/ {p;q;}')"
+          if [[ -n "$existing" ]]; then
+            echo "Commit already tagged: $existing"
+            exit 0
+          fi
 
-      - name: Build Integrations (required by risk-engine tests)
-        working-directory: packages/integrations
-        run: npm run build
+          latest="$(git tag --sort=-version:refname | sed -nE '/^v[0-9]+\.[0-9]+\.[0-9]+$/ {p;q;}')"
+          if [[ -z "$latest" ]]; then
+            next="v1.0.0"
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            if [[ "$COMMIT_MSG" == "Merge pull request"* ]]; then
+              next="v${major}.$((minor + 1)).0"
+            else
+              next="v${major}.${minor}.$((patch + 1))"
+            fi
+          fi
 
-      - name: Run all tests (root jest)
-        run: npx jest
+          echo "Latest: ${latest:-none}; next: $next"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$next"
+          git push origin "$next"

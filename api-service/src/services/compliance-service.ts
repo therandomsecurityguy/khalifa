@@ -10,42 +10,27 @@ import {
   type ComplianceControlResult,
   type ComplianceEvidence,
 } from '@khalifa/risk-engine';
-import Gremlin from 'gremlin';
+import { getApiNeptuneClient } from './api-dependencies';
+import type { NeptuneClient } from './neptune-client';
 
 export interface ComplianceServiceConfig {
-  neptuneEndpoint: string;
   evidenceTableName?: string;
   reportsTableName?: string;
 }
 
 class GremlinGraphClient implements GraphClient {
-  private client: Gremlin.driver.Client;
-  constructor(endpoint: string) {
-    this.client = new Gremlin.driver.Client(`wss://${endpoint}:8182/gremlin`, {
-      traversalSource: 'g',
-      connectTimeout: 30000,
-    });
-  }
+  constructor(private readonly client: NeptuneClient) {}
+
   async executeQuery(query: string): Promise<any[]> {
-    const result = await this.client.submit(query);
-    const items: any[] = [];
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const item = await result.next();
-      if (!item) break;
-      items.push(item);
-    }
-    return items;
+    return this.client.executeStaticQuery(query);
   }
 }
 
 export class ComplianceService {
   private engine: ComplianceEngine;
-  private neptuneEndpoint: string;
 
   constructor(config: ComplianceServiceConfig) {
-    this.neptuneEndpoint = config.neptuneEndpoint;
-    const graphClient = new GremlinGraphClient(config.neptuneEndpoint);
+    const graphClient = new GremlinGraphClient(getApiNeptuneClient());
     const evidenceStore = new DynamoDBEvidenceStore(
       config.evidenceTableName || process.env.EVIDENCE_TABLE || 'ComplianceEvidence'
     );
@@ -56,7 +41,7 @@ export class ComplianceService {
   }
 
   async listFrameworks(): Promise<ComplianceFrameworkSummary[]> {
-    const frameworks: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'SOC2', 'ISO27001'];
+    const frameworks: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'KHALIFA_BASELINE'];
     const summaries: ComplianceFrameworkSummary[] = [];
     for (const f of frameworks) {
       summaries.push(await this.engine.getFrameworkSummary(f));

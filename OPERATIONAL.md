@@ -3,11 +3,21 @@
 ## A. EKS Architecture Summary
 
 ### Components
-1. **api-service** - REST API deployment (2 replicas, HPA to 10)
-2. **rule-runner** - CronJob running every 6 hours
-3. **IRSA roles** - IAM roles for pod authentication to Neptune/DynamoDB
+
+1. **api-service** - REST API deployment (2 replicas by default, optional HPA)
+2. **ui** - Next.js UI deployment
+3. **rule-runner** - Risk CronJob (every 6 hours)
+4. **org-collector** - Organization collection CronJob
+5. **incremental** - SQS incremental collector Deployment
+6. **graph-writer** - ClusterIP-only graph persistence Deployment
+7. **compliance** - Compliance CronJob
+8. **cloudtrail-analyzer** - CloudTrail usage CronJob (Athena → AccessAnalyzerCache; optional anomaly nodes via graph-writer)
+9. **dspm-scanner** - CronJob: secret scanning of S3 objects and Lambda environment variables (Macie primary, regex fallback; findings written via graph-writer)
+10. **policy-evaluator / least-privilege-sweep** - Lambdas: effective permissions, escalation paths, rightsizing
+11. **IRSA roles** - IAM roles for pod authentication to Neptune/DynamoDB/SQS
 
 ### Network Flow
+
 ```
 User → ALB (443) → api-service (ClusterIP) → Neptune (8182)
                                                     ↓
@@ -17,47 +27,59 @@ User → ALB (443) → api-service (ClusterIP) → Neptune (8182)
 ## B. IRSA Configuration (Critical for Security)
 
 ### API Service Role Permissions
+
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": [
-      "dynamodb:GetItem",
-      "dynamodb:Query", 
-      "dynamodb:Scan",
-      "dynamodb:PutItem",
-      "dynamodb:UpdateItem"
-    ],
-    "Resource": [
-      "arn:aws:dynamodb:REGION:ACCOUNT:table/SecurityIssues",
-      "arn:aws:dynamodb:REGION:ACCOUNT:table/SecurityIssues/index/*"
-    ]
-  }, {
-    "Effect": "Allow",
-    "Action": ["neptune-db:Connect"],
-    "Resource": "arn:aws:neptune-db:REGION:ACCOUNT:*"
-  }]
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:REGION:ACCOUNT:table/SecurityIssues",
+        "arn:aws:dynamodb:REGION:ACCOUNT:table/SecurityIssues/index/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["neptune-db:Connect"],
+      "Resource": "arn:aws:neptune-db:REGION:ACCOUNT:*"
+    }
+  ]
 }
 ```
 
 ### Rule Runner Role Permissions
+
 Same as API Service + `dynamodb:UpdateItem` for status updates.
 
 ## C. Network Policies
 
 ### Pod Egress Restrictions
-- **api-service**: Only to Neptune (8182), AWS API (443)
-- **rule-runner**: Only to Neptune (8182), AWS API (443), DynamoDB
 
-Apply with:
+- **api-service**: Only to Neptune (8182), AWS API (443)
+- **rule-runner / compliance / graph-writer**: Neptune (8182), AWS API (443)
+- **org-collector / incremental / cloudtrail-analyzer**: graph-writer Service port and targetPort, AWS API (443), Neptune as needed
+- **graph-writer ingress**: collectors and the CloudTrail analyzer, on the container/target port; Service is ClusterIP and is not on the Ingress
+- **graph-writer auth**: `/mutations` requires `GRAPH_WRITER_TOKEN` and accepts the collector's per-run reconcile; `/livez` and `/readyz` stay unauthenticated for probes
+- **collection secrets**: `COLLECTOR_EXTERNAL_ID` and `GRAPH_WRITER_TOKEN` are never ConfigMap data. Leave `collection.externalId` and `graphWriter.token` empty and set `externalSecrets.targetName` (for example `khalifa-runtime`) so workloads mount an existing Secret. Helm-owned Secrets are only rendered when those two values are set. Graph-writer mounts the token key; collectors mount ExternalId plus token.
+
+Render and review with:
+
 ```bash
-kubectl apply -f eks-manifests/08-network-policy.yaml
+helm template khalifa deploy/helm/khalifa --values <environment-values.yaml>
 ```
 
 ## D. Logging & Observability
 
 ### CloudWatch Setup
+
 ```bash
 # Log group retention
 aws logs put-retention-policy \
@@ -66,6 +88,7 @@ aws logs put-retention-policy \
 ```
 
 ### Recommended Dashboards
+
 1. API latency (p50, p95, p99)
 2. Issue count by severity
 3. Rule execution success/failure
@@ -73,41 +96,56 @@ aws logs put-retention-policy \
 
 ## E. SLOs
 
-| Service | SLO | Alert Threshold |
-|---------|-----|-----------------|
-| API | 99.9% availability | < 99.5% for 5 min |
-| API | p99 latency < 500ms | > 1s for 5 min |
-| Rule Runner | 99% execution success | > 2 failures/day |
-| Rule Runner | Execution < 30 min | > 45 min |
+| Service     | SLO                   | Alert Threshold   |
+| ----------- | --------------------- | ----------------- |
+| API         | 99.9% availability    | < 99.5% for 5 min |
+| API         | p99 latency < 500ms   | > 1s for 5 min    |
+| Rule Runner | 99% execution success | > 2 failures/day  |
+| Rule Runner | Execution < 30 min    | > 45 min          |
 
 ## F. Runbooks
 
 ### Runbook: API Pod High CPU
+
 1. Check HPA: `kubectl get hpa -n security-graph`
-2. Describe pod: `kubectl describe pod -l app=api-service -n security-graph`
-3. Check logs: `kubectl logs -l app=api-service -n security-graph --tail=100`
-4. Scale manually if needed: `kubectl scale deployment api-service --replicas=5 -n security-graph`
+2. Describe pod: `kubectl describe pod -l app.kubernetes.io/component=api -n security-graph`
+3. Check logs: `kubectl logs -l app.kubernetes.io/component=api -n security-graph --tail=100`
+4. Scale manually if needed: `kubectl scale deployment khalifa-api --replicas=5 -n security-graph`
 
 ### Runbook: Rule Runner Job Failed
+
 1. Check job status: `kubectl get job -n security-graph`
 2. View logs: `kubectl logs job/<job-name> -n security-graph`
 3. Check Neptune connectivity from pod
-4. Retry manually: `kubectl create job --from=cronjob/rule-runner rule-runner-manual -n security-graph`
+4. Retry manually: `kubectl create job --from=cronjob/khalifa-rule-runner rule-runner-manual -n security-graph`
 
 ### Runbook: Neptune Query Timeout
+
 1. Check Neptune cluster status in Console
 2. Increase query timeout in configmap
 3. Check for long-running queries in Neptune Insights
 4. Consider scaling Neptune instance
 
+### Runbook: Enabling the CloudTrail analyzer
+
+The `cloudtrail-analyzer` CronJob ships suspended. It queries the organization trail through Athena, and everything on the Khalifa side is created by `khalifa-data` once `cloudtrail_logs_bucket` (plus `cloudtrail_organization_id` and `cloudtrail_logs_kms_key_arn`) is set: the Glue database and `cloudtrail_logs` table with partition projection, the Athena workgroup, the encrypted results bucket, and the analyzer role's Athena / Glue / S3 / KMS statements. `helm_values.config` then carries `athenaDatabase`, `athenaWorkgroup`, and `athenaResultsLocation`.
+
+The trail bucket and its KMS key are owned by the audit account, so two grants must be made there for `arn:aws:iam::<home account>:role/<name_prefix>-khalifa-cloudtrail-analyzer` before the CronJob is unsuspended:
+
+1. Bucket policy on the trail bucket: `s3:GetBucketLocation` and `s3:ListBucket` on the bucket; `s3:GetObject` on `<bucket>/AWSLogs/<organization id>/*`.
+2. Key policy on the trail's KMS key: `kms:Decrypt`.
+
+Then set `cloudtrailAnalyzer.suspend = false` in the environment's Helm values. The first run scans `ANALYSIS_DAYS` (default 90) days of the collected accounts; every query bounds the `log_date` partition, so Athena reads only that window. A `Query cannot be completed` or `AccessDenied` from Athena on the first run means one of the two grants above is missing.
+
 ## G. Security Hardening
 
 ### Must Do Before Production
+
 1. [ ] Enable VPC Flow Logs
 2. [ ] Configure GuardDuty on all accounts
-3. [ ] Enable CloudTrail with Lake integration
+3. [ ] Enable the CloudTrail analyzer (see the runbook above)
 4. [ ] Restrict IAM roles to minimum required permissions
-5. [ ] Enable encryption at rest for DynamoDB
+5. [x] Enable encryption at rest for DynamoDB (khalifa-data CMK)
 6. [ ] Enable encryption in transit for Neptune
 7. [ ] Configure WAF on ALB
 8. [ ] Review and restrict NetworkPolicies
@@ -117,21 +155,55 @@ aws logs put-retention-policy \
 ## H. Deployment Commands
 
 ```bash
-# Deploy manifests
-kubectl apply -f eks-manifests/
+# Deploy through the environment repository's Terraform root
+terraform apply
 
 # Check deployment status
-kubectl rollout status deployment/api-service -n security-graph
+kubectl rollout status deployment/khalifa-api -n security-graph
 
 # View API logs
-kubectl logs -l app=api-service -n security-graph -f
+kubectl logs -l app.kubernetes.io/component=api -n security-graph -f
 
 # Scale API service
-kubectl scale deployment api-service --replicas=5 -n security-graph
+kubectl scale deployment khalifa-api --replicas=5 -n security-graph
 
 # Manual rule runner execution
-kubectl create job --from=cronjob/rule-runner rule-runner-manual -n security-graph
+kubectl create job --from=cronjob/khalifa-rule-runner rule-runner-manual -n security-graph
 ```
+
+## I. Graph Query Profiling
+
+Neptune serves id lookups from the index; a property filter on a whole label
+(for example `g.V().hasLabel('EffectivePermission').has('principal_arn', x)`)
+scans the label instead. Khalifa keys derived vertices by deterministic ids
+(resource ARNs, `eff-perm:<principal ARN>`, `edge-<sha256>`) so hot lookups are
+id steps, and CIEM/label-wide traversals are paged with `range(low, high)`.
+
+Before adding a new query, profile it from a workload pod that already has
+Neptune access (the rule-runner or graph-writer ServiceAccount has IRSA):
+
+```bash
+POD=$(kubectl -n khalifa get pod -l app.kubernetes.io/component=rule-runner -o name | head -1)
+kubectl -n khalifa exec "$POD" -- node -e '
+  const Gremlin = require("gremlin");
+  const c = new Gremlin.driver.Client(process.env.NEPTUNE_URL, { traversalSource: "g" });
+  c.submit(process.argv[1]).then((r) => console.log(JSON.stringify(r.toArray(), null, 2)));
+' "g.V().hasLabel(''EffectivePermission'').limit(1).profile()"
+```
+
+Queries worth profiling after a schema or traversal change:
+
+- `g.V().hasLabel('EffectivePermission').has('principal_arn', <arn>).profile()` vs `g.V('eff-perm:<arn>').limit(1).profile()` (expect an id/index hit and no full-label scan)
+- `g.V().hasLabel(within('IamUser', 'IamRole')).values('arn').range(0, 1000).profile()`
+- `g.E().hasLabel('TRUSTS').range(0, 1000).profile()`
+- `g.V().has('is_internet_exposed', true).repeat(out().simplePath()).times(4).profile()` (attack-path cost)
+- The rule templates in `packages/risk-engine/src/rules.ts` and the compliance evaluators, which run on a schedule
+
+Read the profile output for: a `NeptuneGraphStep` with an id or index hit, no
+`HasStep` over a whole label at the start of the traversal, and the traverser
+count at each step. The evaluator lambdas log a warning when a bounded
+enumeration hits its item cap (`maxItems`, default 50000), which is the signal
+that a label-wide traversal needs paging or reshaping.
 
 ## I. Monitoring URLs
 

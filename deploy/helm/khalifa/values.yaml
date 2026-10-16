@@ -1,0 +1,432 @@
+nameOverride: ''
+fullnameOverride: ''
+
+commonLabels: {}
+imagePullSecrets: []
+
+serviceAccounts:
+  api:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  ui:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: false
+  ruleRunner:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  organizationCollector:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  incrementalCollector:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  graphWriter:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  compliance:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  cloudtrailAnalyzer:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  dspmScanner:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  policyEvaluator:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  leastPrivilegeSweep:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+  externalSecrets:
+    create: true
+    name: ''
+    annotations: {}
+    automountServiceAccountToken: true
+
+config:
+  awsRegion: ''
+  neptuneEndpoint: ''
+  neptuneQueryTimeoutMs: 30000
+  neptuneMaxAttempts: 3
+  # Rule matches per query. RULE-018 alone produces one path per Security Hub
+  # finding and passed 1000 on 2026-09-19; the risk runner rejects a result over
+  # this limit outright, so it must sit above the largest expected rule result.
+  neptuneMaxResults: 10000
+  issuesTable: ''
+  evidenceTable: ''
+  reportsTable: ''
+  postureTrendsTable: ''
+  accessAnalyzerTable: ''
+  leastPrivilegeTable: ''
+  cognitoUserPoolId: ''
+  cognitoClientId: ''
+  cognitoRegion: ''
+  # Issuer host for Access JWT verify. When set, API egress includes 0.0.0.0/0:443 for JWKS.
+  cloudflareAccessTeamDomain: ''
+  cloudflareAccessAud: ''
+  corsAllowedOrigins: []
+  issueSinks: []
+  issuesTopicArn: ''
+  uiBaseUrl: ''
+  athenaDatabase: ''
+  athenaWorkgroup: ''
+  athenaResultsLocation: ''
+  analysisDays: 90
+  canaryPrincipalArns: []
+  dspmScanMode: 'tagged-only'
+  macieEnabled: false
+  rateLimitPerMinute: 0
+  rateLimitExpensivePerMinute: 0
+  dspmClassifyBudgetMs: 0
+
+collection:
+  homeAccountId: ''
+  accountIds: []
+  parentIds: []
+  regions: []
+  concurrency: 2
+  maxAttempts: 3
+  retryDelayMs: 1000
+  graphWriterTimeoutMs: 30000
+  incrementalQueueUrl: ''
+  # GuardDuty findings are read from the delegated administrator's detectors
+  # after each organization sweep. Empty leaves it off; its member role needs
+  # guardduty:ListFindings and GetFindings first.
+  guardDutyAdministratorAccountId: ''
+  guardDutyFindingRegions: []
+
+api:
+  image: ''
+  replicaCount: 2
+  port: 8080
+  podAnnotations: {}
+  podLabels: {}
+  service:
+    type: ClusterIP
+    port: 80
+    annotations: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  pdb:
+    enabled: false
+    minAvailable: 1
+  serviceMonitor:
+    enabled: false
+    labels: {}
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+
+ui:
+  image: ''
+  replicaCount: 2
+  port: 3000
+  podAnnotations: {}
+  podLabels: {}
+  service:
+    type: ClusterIP
+    port: 80
+    annotations: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  pdb:
+    enabled: false
+    minAvailable: 1
+
+ruleRunner:
+  image: ''
+  # 2.5h after org-collector so it starts after the 7200s deadline, not on it.
+  schedule: '30 2-22/4 * * *'
+  timeZone: ''
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+organizationCollector:
+  image: ''
+  # First slot in the 4h window. Rule-runner and compliance are offset.
+  schedule: '0 */4 * * *'
+  timeZone: ''
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+incrementalCollector:
+  image: ''
+  replicaCount: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  pdb:
+    enabled: false
+    minAvailable: 1
+
+graphWriter:
+  image: ''
+  replicaCount: 2
+  port: 8080
+  maxBodyBytes: 4194304
+  # Parallel vertex-property inserts CME on Neptune Serverless at 1 NCU.
+  concurrency: 2
+  podAnnotations: {}
+  podLabels: {}
+  service:
+    port: 80
+    annotations: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  pdb:
+    enabled: false
+    minAvailable: 1
+
+# Khalifa vs Security Hub CIS v3.0.0 reconciliation (SEC-3254), run at the end of
+# each compliance job. Disabled while securityHubRoleArn is empty. The role is
+# the audit account's read-only khalifa-securityhub-reader; the compliance IRSA
+# role needs sts:AssumeRole on it (khalifa-data securityhub_reader_role_arn).
+reconciliation:
+  securityHubRoleArn: ''
+  securityHubRegion: us-east-1
+  # Consecutive days of agreement before a requirement is publishable.
+  minAgreementDays: 5
+  # CIS requirements that may ever be published (SEC-3256). Empty: none.
+  publishAllowlist: []
+  # Client ID (not the secret) of the Cloudflare Access service token the
+  # trust-center sync uses; the only caller of /compliance/reconciliation/publishable.
+  # Empty: the endpoint accepts no one.
+  trustCenterSyncClientId: ''
+
+compliance:
+  image: ''
+  # 30 minutes after org-collector start; reads the graph, does not write Neptune.
+  schedule: '30 */4 * * *'
+  timeZone: ''
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+cloudtrailAnalyzer:
+  image: ''
+  schedule: '0 2 * * *'
+  timeZone: ''
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+dspmScanner:
+  image: ''
+  schedule: '0 4 * * *'
+  timeZone: ''
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# CIEM is enabled only after its first manual run is verified; both jobs ship
+# suspended so an accidental values bump cannot start the heaviest job in the
+# system before IRSA and the graph writes are validated.
+policyEvaluator:
+  image: ''
+  # Off-peak, after the collectors have populated the graph for the cycle.
+  schedule: '0 5 * * *'
+  timeZone: ''
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+leastPrivilegeSweep:
+  image: ''
+  schedule: '30 5 * * *'
+  timeZone: ''
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+ingress:
+  enabled: false
+  className: ''
+  annotations: {}
+  hosts: []
+  tls: []
+
+externalSecrets:
+  enabled: false
+  refreshInterval: 1h
+  # Existing Secret to mount; it provides COLLECTOR_EXTERNAL_ID and GRAPH_WRITER_TOKEN.
+  targetName: ''
+  mountIn: []
+  secretStore:
+    name: ''
+    service: SecretsManager
+    region: ''
+    roleArn: ''
+  data: []
+
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
+
+networkPolicies:
+  enabled: false
+  dns:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: kube-system
+    podSelector:
+      matchLabels:
+        k8s-app: kube-dns
+  egressCidrs: []

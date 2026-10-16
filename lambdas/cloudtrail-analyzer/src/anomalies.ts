@@ -2,10 +2,7 @@ import { createHash, randomUUID } from 'crypto';
 import type { GraphNode } from '../../shared/types';
 
 export type AnomalyType =
-  | 'ROOT_USAGE'
-  | 'SECRET_READ_NEW_SOURCE_IP'
-  | 'ACCESS_DENIED_SPIKE'
-  | 'CANARY_USED';
+  'ROOT_USAGE' | 'SECRET_READ_NEW_SOURCE_IP' | 'ACCESS_DENIED_SPIKE' | 'CANARY_USED';
 
 export interface AnomalyRecord {
   type: AnomalyType;

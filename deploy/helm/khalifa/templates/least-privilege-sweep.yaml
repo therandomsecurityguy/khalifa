@@ -1,0 +1,68 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "khalifa.fullname" . }}-least-privilege-sweep
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: least-privilege-sweep
+spec:
+  schedule: {{ .Values.leastPrivilegeSweep.schedule | quote }}
+  {{- with .Values.leastPrivilegeSweep.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.leastPrivilegeSweep.suspend }}
+  concurrencyPolicy: {{ .Values.leastPrivilegeSweep.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.leastPrivilegeSweep.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.leastPrivilegeSweep.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.leastPrivilegeSweep.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "least-privilege-sweep") | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.leastPrivilegeSweep.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.leastPrivilegeSweep.ttlSecondsAfterFinished }}
+      backoffLimit: {{ .Values.leastPrivilegeSweep.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "khalifa.selectorLabels" (dict "root" . "component" "least-privilege-sweep") | nindent 12 }}
+            {{- with .Values.leastPrivilegeSweep.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.leastPrivilegeSweep.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "leastPrivilegeSweep" "suffix" "least-privilege-sweep") }}
+          automountServiceAccountToken: {{ .Values.serviceAccounts.leastPrivilegeSweep.automountServiceAccountToken }}
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "khalifa.podSecurityContext" . | nindent 12 }}
+          {{- if .Values.topologySpread.enabled }}
+          topologySpreadConstraints:
+            {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "least-privilege-sweep") | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: least-privilege-sweep
+              image: {{ required "leastPrivilegeSweep.image must be an immutable repository@sha256 digest" .Values.leastPrivilegeSweep.image | quote }}
+              imagePullPolicy: IfNotPresent
+              args: ["least-privilege-sweep"]
+              securityContext:
+                {{- include "khalifa.containerSecurityContext" . | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-config
+              resources:
+                {{- toYaml .Values.leastPrivilegeSweep.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "khalifa.fullname" . }}-config
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+data:
+  AWS_REGION: {{ .Values.config.awsRegion | quote }}
+  NEPTUNE_ENDPOINT: {{ .Values.config.neptuneEndpoint | quote }}
+  NEPTUNE_QUERY_TIMEOUT_MS: {{ .Values.config.neptuneQueryTimeoutMs | quote }}
+  NEPTUNE_MAX_ATTEMPTS: {{ .Values.config.neptuneMaxAttempts | quote }}
+  NEPTUNE_MAX_RESULTS: {{ .Values.config.neptuneMaxResults | quote }}
+  ISSUES_TABLE: {{ .Values.config.issuesTable | quote }}
+  EVIDENCE_TABLE: {{ .Values.config.evidenceTable | quote }}
+  REPORTS_TABLE: {{ .Values.config.reportsTable | quote }}
+  POSTURE_TRENDS_TABLE: {{ .Values.config.postureTrendsTable | quote }}
+  ACCESS_ANALYZER_TABLE: {{ .Values.config.accessAnalyzerTable | quote }}
+  LEAST_PRIVILEGE_TABLE: {{ .Values.config.leastPrivilegeTable | quote }}
+  COGNITO_USER_POOL_ID: {{ .Values.config.cognitoUserPoolId | quote }}
+  COGNITO_CLIENT_ID: {{ .Values.config.cognitoClientId | quote }}
+  COGNITO_REGION: {{ default .Values.config.awsRegion .Values.config.cognitoRegion | quote }}
+  CLOUDFLARE_ACCESS_TEAM_DOMAIN: {{ default "" .Values.config.cloudflareAccessTeamDomain | quote }}
+  CLOUDFLARE_ACCESS_AUD: {{ default "" .Values.config.cloudflareAccessAud | quote }}
+  CORS_ALLOWED_ORIGINS: {{ join "," .Values.config.corsAllowedOrigins | quote }}
+  ISSUE_SINKS: {{ join "," .Values.config.issueSinks | quote }}
+  ISSUES_TOPIC_ARN: {{ .Values.config.issuesTopicArn | quote }}
+  UI_BASE_URL: {{ .Values.config.uiBaseUrl | quote }}
+  COMPLIANCE_EVIDENCE_TABLE: {{ .Values.config.evidenceTable | quote }}
+  COMPLIANCE_REPORTS_TABLE: {{ .Values.config.reportsTable | quote }}
+  ATHENA_DATABASE: {{ .Values.config.athenaDatabase | quote }}
+  ATHENA_WORKGROUP: {{ .Values.config.athenaWorkgroup | quote }}
+  ATHENA_RESULTS_S3_LOCATION: {{ .Values.config.athenaResultsLocation | quote }}
+  ANALYSIS_DAYS: {{ .Values.config.analysisDays | quote }}
+  CANARY_PRINCIPAL_ARNS: {{ join "," .Values.config.canaryPrincipalArns | quote }}
+  DSPM_SCAN_MODE: {{ .Values.config.dspmScanMode | quote }}
+  RULE_RUNNER_SCHEDULE: {{ .Values.ruleRunner.schedule | quote }}
+  RULE_RUNNER_TIMEZONE: {{ default "UTC" .Values.ruleRunner.timeZone | quote }}
+  {{- with .Values.config.rateLimitPerMinute }}
+  RATE_LIMIT_PER_MINUTE: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.rateLimitExpensivePerMinute }}
+  RATE_LIMIT_EXPENSIVE_PER_MINUTE: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.dspmClassifyBudgetMs }}
+  DSPM_CLASSIFY_BUDGET_MS: {{ . | quote }}
+  {{- end }}
+  MACIE_ENABLED: {{ .Values.config.macieEnabled | quote }}
+  RECONCILIATION_SECURITY_HUB_ROLE_ARN: {{ .Values.reconciliation.securityHubRoleArn | quote }}
+  RECONCILIATION_SECURITY_HUB_REGION: {{ .Values.reconciliation.securityHubRegion | quote }}
+  RECONCILIATION_MIN_AGREEMENT_DAYS: {{ .Values.reconciliation.minAgreementDays | quote }}
+  RECONCILIATION_PUBLISH_ALLOWLIST: {{ join "," .Values.reconciliation.publishAllowlist | quote }}
+  TRUST_CENTER_SYNC_CLIENT_ID: {{ default "" .Values.reconciliation.trustCenterSyncClientId | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "khalifa.fullname" . }}-collection
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: collection
+data:
+  HOME_ACCOUNT_ID: {{ .Values.collection.homeAccountId | quote }}
+  COLLECTION_ACCOUNT_IDS: {{ join "," .Values.collection.accountIds | quote }}
+  COLLECTION_PARENT_IDS: {{ join "," .Values.collection.parentIds | quote }}
+  COLLECTION_REGIONS: {{ join "," .Values.collection.regions | quote }}
+  COLLECTION_CONCURRENCY: {{ .Values.collection.concurrency | quote }}
+  COLLECTION_MAX_ATTEMPTS: {{ .Values.collection.maxAttempts | quote }}
+  COLLECTION_RETRY_DELAY_MS: {{ .Values.collection.retryDelayMs | quote }}
+  GRAPH_WRITER_TIMEOUT_MS: {{ .Values.collection.graphWriterTimeoutMs | quote }}
+  GRAPH_WRITER_URL: {{ printf "http://%s-graph-writer:%v" (include "khalifa.fullname" .) .Values.graphWriter.service.port | quote }}
+  SQS_QUEUE_URL: {{ .Values.collection.incrementalQueueUrl | quote }}
+  GUARDDUTY_ADMINISTRATOR_ACCOUNT_ID: {{ .Values.collection.guardDutyAdministratorAccountId | default "" | quote }}
+  GUARDDUTY_FINDING_REGIONS: {{ join "," (.Values.collection.guardDutyFindingRegions | default list) | quote }}

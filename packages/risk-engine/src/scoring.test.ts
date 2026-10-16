@@ -5,6 +5,7 @@ import {
   calculatePathSummary,
 } from './scoring';
 import type { RiskScoreInput } from './types';
+import { riskRules } from './rules';
 
 describe('computeRiskScore', () => {
   const baseInput: RiskScoreInput = {
@@ -22,13 +23,6 @@ describe('computeRiskScore', () => {
 
   test('should return critical severity for high risk input', () => {
     const input: RiskScoreInput = {
-      cvss: {
-        baseScore: 9.8,
-        exploitabilitySubScore: 3.9,
-        impactSubScore: 5.9,
-        vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
-      },
-      exploitabilityFlags: { hasExploit: true, hasPublicExploit: true, malwareAvailable: false },
       exposureLevel: 'internet',
       identityBlastRadius: { type: 'admin', scope: 1 },
       dataClassification: 'restricted',
@@ -43,12 +37,6 @@ describe('computeRiskScore', () => {
 
   test('should return high severity for medium-high risk input', () => {
     const input: RiskScoreInput = {
-      cvss: {
-        baseScore: 7.5,
-        exploitabilitySubScore: 2.5,
-        impactSubScore: 5.9,
-        vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H',
-      },
       exposureLevel: 'cross-account',
       dataClassification: 'secret',
       environment: 'prod',
@@ -60,7 +48,19 @@ describe('computeRiskScore', () => {
     expect(result.score).toBeGreaterThanOrEqual(60);
   });
 
-  test('should apply crown jewel bonus', () => {
+  test('reaches critical for a critical-hinted finding without CVSS data', () => {
+    const result = computeRiskScore({
+      exposureLevel: 'internet',
+      identityBlastRadius: { type: 'admin', scope: 1 },
+      dataClassification: 'restricted',
+      environment: 'prod',
+      isCrownJewel: false,
+    });
+    expect(result.score).toBeGreaterThanOrEqual(80);
+    expect(result.severity).toBe('critical');
+  });
+
+  test('applies crown jewel bonus', () => {
     const withCrownJewel = computeRiskScore({ ...baseInput, isCrownJewel: true });
     const withoutCrownJewel = computeRiskScore({ ...baseInput, isCrownJewel: false });
     expect(withCrownJewel.score).toBeGreaterThan(withoutCrownJewel.score);
@@ -95,19 +95,12 @@ describe('computeRiskScore', () => {
 
   test('should return all factor contributions', () => {
     const input: RiskScoreInput = {
-      cvss: {
-        baseScore: 9.0,
-        exploitabilitySubScore: 3.0,
-        impactSubScore: 5.0,
-        vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H',
-      },
       exposureLevel: 'internet',
       dataClassification: 'secret',
       environment: 'prod',
       isCrownJewel: true,
     };
     const result = computeRiskScore(input);
-    expect(result.factors).toHaveProperty('cvssContribution');
     expect(result.factors).toHaveProperty('exposureContribution');
     expect(result.factors).toHaveProperty('dataClassificationContribution');
     expect(result.factors).toHaveProperty('environmentContribution');
@@ -126,19 +119,18 @@ describe('computeRiskScore', () => {
 });
 
 describe('getRemediationHint', () => {
-  test('should return specific hint for RULE-001', () => {
-    const hint = getRemediationHint('RULE-001', {});
-    expect(hint).toContain('IAM role');
+  test('every rule has its own hint', () => {
+    const fallback = getRemediationHint('RULE-999', {});
+    expect(fallback).toContain('best practices');
+    const missing = riskRules
+      .map((rule) => rule.id)
+      .filter((id) => getRemediationHint(id, {}) === fallback);
+    expect(missing).toEqual([]);
   });
 
-  test('should return specific hint for RULE-002', () => {
-    const hint = getRemediationHint('RULE-002', {});
-    expect(hint).toContain('SSH');
-  });
-
-  test('should return default hint for unknown rule', () => {
-    const hint = getRemediationHint('RULE-999', {});
-    expect(hint).toContain('best practices');
+  test('names the concrete fix', () => {
+    expect(getRemediationHint('RULE-002', {})).toContain('0.0.0.0/0');
+    expect(getRemediationHint('RULE-013', {})).toContain('IAM role');
   });
 });
 

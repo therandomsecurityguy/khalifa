@@ -1,8 +1,10 @@
 {
   "name": "khalifa-cdk",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "build": "tsc -b ../packages/risk-engine && tsc",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "watch": "tsc -w",
     "cdk": "cdk",
     "lint": "eslint lib bin --ext .ts",
@@ -11,7 +13,7 @@
     "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.100.0",
+    "aws-cdk-lib": "^2.268.0",
     "constructs": "^10.0.0",
     "source-map-support": "^0.5.21"
   },
@@ -19,7 +21,7 @@
     "@types/node": "^20.19.43",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
-    "aws-cdk": "^2.100.0",
+    "aws-cdk": "^2.1141.0",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",

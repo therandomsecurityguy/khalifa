@@ -1,28 +1,31 @@
 import type { Request, Response } from 'express';
-import { NeptuneClient } from '../services/neptune-client';
 import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
+import { parseBoundedInteger } from '../middleware/gremlin-validator';
+import { getApiNeptuneClient } from '../services/api-dependencies';
+import { LeastPrivilegeStore } from '../services/least-privilege-store';
 import type {
   EffectivePermissionsResponse,
   EscalationPathsResponse,
   UnusedPermissionsResponse,
   RightsizingResponse,
-  TrustGraphResponse,
   EscalationPath,
   ConditionalGrant,
   ServiceActions,
-  IamPolicyStatement,
   IamConditionBlock,
 } from '../types';
 
-const neptuneEndpoint = process.env.NEPTUNE_ENDPOINT || '';
-const neptuneClient = new NeptuneClient({ endpoint: neptuneEndpoint });
+const neptuneClient = getApiNeptuneClient();
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 const accessAnalyzerTable = process.env.ACCESS_ANALYZER_TABLE || 'AccessAnalyzerCache';
+const leastPrivilegeStore = new LeastPrivilegeStore();
 
-export async function getEffectivePermissions(req: Request, res: Response): Promise<void> {
+export async function getEffectivePermissions(
+  req: Request<{ principal: string }>,
+  res: Response
+): Promise<void> {
   try {
     const { principal } = req.params;
     if (!principal) {
@@ -30,7 +33,6 @@ export async function getEffectivePermissions(req: Request, res: Response): Prom
       return;
     }
 
-    await neptuneClient.connect();
     const perm = await neptuneClient.getEffectivePermissions(principal);
 
     if (!perm) {
@@ -64,7 +66,6 @@ export async function getEscalationPaths(req: Request, res: Response): Promise<v
   try {
     const { sourceAccount, targetRole, escalationType, riskLevel } = req.query;
 
-    await neptuneClient.connect();
     const paths = await neptuneClient.getEscalationPaths({
       sourceAccount: sourceAccount as string | undefined,
       targetRole: targetRole as string | undefined,
@@ -109,7 +110,6 @@ export async function getUnusedPermissions(req: Request, res: Response): Promise
       return;
     }
 
-    await neptuneClient.connect();
     const perm = await neptuneClient.getEffectivePermissions(principal as string);
 
     const usedActions = await fetchUsedActionsFromDynamo(principal as string);
@@ -133,7 +133,10 @@ export async function getUnusedPermissions(req: Request, res: Response): Promise
   }
 }
 
-export async function getRightsizingRecommendation(req: Request, res: Response): Promise<void> {
+export async function getRightsizingRecommendation(
+  req: Request<{ principal: string }>,
+  res: Response
+): Promise<void> {
   try {
     const { principal } = req.params;
 
@@ -142,7 +145,6 @@ export async function getRightsizingRecommendation(req: Request, res: Response):
       return;
     }
 
-    await neptuneClient.connect();
     const perm = await neptuneClient.getEffectivePermissions(principal);
 
     if (!perm) {
@@ -154,25 +156,21 @@ export async function getRightsizingRecommendation(req: Request, res: Response):
 
     const allowedActions = parseJsonArray(perm.allowed_actions as string);
     const usedActions = await fetchUsedActionsFromDynamo(principal);
-
-    const currentPolicy: IamPolicyStatement[] = [
-      {
-        sid: 'current',
-        effect: 'Allow',
-        actions: allowedActions,
-        resources: ['*'],
-      },
-    ];
-
     const keptActions = computeKeptActions(allowedActions, usedActions);
-    const removedActions = allowedActions.filter((a) => !keptActions.includes(a));
-
+    const removedActions = allowedActions.filter((action) => !keptActions.includes(action));
     const removalRatio =
       allowedActions.length > 0 ? removedActions.length / allowedActions.length : 0;
 
     const response: RightsizingResponse = {
       principalArn: principal,
-      currentPolicy,
+      currentPolicy: [
+        {
+          sid: 'current',
+          effect: 'Allow',
+          actions: allowedActions,
+          resources: ['*'],
+        },
+      ],
       recommendedPolicy: [
         {
           sid: 'rightsized',
@@ -186,7 +184,6 @@ export async function getRightsizingRecommendation(req: Request, res: Response):
       riskLevel: removalRatio > 0.5 ? 'high' : removalRatio > 0.2 ? 'medium' : 'low',
       confidence: usedActions.length > 0 ? Math.min(1, usedActions.length / 50) : 0,
     };
-
     res.json(response);
   } catch (error) {
     console.error('Error getting rightsizing recommendation:', error);
@@ -198,20 +195,111 @@ export async function getRightsizingRecommendation(req: Request, res: Response):
 
 export async function getTrustGraph(req: Request, res: Response): Promise<void> {
   try {
-    const { account } = req.query;
+    const { account, limit, nextToken } = req.query;
+    if (
+      (account !== undefined && typeof account !== 'string') ||
+      (nextToken !== undefined && typeof nextToken !== 'string')
+    ) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid trust graph query' });
+      return;
+    }
+    const pageSize = parseBoundedInteger(limit, 100, 1, 200, 'limit');
 
-    await neptuneClient.connect();
-    const result = await neptuneClient.getTrustGraph(account as string | undefined);
-
-    const response: TrustGraphResponse = {
-      nodes: result.nodes,
-      edges: result.edges,
-    };
-
-    res.json(response);
+    const result = await neptuneClient.getTrustGraph({
+      accountId: account,
+      limit: pageSize,
+      nextToken,
+    });
+    res.json(result);
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith('limit must be') ||
+        error.message.includes('trust graph cursor') ||
+        error.message.includes('pagination token'))
+    ) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: error.message });
+      return;
+    }
     console.error('Error getting trust graph:', error);
     res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to get trust graph' });
+  }
+}
+
+export async function getLeastPrivilegeFindings(req: Request, res: Response): Promise<void> {
+  try {
+    const { accountId, riskLevel, principalType, limit, nextToken } = req.query;
+    if (
+      (accountId !== undefined && typeof accountId !== 'string') ||
+      (riskLevel !== undefined && typeof riskLevel !== 'string') ||
+      (principalType !== undefined && typeof principalType !== 'string') ||
+      (nextToken !== undefined && typeof nextToken !== 'string')
+    ) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid least-privilege query' });
+      return;
+    }
+    const pageSize = parseBoundedInteger(limit, 100, 1, 200, 'limit');
+
+    const result = await leastPrivilegeStore.listFindings({
+      accountId,
+      riskLevel,
+      principalType,
+      limit: pageSize,
+      nextToken,
+    });
+
+    res.json(result);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('limit must be')) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: error.message });
+      return;
+    }
+    console.error('Error listing least-privilege findings:', error);
+    res
+      .status(500)
+      .json({ code: 'INTERNAL_ERROR', message: 'Failed to list least-privilege findings' });
+  }
+}
+
+export async function getLeastPrivilegeFinding(req: Request, res: Response): Promise<void> {
+  try {
+    const { accountId, principalArn } = req.params;
+
+    if (!/^\d{12}$/.test(accountId) || !principalArn) {
+      res
+        .status(400)
+        .json({ code: 'BAD_REQUEST', message: 'accountId and principalArn are required' });
+      return;
+    }
+
+    const finding = await leastPrivilegeStore.getFinding(accountId, principalArn);
+
+    if (!finding) {
+      res.status(404).json({
+        code: 'NOT_FOUND',
+        message: `No least-privilege finding for ${principalArn} in account ${accountId}`,
+      });
+      return;
+    }
+
+    res.json(finding);
+  } catch (error) {
+    console.error('Error getting least-privilege finding:', error);
+    res
+      .status(500)
+      .json({ code: 'INTERNAL_ERROR', message: 'Failed to get least-privilege finding' });
+  }
+}
+
+export async function getLeastPrivilegeSummary(_req: Request, res: Response): Promise<void> {
+  try {
+    const summary = await leastPrivilegeStore.getSummary();
+    res.json(summary);
+  } catch (error) {
+    console.error('Error getting least-privilege summary:', error);
+    res
+      .status(500)
+      .json({ code: 'INTERNAL_ERROR', message: 'Failed to get least-privilege summary' });
   }
 }
 
@@ -275,8 +363,9 @@ async function fetchUsedActionsFromDynamo(principalArn: string): Promise<UsedAct
         lastUsed: data.lastUsed || '',
       };
     });
-  } catch {
-    return [];
+  } catch (error) {
+    console.error('Failed to read Access Analyzer usage:', error);
+    throw error;
   }
 }
 

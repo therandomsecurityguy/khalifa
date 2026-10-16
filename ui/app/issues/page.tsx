@@ -1,229 +1,385 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getIssues, getIssueCounts } from '@/lib/api';
-import { Issue, SeverityCounts } from '@/types';
+import { useEffect, useState } from 'react';
+import { getAccounts, getIssueSummary, getIssues, listRules } from '@/lib/api';
+import { issueSubject } from '@/lib/issue-subject';
+import { useRequest } from '@/lib/use-request';
+import type { Issue, IssueStatus, Severity, SeverityStatusCounts } from '@/types';
+import { EmptyState, ErrorState, LoadingState, NoMatchesState } from '@/components/states';
+import { ColumnFilter } from '@/components/column-filter';
+import { IssueSummary } from '@/components/issue-summary';
+import { IssueRunTimes } from '@/components/issue-run-times';
+import {
+  Card,
+  IssueStatusBadge,
+  LINK,
+  PageBody,
+  PageHeader,
+  SECONDARY_BUTTON,
+  SeverityBadge,
+  Spinner,
+  Table,
+  Td,
+  Th,
+} from '@/components/ui';
 
-const severityColors: Record<string, string> = {
-  critical: 'bg-red-600',
-  high: 'bg-orange-500',
-  medium: 'bg-yellow-500',
-  low: 'bg-blue-500',
-};
+interface Filters {
+  severity: Severity[];
+  status: IssueStatus[];
+  rule: string[];
+  team: string[];
+}
 
-const severityLabels: Record<string, string> = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-};
+const DEFAULT_FILTERS: Filters = { severity: [], status: ['open'], rule: [], team: [] };
+const NO_FILTERS: Filters = { severity: [], status: [], rule: [], team: [] };
+const COLUMNS = 8;
+const PAGE_SIZE = 50;
+const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low'];
+const STATUSES: IssueStatus[] = ['open', 'suppressed', 'resolved'];
+
+// The summary counts every severity and status, so it knows the total for
+// those filters; rule and team filters it cannot count.
+function expectedTotal(counts: SeverityStatusCounts, filters: Filters): number | undefined {
+  if (filters.rule.length || filters.team.length) return undefined;
+  const severities = filters.severity.length ? filters.severity : SEVERITIES;
+  const statuses = filters.status.length ? filters.status : STATUSES;
+  return severities.reduce(
+    (sum, severity) =>
+      sum + statuses.reduce((inner, status) => inner + counts[severity][status], 0),
+    0
+  );
+}
+
+function describeFilters(filters: Filters): string[] {
+  const active: string[] = [];
+  if (filters.severity.length) active.push(`Severity ${filters.severity.join(', ')}`);
+  if (filters.rule.length) active.push(`Rule ${filters.rule.join(', ')}`);
+  if (filters.team.length) active.push(`Team ${filters.team.join(', ')}`);
+  if (filters.status.length) active.push(`Status ${filters.status.join(', ')}`);
+  return active;
+}
+
+function IssueRow({
+  issue,
+  title,
+  accountNames,
+}: {
+  issue: Issue;
+  title: string;
+  accountNames: Map<string, string>;
+}) {
+  const subject = issueSubject(issue, accountNames);
+  return (
+    <tr className="hover:bg-gray-50">
+      <Td className="whitespace-nowrap">
+        <SeverityBadge severity={issue.severity} />
+      </Td>
+      <Td>
+        <div className="text-xs font-medium text-gray-500">{issue.ruleId}</div>
+        <div className="font-medium text-gray-900">{title}</div>
+      </Td>
+      <Td>
+        {subject ? (
+          <>
+            <div className="break-all text-gray-900">
+              {subject.name} <span className="text-xs text-gray-500">({subject.type})</span>
+            </div>
+            <div className="text-xs text-gray-500">
+              {[subject.account, subject.matches].filter(Boolean).join(' · ')}
+            </div>
+          </>
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
+      </Td>
+      <Td className="whitespace-nowrap text-gray-500">{issue.owningTeam}</Td>
+      <Td className="whitespace-nowrap text-gray-500">{issue.riskScore.toFixed(1)}</Td>
+      <Td className="whitespace-nowrap">
+        <IssueStatusBadge status={issue.status} />
+        {issue.status === 'resolved' && issue.resolvedAt && (
+          <div className="mt-1 text-xs text-gray-500">
+            {new Date(issue.resolvedAt).toLocaleDateString()}
+          </div>
+        )}
+        {issue.status === 'suppressed' && issue.suppression && (
+          <div className="mt-1 text-xs text-gray-500">
+            until {new Date(issue.suppression.until).toLocaleDateString()}
+          </div>
+        )}
+      </Td>
+      <Td className="whitespace-nowrap text-gray-500">
+        {new Date(issue.createdAt).toLocaleDateString()}
+      </Td>
+      <Td className="whitespace-nowrap">
+        <Link href={`/issues/${issue.id}`} className={LINK}>
+          View
+        </Link>
+      </Td>
+    </tr>
+  );
+}
 
 export default function IssuesPage() {
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [counts, setCounts] = useState<SeverityCounts | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [order, setOrder] = useState<'desc' | 'asc'>('desc');
+  const query = {
+    severity: filters.severity,
+    status: filters.status,
+    ruleId: filters.rule,
+    team: filters.team,
+    order,
+    limit: PAGE_SIZE,
+  };
+  const issues = useRequest(
+    (signal) => getIssues(query, { signal }),
+    [
+      filters.severity.join(','),
+      filters.status.join(','),
+      filters.rule.join(','),
+      filters.team.join(','),
+      order,
+    ]
+  );
+  const summary = useRequest((signal) => getIssueSummary({ signal }), []);
 
-  const [filters, setFilters] = useState({
-    severity: [] as string[],
-    team: '',
-    status: 'open',
-    limit: 50,
-  });
-
+  // Pages after the first, appended by "Load more"; any filter change starts over.
+  const [more, setMore] = useState<{ items: Issue[]; nextToken?: string } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState(false);
   useEffect(() => {
-    loadData();
-  }, [filters]);
+    setMore(null);
+    setMoreError(false);
+  }, [issues.data]);
+  const loaded = issues.status === 'success' ? [...issues.data.items, ...(more?.items ?? [])] : [];
+  const nextToken = more
+    ? more.nextToken
+    : issues.status === 'success'
+      ? issues.data.nextToken
+      : undefined;
+  const total = summary.status === 'success' ? expectedTotal(summary.data, filters) : undefined;
 
-  async function loadData() {
-    setLoading(true);
-    setError(null);
-
+  async function loadMore(): Promise<void> {
+    if (!nextToken) return;
+    setLoadingMore(true);
+    setMoreError(false);
     try {
-      const [issuesRes, countsRes] = await Promise.all([getIssues(filters), getIssueCounts()]);
-
-      setIssues(issuesRes.items);
-      setCounts(countsRes);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load issues');
+      const page = await getIssues({ ...query, nextToken });
+      setMore((previous) => ({
+        items: [...(previous?.items ?? []), ...page.items],
+        nextToken: page.nextToken,
+      }));
+    } catch {
+      setMoreError(true);
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
   }
+  const rules = useRequest((signal) => listRules({ signal }), []);
+  const catalog = rules.status === 'success' ? rules.data.rules : [];
+  const ruleNames = new Map(catalog.map((rule) => [rule.id, rule.name]));
+  const accounts = useRequest((signal) => getAccounts({ signal }), []);
+  const accountNames = new Map(
+    (accounts.status === 'success' ? accounts.data.accounts : []).map((a) => [a.id, a.name])
+  );
+  const ruleOptions = catalog
+    .map((rule) => rule.id)
+    .sort()
+    .map((id) => ({ value: id, label: id }));
+  const teamOptions = [...new Set(catalog.map((rule) => rule.ownerTeam))]
+    .sort()
+    .map((team) => ({ value: team, label: team }));
+  const activeFilters = describeFilters(filters);
 
-  function handleFilterChange(key: string, value: string | string[]): void {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+  function update<K extends keyof Filters>(key: K, values: Filters[K]): void {
+    setFilters((previous) => ({ ...previous, [key]: values }));
+  }
+
+  function toggleSeverity(value: Severity): void {
+    setFilters((previous) => ({
+      ...previous,
+      severity: previous.severity.includes(value)
+        ? previous.severity.filter((item) => item !== value)
+        : [...previous.severity, value],
+    }));
+  }
+
+  const nothingRecorded =
+    issues.status === 'success' && loaded.length === 0 && !nextToken && activeFilters.length === 0;
+
+  let body;
+  if (issues.status === 'success' && loaded.length > 0) {
+    body = loaded.map((issue) => (
+      <IssueRow
+        key={issue.id}
+        issue={issue}
+        accountNames={accountNames}
+        title={
+          (typeof issue.metadata?.ruleName === 'string' && issue.metadata.ruleName) ||
+          ruleNames.get(issue.ruleId) ||
+          issue.ruleId
+        }
+      />
+    ));
+  } else if (issues.status === 'success' && nextToken) {
+    // The read budget ran out before any match; keep searching on request.
+    body = (
+      <tr>
+        <Td colSpan={COLUMNS}>
+          <p className="py-6 text-center text-sm text-gray-500">
+            No matches yet in the issues read so far.
+          </p>
+        </Td>
+      </tr>
+    );
+  } else if (issues.status === 'success') {
+    body = (
+      <tr>
+        <Td colSpan={COLUMNS}>
+          <NoMatchesState
+            noun="issues"
+            activeFilters={activeFilters}
+            onClear={() => setFilters(NO_FILTERS)}
+          />
+        </Td>
+      </tr>
+    );
+  } else {
+    body = (
+      <tr>
+        <Td colSpan={COLUMNS}>
+          <LoadingState label="Loading issues…" />
+        </Td>
+      </tr>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-gray-900">Security Issues</h1>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-red-800">{error}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            {counts &&
-              Object.entries(counts).map(([severity, count]) => (
-                <div
-                  key={severity}
-                  className={`bg-white rounded-lg shadow p-6 border-l-4 ${severityColors[severity]}`}
-                >
-                  <div className="text-sm font-medium text-gray-500 uppercase">
-                    {severityLabels[severity]}
-                  </div>
-                  <div className="mt-2 text-3xl font-semibold text-gray-900">{count}</div>
-                </div>
-              ))}
+    <>
+      <PageHeader title="Security issues" actions={<IssueRunTimes />} />
+      <PageBody>
+        {summary.status === 'error' ? (
+          <ErrorState error={summary.error} onRetry={summary.reload} className="mb-6" />
+        ) : summary.status !== 'success' ? (
+          <div className="mb-6 rounded-lg bg-white shadow" aria-busy="true">
+            <LoadingState label="Loading summary…" />
           </div>
+        ) : (
+          <div className="mb-6">
+            <IssueSummary
+              counts={summary.data}
+              severity={filters.severity}
+              status={filters.status}
+              onToggleSeverity={toggleSeverity}
+              onStatus={(values) => update('status', values)}
+            />
+          </div>
+        )}
 
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <div className="flex flex-wrap gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
-                  <select
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    onChange={(e) =>
-                      handleFilterChange('severity', e.target.value ? [e.target.value] : [])
-                    }
-                    value={filters.severity[0] || ''}
-                  >
-                    <option value="">All</option>
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </div>
+        {filters.severity.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {filters.severity.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => toggleSeverity(value)}
+                aria-label={`Remove severity filter: ${value}`}
+                className="inline-flex items-center gap-1 rounded-full border border-indigo-500 bg-indigo-50 px-3 py-0.5 text-xs font-medium text-indigo-800 hover:bg-indigo-100"
+              >
+                Severity: {value}
+                <span aria-hidden="true">×</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="text-sm font-medium text-indigo-600 hover:text-indigo-900"
+              onClick={() => setFilters(NO_FILTERS)}
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
-                  <input
-                    type="text"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    placeholder="Filter by team"
-                    value={filters.team}
-                    onChange={(e) => handleFilterChange('team', e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    onChange={(e) => handleFilterChange('status', e.target.value)}
-                    value={filters.status}
-                  >
-                    <option value="">All</option>
-                    <option value="open">Open</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="suppressed">Suppressed</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="p-8 text-center text-gray-500">Loading...</div>
-            ) : issues.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No issues found</div>
+        <Card flush>
+          <div aria-busy={issues.status === 'loading'}>
+            {issues.status === 'error' ? (
+              <ErrorState error={issues.error} onRetry={issues.reload} className="m-4" />
+            ) : nothingRecorded ? (
+              <EmptyState
+                title="No issues recorded"
+                description="The risk runner has not written any issues yet. Check back after the next collection."
+              />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Severity
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Issue
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Resources
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Team
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Risk Score
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              // The header stays mounted through reloads so an open column filter
+              // keeps its panel while the list refreshes.
+              <Table caption="Security issues">
+                <thead>
+                  <tr>
+                    <Th>Severity</Th>
+                    <Th>
+                      <ColumnFilter
+                        label="Rule"
+                        options={ruleOptions}
+                        selected={filters.rule}
+                        onChange={(values) => update('rule', values)}
+                      />
+                    </Th>
+                    <Th>Resources</Th>
+                    <Th>
+                      <ColumnFilter
+                        label="Team"
+                        options={teamOptions}
+                        selected={filters.team}
+                        onChange={(values) => update('team', values)}
+                      />
+                    </Th>
+                    <Th>Risk score</Th>
+                    <Th>Status</Th>
+                    <Th>
+                      <button
+                        type="button"
+                        onClick={() => setOrder(order === 'desc' ? 'asc' : 'desc')}
+                        aria-label={`Created, ${order === 'desc' ? 'newest' : 'oldest'} first`}
+                        className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-gray-900"
+                      >
                         Created
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {issues.map((issue) => (
-                      <tr key={issue.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityColors[issue.severity]} text-white`}
-                          >
-                            {issue.severity}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-gray-900">{issue.ruleId}</div>
-                          <div className="text-sm text-gray-500">
-                            {typeof issue.metadata?.ruleName === 'string' && (
-                              <div className="text-sm text-gray-500">{issue.metadata.ruleName}</div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-900">
-                            {issue.resourcesInvolved.slice(0, 2).map((r) => (
-                              <div key={r.resourceId} className="truncate max-w-xs">
-                                {r.resourceType}: {r.resourceName || r.resourceId}
-                              </div>
-                            ))}
-                            {issue.resourcesInvolved.length > 2 && (
-                              <div className="text-sm text-gray-500">
-                                +{issue.resourcesInvolved.length - 2} more
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {issue.owningTeam}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {issue.riskScore.toFixed(1)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(issue.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <Link
-                            href={`/issues/${issue.id}`}
-                            className="text-indigo-600 hover:text-indigo-900"
-                          >
-                            View
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        <span aria-hidden="true">{order === 'desc' ? '↓' : '↑'}</span>
+                      </button>
+                    </Th>
+                    <Th>Actions</Th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">{body}</tbody>
+              </Table>
+            )}
+            {issues.status === 'success' && (loaded.length > 0 || nextToken) && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-6 py-3 text-sm text-gray-600">
+                <span className="tabular-nums">
+                  Showing {loaded.length}
+                  {total !== undefined ? ` of ${total}` : ''}{' '}
+                  {loaded.length === 1 ? 'issue' : 'issues'}
+                </span>
+                <span className="flex items-center gap-3">
+                  {moreError && (
+                    <span className="text-red-700">Could not load more. Try again.</span>
+                  )}
+                  {nextToken && (
+                    <button
+                      type="button"
+                      className={SECONDARY_BUTTON}
+                      disabled={loadingMore}
+                      onClick={() => void loadMore()}
+                    >
+                      {loadingMore && <Spinner />}
+                      {loadingMore ? 'Loading…' : 'Load more'}
+                    </button>
+                  )}
+                </span>
               </div>
             )}
           </div>
-        </div>
-      </main>
-    </div>
+        </Card>
+      </PageBody>
+    </>
   );
 }

@@ -1,221 +1,293 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v1.0.0)'
+        description: Release tag
         required: true
         type: string
-      dry-run:
-        description: 'Dry run (skip publishing)'
+      dry_run:
+        description: Build without publishing images or a GitHub release
         required: false
         type: boolean
-        default: false
+        default: true
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.ref_name || inputs.version }}
   cancel-in-progress: false
+
+env:
+  VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+  NODE_OPTIONS: --max-old-space-size=8192
+  PUBLISH_IMAGES: 'true'
+  AWS_REGION: ${{ vars.KHALIFA_AWS_REGION || 'us-west-2' }}
+  AWS_ROLE_ARN: ${{ vars.KHALIFA_AWS_ROLE_ARN }}
+  API_ECR_REPOSITORY: ${{ vars.KHALIFA_API_ECR_REPOSITORY }}
+  UI_ECR_REPOSITORY: ${{ vars.KHALIFA_UI_ECR_REPOSITORY }}
+  RULE_RUNNER_ECR_REPOSITORY: ${{ vars.KHALIFA_RULE_RUNNER_ECR_REPOSITORY }}
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    outputs:
-      api-service-version: ${{ steps.set-version.outputs.api-service-version }}
-      risk-engine-version: ${{ steps.set-version.outputs.risk-engine-version }}
-      collector-version: ${{ steps.set-version.outputs.collector-version }}
-      ui-version: ${{ steps.set-version.outputs.ui-version }}
-      cdk-version: ${{ steps.set-version.outputs.cdk-version }}
+    name: Build release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
+
+      - name: Setup Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.4
+
+      - name: Validate release configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "VERSION must be a semantic version tag beginning with v: $VERSION" >&2
+            exit 1
+          fi
+          if [[ "$PUBLISH_IMAGES" == "true" && "$DRY_RUN" != "true" ]]; then
+            for name in AWS_REGION AWS_ROLE_ARN API_ECR_REPOSITORY UI_ECR_REPOSITORY RULE_RUNNER_ECR_REPOSITORY; do
+              if [[ -z "${!name}" ]]; then
+                echo "Missing required variable: $name" >&2
+                exit 1
+              fi
+            done
+          fi
+          if [[ "$DRY_RUN" != "true" ]]; then
+            if ! tag_sha="$(git rev-parse "$VERSION^{commit}" 2>/dev/null)"; then
+              echo "Release tag does not exist: $VERSION" >&2
+              exit 1
+            fi
+            source_sha="$(git rev-parse HEAD)"
+            if [[ "$tag_sha" != "$source_sha" ]]; then
+              echo "Release tag $VERSION resolves to $tag_sha, not checked-out commit $source_sha" >&2
+              exit 1
+            fi
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: |
-            api-service/package-lock.json
-            packages/risk-engine/package-lock.json
-            lambdas/collector/package-lock.json
-            lambdas/incremental-collector/package-lock.json
-            lambdas/list-accounts/package-lock.json
-            lambdas/graph-writer/package-lock.json
-            ui/package-lock.json
-            cdk/package-lock.json
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Install API service deps
-        working-directory: api-service
-        run: npm ci
-
-      - name: Install risk-engine deps
-        working-directory: packages/risk-engine
-        run: npm ci
-
-      - name: Install collector deps
-        working-directory: lambdas/collector
-        run: npm ci
-
-      - name: Install incremental-collector deps
-        working-directory: lambdas/incremental-collector
-        run: npm ci
-
-      - name: Install list-accounts deps
-        working-directory: lambdas/list-accounts
-        run: npm ci
-
-      - name: Install graph-writer deps
-        working-directory: lambdas/graph-writer
-        run: npm ci
-
-      - name: Install UI deps
-        working-directory: ui
-        run: npm ci
-
-      - name: Install CDK deps
-        working-directory: cdk
-        run: npm ci
-
-      - name: Set version
-        id: set-version
+      - name: Pin npm
         run: |
-          version="${{ github.event.inputs.version }}"
-          echo "api-service-version=${version}" >> $GITHUB_OUTPUT
-          echo "risk-engine-version=${version}" >> $GITHUB_OUTPUT
-          echo "collector-version=${version}" >> $GITHUB_OUTPUT
-          echo "ui-version=${version}" >> $GITHUB_OUTPUT
-          echo "cdk-version=${version}" >> $GITHUB_OUTPUT
+          npm install --global npm@11.19.1
+          test "$(npm --version)" = "11.19.1"
 
-      - name: Build API service
-        working-directory: api-service
-        run: npm run build
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Build Risk Engine
-        working-directory: packages/risk-engine
-        run: npm run build
+      - name: Verify source
+        env:
+          COLLECTION_ACCOUNT_IDS: '111122223333'
+          COLLECTOR_EXTERNAL_ID: ci-collector-external-id
+          HOME_ACCOUNT_ID: '111122223333'
+          NEPTUNE_CLUSTER_RESOURCE_ID: cluster-ci
+        run: |
+          npm run ci:quality
+          npm run ci:audit
+          npm --workspace cdk exec -- cdk synth --no-lookups
 
-      - name: Build Collector
-        working-directory: lambdas/collector
-        run: npm run build
+      - name: Generate dependency SBOM
+        run: npm sbom --sbom-format=cyclonedx --omit=dev > artifacts/npm.cdx.json
 
-      - name: Build Incremental Collector
-        working-directory: lambdas/incremental-collector
-        run: npm run build
+      - name: Smoke release containers
+        run: bash scripts/smoke-containers.sh
 
-      - name: Build List Accounts
-        working-directory: lambdas/list-accounts
-        run: npm run build
+      - name: Record unpublished images
+        if: env.PUBLISH_IMAGES != 'true' || env.DRY_RUN == 'true'
+        run: echo '{}' > artifacts/images.json
 
-      - name: Build Graph Writer
-        working-directory: lambdas/graph-writer
-        run: npm run build
-
-      - name: Build UI
-        working-directory: ui
-        run: npm run build
-
-      - name: Build CDK
-        working-directory: cdk
-        run: npm run build
-
-      - name: Synthesize CDK
-        working-directory: cdk
-        run: npx cdk synth --no-lookups --app "npx ts-node --prefer-ts-exts bin/khalifa.ts"
-
-      - name: Create release artifacts
+      - name: Assume AWS release role
+        if: env.PUBLISH_IMAGES == 'true' && env.DRY_RUN != 'true'
+        shell: bash
         run: |
           set -euo pipefail
-          version="${{ github.event.inputs.version }}"
-          mkdir -p dist
+          token_json="$(curl --silent --show-error --fail -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com")"
+          oidc_token="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])' <<<"$token_json")"
+          credentials="$(aws sts assume-role-with-web-identity --role-arn "$AWS_ROLE_ARN" --role-session-name "khalifa-release-$GITHUB_RUN_ID" --web-identity-token "$oidc_token" --duration-seconds 3600)"
+          access_key_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Credentials"]["AccessKeyId"])' <<<"$credentials")"
+          secret_access_key="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Credentials"]["SecretAccessKey"])' <<<"$credentials")"
+          session_token="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Credentials"]["SessionToken"])' <<<"$credentials")"
+          echo "::add-mask::$access_key_id"
+          echo "::add-mask::$secret_access_key"
+          echo "::add-mask::$session_token"
+          {
+            echo "AWS_ACCESS_KEY_ID=$access_key_id"
+            echo "AWS_SECRET_ACCESS_KEY=$secret_access_key"
+            echo "AWS_SESSION_TOKEN=$session_token"
+          } >> "$GITHUB_ENV"
 
-          # API Service
-          mkdir -p dist/api-service
-          cp -r api-service/dist dist/api-service/
-          cp api-service/package.json api-service/package-lock.json dist/api-service/
-          tar -C dist -czf "dist/api-service_${version}.tar.gz" api-service
+      - name: Setup Docker Buildx
+        if: env.PUBLISH_IMAGES == 'true' && env.DRY_RUN != 'true'
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
-          # Risk Engine Lambda
-          mkdir -p dist/packages/risk-engine
-          cp -r packages/risk-engine/dist dist/packages/risk-engine/
-          cp packages/risk-engine/package.json packages/risk-engine/package-lock.json dist/packages/risk-engine/
-          tar -C dist -czf "dist/risk-engine_${version}.tar.gz" packages/risk-engine
-
-          # Collector Lambda
-          mkdir -p dist/lambdas/collector
-          cp -r lambdas/collector/dist dist/lambdas/collector/
-          cp lambdas/collector/package.json lambdas/collector/package-lock.json dist/lambdas/collector/
-          tar -C dist -czf "dist/collector_${version}.tar.gz" lambdas/collector
-
-          # UI
-          mkdir -p dist/ui
-          cp -r ui/.next dist/ui/
-          cp ui/package.json ui/package-lock.json dist/ui/
-          tar -C dist -czf "dist/ui_${version}.tar.gz" ui
-
-          # CDK
-          mkdir -p dist/cdk
-          cp -r cdk/dist dist/cdk/
-          cp cdk/package.json cdk/package-lock.json dist/cdk/
-          tar -C dist -czf "dist/cdk_${version}.tar.gz" cdk
-
-          # Templates
-          mkdir -p dist/templates
-          cp -r templates dist/
-          tar -C dist -czf "dist/templates_${version}.tar.gz" templates
-
-          # EKS manifests
-          mkdir -p dist/eks-manifests
-          cp -r eks-manifests dist/
-          tar -C dist -czf "dist/eks-manifests_${version}.tar.gz" eks-manifests
-
-      - name: Generate checksums
+      - name: Authenticate to ECR
+        if: env.PUBLISH_IMAGES == 'true' && env.DRY_RUN != 'true'
+        shell: bash
         run: |
           set -euo pipefail
-          (cd dist && sha256sum ./*.tar.gz > checksums.txt)
+          aws_account_id="$(aws sts get-caller-identity --query Account --output text)"
+          ecr_registry="$aws_account_id.dkr.ecr.$AWS_REGION.amazonaws.com"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ecr_registry"
+          echo "ECR_REGISTRY=$ecr_registry" >> "$GITHUB_ENV"
 
-      - name: Upload release artifacts
+      - name: Publish images
+        if: env.PUBLISH_IMAGES == 'true' && env.DRY_RUN != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          get_digest() {
+            local repository=$1
+            local tag=$2
+            local digest
+            for _ in $(seq 1 12); do
+              digest="$(aws ecr describe-images --repository-name "$repository" --image-ids "imageTag=$tag" --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)"
+              if [[ "$digest" == sha256:* ]]; then
+                echo "$digest"
+                return
+              fi
+              sleep 5
+            done
+            echo "Unable to resolve ECR digest for $repository:$tag" >&2
+            return 1
+          }
+
+          require_immutable_repository() {
+            local repository=$1
+            local mutability
+            mutability="$(aws ecr describe-repositories --repository-names "$repository" --query 'repositories[0].imageTagMutability' --output text)"
+            if [[ "$mutability" != "IMMUTABLE" ]]; then
+              echo "ECR repository must use immutable tags: $repository" >&2
+              return 1
+            fi
+          }
+
+          require_absent_tag() {
+            local repository=$1
+            local tag=$2
+            local output
+            local status
+            set +e
+            output="$(aws ecr describe-images --repository-name "$repository" --image-ids "imageTag=$tag" --output json 2>&1)"
+            status=$?
+            set -e
+            if [[ $status -eq 0 ]]; then
+              echo "Refusing to overwrite existing ECR tag: $repository:$tag" >&2
+              return 1
+            fi
+            if [[ "$output" != *"ImageNotFoundException"* ]]; then
+              echo "$output" >&2
+              return 1
+            fi
+          }
+
+          images='{}'
+          specs=(
+            "api:$API_ECR_REPOSITORY"
+            "ui:$UI_ECR_REPOSITORY"
+            "rule-runner:$RULE_RUNNER_ECR_REPOSITORY"
+          )
+
+          for spec in "${specs[@]}"; do
+            target="${spec%%:*}"
+            repository="${spec#*:}"
+            image="$ECR_REGISTRY/$repository"
+            require_immutable_repository "$repository"
+            require_absent_tag "$repository" "$GITHUB_SHA"
+            require_absent_tag "$repository" "$VERSION"
+            docker buildx build --platform linux/amd64 --target "$target" --tag "$image:$GITHUB_SHA" --tag "$image:$VERSION" --provenance=mode=max --sbom=true --push .
+            sha_digest="$(get_digest "$repository" "$GITHUB_SHA")"
+            version_digest="$(get_digest "$repository" "$VERSION")"
+            if [[ "$sha_digest" != "$version_digest" ]]; then
+              echo "Version and source tags have different digests for $target" >&2
+              exit 1
+            fi
+            images="$(jq --arg target "$target" --arg reference "$image@$sha_digest" '. + {($target): {reference: $reference, digest: ($reference | split("@")[1])}}' <<<"$images")"
+          done
+
+          echo "$images" > artifacts/images.json
+
+      - name: Create release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_version="${VERSION#v}"
+          images="$(cat artifacts/images.json)"
+          jq -n --arg schema_version "1" --arg version "$VERSION" --arg source_sha "$GITHUB_SHA" --arg artifact_version "$artifact_version" --argjson published "$([[ "$PUBLISH_IMAGES" == "true" && "$DRY_RUN" != "true" ]] && echo true || echo false)" --argjson images "$images" '{
+            schemaVersion: ($schema_version | tonumber),
+            version: $version,
+            sourceSha: $source_sha,
+            published: $published,
+            images: $images,
+            lambdaArtifacts: "Lambda zip files in this release",
+            dependencySbom: "npm.cdx.json",
+            deploymentArtifacts: ["khalifa-\($artifact_version).tgz", "khalifa-eks-\($artifact_version).tar.gz"]
+          }' > artifacts/release-manifest.json
+          mkdir -p artifacts/release
+          helm package deploy/helm/khalifa --version "$artifact_version" --app-version "$artifact_version" --destination artifacts/release
+          mkdir -p artifacts/khalifa-eks/deploy/helm artifacts/khalifa-eks/deploy/terraform
+          tar --extract --gzip --file "artifacts/release/khalifa-$artifact_version.tgz" --directory artifacts/khalifa-eks/deploy/helm
+          cp -R deploy/terraform/khalifa-eks artifacts/khalifa-eks/deploy/terraform/
+          tar --create --gzip --file "artifacts/release/khalifa-eks-$artifact_version.tar.gz" --directory artifacts/khalifa-eks deploy
+          cp artifacts/lambdas/*.zip artifacts/release/
+          cp artifacts/npm.cdx.json artifacts/release/
+          cp artifacts/release-manifest.json artifacts/release/
+          (cd artifacts/release && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+
+      - name: Upload release assets
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: release-${{ github.event.inputs.version }}
-          path: dist
+          name: khalifa-release-${{ env.VERSION }}
+          path: artifacts/release
           if-no-files-found: error
           retention-days: 30
 
   publish:
-    name: Publish Release
+    name: Publish GitHub release
     needs: build
-    if: ${{ !github.event.inputs.dry-run }}
-    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
-      - name: Download release artifacts
+      - name: Download release assets
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
-          name: release-${{ github.event.inputs.version }}
-          path: dist
+          name: khalifa-release-${{ env.VERSION }}
+          path: release-assets
 
       - name: Verify checksums
-        run: |
-          set -euo pipefail
-          (cd dist && sha256sum -c checksums.txt)
+        run: (cd release-assets && sha256sum --check SHA256SUMS)
 
-      - name: Create GitHub Release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version="${{ github.event.inputs.version }}"
-          if gh release view "${version}" >/dev/null 2>&1; then
-            echo "Release ${version} already exists, uploading assets..."
-            gh release upload "${version}" dist/* --clobber
-          else
-            echo "Creating release ${version}..."
-            gh release create "${version}" dist/* --verify-tag --generate-notes
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Refusing to overwrite existing GitHub release: $VERSION" >&2
+            exit 1
           fi
+          gh release create "$VERSION" release-assets/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes

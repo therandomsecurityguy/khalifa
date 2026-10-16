@@ -1,0 +1,43 @@
+name: Mirror Gremlin Server image
+
+# Run by hand. Copies the pinned Gremlin Server image to GHCR so the
+# graph-queries job does not hit Docker Hub's pull rate limit.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SOURCE: docker.io/tinkerpop/gremlin-server@sha256:911e27acc8a43209fee272408fa99045f5ba48ae410c8cef6da8c500eca42416
+  DIGEST: sha256:911e27acc8a43209fee272408fa99045f5ba48ae410c8cef6da8c500eca42416
+  TARGET: ghcr.io/therandomsecurityguy/khalifa-gremlin-server:3.7.1
+
+jobs:
+  mirror:
+    name: Copy to GHCR
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+
+      # Copies the multi-platform index as-is, so the digest is unchanged.
+      - name: Copy image
+        run: docker buildx imagetools create --tag "$TARGET" "$SOURCE"
+
+      - name: Verify digest
+        run: |
+          copied=$(docker buildx imagetools inspect "$TARGET" --format '{{json .Manifest}}' | jq -r .digest)
+          echo "Copied $copied"
+          test "$copied" = "$DIGEST"
+
+      - name: Log out
+        if: always()
+        run: docker logout ghcr.io

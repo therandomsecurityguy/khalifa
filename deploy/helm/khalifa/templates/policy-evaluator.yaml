@@ -1,0 +1,68 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "khalifa.fullname" . }}-policy-evaluator
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: policy-evaluator
+spec:
+  schedule: {{ .Values.policyEvaluator.schedule | quote }}
+  {{- with .Values.policyEvaluator.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.policyEvaluator.suspend }}
+  concurrencyPolicy: {{ .Values.policyEvaluator.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.policyEvaluator.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.policyEvaluator.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.policyEvaluator.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "policy-evaluator") | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.policyEvaluator.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.policyEvaluator.ttlSecondsAfterFinished }}
+      backoffLimit: {{ .Values.policyEvaluator.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "khalifa.selectorLabels" (dict "root" . "component" "policy-evaluator") | nindent 12 }}
+            {{- with .Values.policyEvaluator.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.policyEvaluator.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "policyEvaluator" "suffix" "policy-evaluator") }}
+          automountServiceAccountToken: {{ .Values.serviceAccounts.policyEvaluator.automountServiceAccountToken }}
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "khalifa.podSecurityContext" . | nindent 12 }}
+          {{- if .Values.topologySpread.enabled }}
+          topologySpreadConstraints:
+            {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "policy-evaluator") | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: policy-evaluator
+              image: {{ required "policyEvaluator.image must be an immutable repository@sha256 digest" .Values.policyEvaluator.image | quote }}
+              imagePullPolicy: IfNotPresent
+              args: ["policy-evaluator"]
+              securityContext:
+                {{- include "khalifa.containerSecurityContext" . | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-config
+              resources:
+                {{- toYaml .Values.policyEvaluator.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

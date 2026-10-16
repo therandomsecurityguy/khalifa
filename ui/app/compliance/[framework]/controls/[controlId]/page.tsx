@@ -1,308 +1,246 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { getControlDetails } from '@/lib/api';
-import type {
-  ComplianceControlDetail,
-  ComplianceEvidence,
-  ComplianceRelatedIssue,
-} from '@/lib/api';
-
-const frameworkLabels: Record<string, string> = {
-  CIS_AWS_FOUNDATIONS: 'CIS AWS Foundations v3.0',
-  SOC2: 'SOC 2 Type II',
-  ISO27001: 'ISO 27001:2022',
-};
-
-const statusColors: Record<string, string> = {
-  PASS: 'bg-green-100 text-green-800',
-  FAIL: 'bg-red-100 text-red-800',
-  MANUAL: 'bg-yellow-100 text-yellow-800',
-  NOT_EVALUATED: 'bg-gray-100 text-gray-800',
-  NOT_APPLICABLE: 'bg-blue-100 text-blue-800',
-};
-
-const severityColors: Record<string, string> = {
-  critical: 'bg-red-100 text-red-800',
-  high: 'bg-orange-100 text-orange-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  low: 'bg-blue-100 text-blue-800',
-};
+import { getControlDetails, isNotFound } from '@/lib/api';
+import { useRequest } from '@/lib/use-request';
+import { frameworkLabel } from '@/lib/compliance';
+import { formatNodeLabel } from '@/lib/graph-labels';
+import { ErrorState, LoadingState, NotFoundState } from '@/components/states';
+import {
+  Badge,
+  Card,
+  LINK,
+  PageBody,
+  PageHeader,
+  RegionScopeBadge,
+  SeverityBadge,
+  StatusBadge,
+  Table,
+  Td,
+  Th,
+  TONES,
+} from '@/components/ui';
 
 export default function ControlDetailPage() {
-  const params = useParams();
-  const framework = params.framework as string;
-  const controlId = params.controlId as string;
+  const { framework, controlId } = useParams<{ framework: string; controlId: string }>();
+  const control = useRequest(
+    (signal) => getControlDetails(framework, controlId, { signal }),
+    [framework, controlId]
+  );
+  const back = {
+    backHref: `/compliance/${framework}`,
+    backLabel: `← ${frameworkLabel(framework)}`,
+  };
 
-  const [control, setControl] = useState<ComplianceControlDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadControl();
-  }, [framework, controlId]);
-
-  async function loadControl() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getControlDetails(framework, controlId);
-      setControl(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load control details');
-    } finally {
-      setLoading(false);
+  if (control.status === 'error') {
+    if (isNotFound(control.error)) {
+      return (
+        <NotFoundState
+          title={controlId}
+          message={`Control ${controlId} is not part of ${frameworkLabel(framework)}.`}
+          {...back}
+        />
+      );
     }
-  }
-
-  function getStatusColor(status: string): string {
-    return statusColors[status] || 'bg-gray-100 text-gray-800';
-  }
-
-  function getSeverityColor(severity: string): string {
-    return severityColors[severity] || 'bg-gray-100 text-gray-800';
-  }
-
-  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500">Loading control details...</div>
-      </div>
+      <>
+        <PageHeader title={controlId} {...back} />
+        <PageBody>
+          <ErrorState error={control.error} onRetry={control.reload} />
+        </PageBody>
+      </>
     );
   }
 
-  if (error || !control) {
+  if (control.status !== 'success') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Control Not Found</h1>
-          <p className="mt-2 text-gray-600">{error || `Control ${controlId} not found`}</p>
-          <Link
-            href={`/compliance/${framework}`}
-            className="mt-4 text-indigo-600 hover:text-indigo-900"
-          >
-            Back to Framework
-          </Link>
-        </div>
-      </div>
+      <>
+        <PageHeader title={controlId} {...back} />
+        <PageBody>
+          <LoadingState label="Loading control details…" />
+        </PageBody>
+      </>
     );
   }
+
+  const detail = control.data;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center space-x-4">
-            <Link
-              href={`/compliance/${framework}`}
-              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
-            >
-              ← {frameworkLabels[framework] || framework}
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{control.title}</h1>
-              <p className="text-sm text-gray-500">Control ID: {control.id}</p>
-            </div>
-          </div>
-        </div>
-      </header>
+    <>
+      <PageHeader
+        title={detail.title}
+        description={`Control ID: ${detail.id}`}
+        {...back}
+        actions={
+          <>
+            <StatusBadge status={detail.status} />
+            <RegionScopeBadge regions={detail.regionsEvaluated} />
+            <SeverityBadge severity={detail.severity} tone="soft" />
+            <Badge tone={detail.automated ? TONES.info : TONES.neutral}>
+              {detail.automated ? 'Automated' : 'Manual'}
+            </Badge>
+          </>
+        }
+      />
+      <PageBody>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <Card title="Description">
+              <p className="text-gray-600">{detail.description || 'No description available.'}</p>
+            </Card>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white shadow rounded-lg p-6">
-                <div className="flex flex-wrap items-center gap-4 mb-4">
-                  <span
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(control.status)}`}
-                  >
-                    {control.status}
-                  </span>
-                  <span
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getSeverityColor(control.severity)}`}
-                  >
-                    {control.severity}
-                  </span>
-                  <span
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${control.automated ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}
-                  >
-                    {control.automated ? 'Automated' : 'Manual'}
-                  </span>
+            <Card title="Remediation guidance">
+              <p className="text-gray-600">
+                {detail.remediationHint ||
+                  'Review and remediate the identified security issue according to best practices.'}
+              </p>
+            </Card>
+
+            {detail.relatedRules && detail.relatedRules.length > 0 && (
+              <Card title="Related security rules">
+                <div className="flex flex-wrap gap-2">
+                  {detail.relatedRules.map((ruleId) => (
+                    <Badge key={ruleId} tone={TONES.accent}>
+                      {ruleId}
+                    </Badge>
+                  ))}
                 </div>
+              </Card>
+            )}
 
-                <div className="prose max-w-none">
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Description</h3>
-                  <p className="text-gray-600">
-                    {control.description || 'No description available.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-white shadow rounded-lg p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Remediation Guidance</h3>
-                <div className="prose max-w-none text-gray-600">
-                  <p>
-                    {control.remediationHint ||
-                      'Review and remediate the identified security issue according to best practices.'}
-                  </p>
-                </div>
-              </div>
-
-              {control.relatedRules && control.relatedRules.length > 0 && (
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Related Security Rules</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {control.relatedRules.map((ruleId: string) => (
-                      <span
-                        key={ruleId}
-                        className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm font-medium"
-                      >
-                        {ruleId}
-                      </span>
+            {detail.evidence && detail.evidence.length > 0 && (
+              <Card title="Evidence" flush>
+                <Table caption="Evidence">
+                  <thead>
+                    <tr>
+                      <Th>Resource</Th>
+                      <Th>Type</Th>
+                      <Th>Status</Th>
+                      <Th>Collected</Th>
+                      <Th>Details</Th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {detail.evidence.map((evidence) => (
+                      <tr key={evidence.resourceId} className="hover:bg-gray-50">
+                        <Td className="max-w-xs truncate whitespace-nowrap font-medium text-gray-900">
+                          {evidence.resourceId}
+                        </Td>
+                        <Td className="whitespace-nowrap text-gray-500">
+                          {formatNodeLabel(evidence.resourceType)}
+                        </Td>
+                        <Td className="whitespace-nowrap">
+                          <StatusBadge status={evidence.status} />
+                        </Td>
+                        <Td className="whitespace-nowrap text-gray-500">
+                          {new Date(evidence.collectedAt).toLocaleString()}
+                        </Td>
+                        <Td className="max-w-md text-gray-500">
+                          <pre className="whitespace-pre-wrap text-xs">
+                            {JSON.stringify(evidence.details, null, 2)}
+                          </pre>
+                        </Td>
+                      </tr>
                     ))}
-                  </div>
-                </div>
-              )}
+                  </tbody>
+                </Table>
+              </Card>
+            )}
 
-              {control.evidence && control.evidence.length > 0 && (
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Evidence</h3>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Resource
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Collected
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Details
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {control.evidence.map((evidence: ComplianceEvidence) => (
-                          <tr key={evidence.resourceId} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate max-w-xs">
-                              {evidence.resourceId}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {evidence.resourceType}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(evidence.status)}`}
-                              >
-                                {evidence.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {new Date(evidence.collectedAt).toLocaleString()}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-500 max-w-md">
-                              <pre className="whitespace-pre-wrap text-xs">
-                                {JSON.stringify(evidence.details, null, 2)}
-                              </pre>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {control.relatedIssues && control.relatedIssues.length > 0 && (
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Related Open Issues</h3>
-                  <ul className="divide-y divide-gray-200">
-                    {control.relatedIssues.map((issue: ComplianceRelatedIssue) => (
-                      <li key={issue.ruleId} className="py-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="font-medium text-gray-900">{issue.ruleId}</span>
-                            <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
-                              {issue.status}
-                            </span>
-                          </div>
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${getSeverityColor(issue.severity)}`}
-                          >
-                            {issue.severity}
-                          </span>
+            {detail.relatedIssues && detail.relatedIssues.length > 0 && (
+              <Card title="Related risk rules">
+                <ul className="divide-y divide-gray-200">
+                  {detail.relatedIssues.map((rule) => (
+                    <li key={rule.ruleId} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="font-medium text-gray-900">{rule.ruleId}</span>
+                          <span className="ml-2 text-sm text-gray-500">{rule.ruleName}</span>
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+                        {rule.openCount === null ? (
+                          <Badge tone={TONES.neutral}>Unavailable</Badge>
+                        ) : rule.openCount === 0 ? (
+                          <Badge tone={TONES.neutral}>No open issues</Badge>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Badge tone={TONES.neutral}>{rule.openCount} open</Badge>
+                            {rule.highestSeverity && (
+                              <SeverityBadge severity={rule.highestSeverity} tone="soft" />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {rule.issues.length > 0 && (
+                        <ul className="mt-2 space-y-1">
+                          {rule.issues.map((issue) => (
+                            <li key={issue.id} className="flex items-center gap-2 text-sm">
+                              <SeverityBadge severity={issue.severity} tone="soft" />
+                              <Link href={`/issues/${issue.id}`} className={`truncate ${LINK}`}>
+                                {issue.resourceName || issue.resourceId || issue.id}
+                              </Link>
+                            </li>
+                          ))}
+                          {rule.openCount !== null && rule.openCount > rule.issues.length && (
+                            <li className="text-sm text-gray-500">
+                              and {rule.openCount - rule.issues.length} more
+                            </li>
+                          )}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </div>
 
-            <div className="space-y-6">
-              <div className="bg-white shadow rounded-lg p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Control Metadata</h3>
-                <dl className="divide-y divide-gray-200">
-                  <div className="py-3 flex justify-between">
-                    <dt className="text-sm font-medium text-gray-500">Framework</dt>
-                    <dd className="text-sm text-gray-900">
-                      {frameworkLabels[framework] || framework}
-                    </dd>
-                  </div>
-                  <div className="py-3 flex justify-between">
-                    <dt className="text-sm font-medium text-gray-500">Section</dt>
-                    <dd className="text-sm text-gray-900">{control.section}</dd>
-                  </div>
-                  <div className="py-3 flex justify-between">
-                    <dt className="text-sm font-medium text-gray-500">Severity</dt>
-                    <dd className="text-sm text-gray-900">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(control.severity)}`}
-                      >
-                        {control.severity}
-                      </span>
-                    </dd>
-                  </div>
-                  <div className="py-3 flex justify-between">
-                    <dt className="text-sm font-medium text-gray-500">Type</dt>
-                    <dd className="text-sm text-gray-900">
-                      {control.automated ? 'Automated' : 'Manual'}
-                    </dd>
-                  </div>
-                  <div className="py-3 flex justify-between">
-                    <dt className="text-sm font-medium text-gray-500">Last Evaluated</dt>
-                    <dd className="text-sm text-gray-900">
-                      {control.lastEvaluated
-                        ? new Date(control.lastEvaluated).toLocaleString()
-                        : 'Never'}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-
-              {control.evidenceRequirements && control.evidenceRequirements.length > 0 && (
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Evidence Requirements</h3>
-                  <ul className="list-disc list-inside space-y-2 text-gray-600">
-                    {control.evidenceRequirements.map((req: string, i: number) => (
-                      <li key={i}>{req}</li>
-                    ))}
-                  </ul>
+          <div className="space-y-6">
+            <Card title="Control metadata">
+              <dl className="divide-y divide-gray-200">
+                <div className="flex justify-between gap-3 py-3 first:pt-0">
+                  <dt className="text-sm font-medium text-gray-500">Framework</dt>
+                  <dd className="text-sm text-gray-900">{frameworkLabel(framework)}</dd>
                 </div>
-              )}
-            </div>
+                <div className="flex justify-between gap-3 py-3">
+                  <dt className="text-sm font-medium text-gray-500">Section</dt>
+                  <dd className="text-sm text-gray-900">{detail.section}</dd>
+                </div>
+                <div className="flex justify-between gap-3 py-3">
+                  <dt className="text-sm font-medium text-gray-500">Severity</dt>
+                  <dd>
+                    <SeverityBadge severity={detail.severity} tone="soft" />
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 py-3">
+                  <dt className="text-sm font-medium text-gray-500">Type</dt>
+                  <dd className="text-sm text-gray-900">
+                    {detail.automated ? 'Automated' : 'Manual'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 py-3 last:pb-0">
+                  <dt className="text-sm font-medium text-gray-500">Last evaluated</dt>
+                  <dd className="text-sm text-gray-900">
+                    {detail.lastEvaluated
+                      ? new Date(detail.lastEvaluated).toLocaleString()
+                      : 'Never'}
+                  </dd>
+                </div>
+              </dl>
+            </Card>
+
+            {detail.evidenceRequirements && detail.evidenceRequirements.length > 0 && (
+              <Card title="Evidence requirements">
+                <ul className="list-inside list-disc space-y-2 text-gray-600">
+                  {detail.evidenceRequirements.map((requirement) => (
+                    <li key={requirement}>{requirement}</li>
+                  ))}
+                </ul>
+              </Card>
+            )}
           </div>
         </div>
-      </main>
-    </div>
+      </PageBody>
+    </>
   );
 }
