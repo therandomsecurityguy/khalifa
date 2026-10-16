@@ -260,6 +260,7 @@ reported as certified.
 | [`packages/risk-engine`](packages/risk-engine)                                                             | Rules, scoring, compliance                                                                         |
 | [`api-service/`](api-service) · [`ui/`](ui)                                                                | REST API and Next.js UI                                                                            |
 | [`deploy/`](deploy)                                                                                        | Helm chart, Terraform modules, fixtures                                                            |
+| [`AGENTS.md`](AGENTS.md)                                                                                   | Secure AWS install workflow and repo conventions for AI agents                                     |
 | [`templates/`](templates)                                                                                  | Member collection role (`SecurityGraphCollectorRole`)                                              |
 | [`scripts/`](scripts)                                                                                      | Helm/Terraform validation, Helm kind smoke, container smoke, Lambda package/smoke, trust-center sync, npm audit |
 | [`trust-center/`](trust-center)                                                                            | In-repo static trust-center site generated from the publishable posture |

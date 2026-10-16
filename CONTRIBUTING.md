@@ -2,6 +2,10 @@
 
 Khalifa is an open-source AWS security graph and risk engine. Contributions are welcome.
 
+Working as an AI agent or building automation against this repo? Start from
+[`AGENTS.md`](AGENTS.md): it holds the secure AWS install workflow and the
+repository conventions agents must follow.
+
 ## Development Setup
 
 ```bash
@@ -82,6 +86,7 @@ npm run ci:quality   # format, lint, typecheck, tests, build, packaging smoke
 ## Pull Request Checklist
 
 - [ ] `npm run ci:quality` passes
+- [ ] Agent/automation changes follow [`AGENTS.md`](AGENTS.md) (load-bearing files, data hygiene, security notes)
 - [ ] New rules/controls have tests
 - [ ] CHANGELOG.md updated under "Unreleased"
 - [ ] README.md (and OPERATIONAL.md/ARCHITECTURE.md where affected) updated if behavior changes
