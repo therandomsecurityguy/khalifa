@@ -15,6 +15,10 @@ import {
 // means reconciliation has stopped, and statuses that old must not be published.
 export const MAX_RECORD_AGE_MS = 24 * 60 * 60 * 1000;
 
+// Published so the trust center can state the staleness window the API
+// actually enforces instead of duplicating it in site config.
+export const MAX_RECORD_AGE_HOURS = MAX_RECORD_AGE_MS / (60 * 60 * 1000);
+
 export interface PublishableRequirement {
   requirement: string;
   title: string;
@@ -37,6 +41,8 @@ export interface PublishableResponse {
   generatedAt: string | null;
   requirements: PublishableRequirement[];
   mappedFrameworks: PublishableMappedRequirement[];
+  /** Hours after which a record is STALE and nothing is published. */
+  maxAgeHours: number;
 }
 
 export type BaselineStatuses = ReadonlyMap<string, ComplianceControlStatus>;
@@ -50,7 +56,13 @@ export function publishableFrom(
   baselineStatuses?: BaselineStatuses
 ): PublishableResponse {
   if (!record) {
-    return { status: 'MISSING', generatedAt: null, requirements: [], mappedFrameworks: [] };
+    return {
+      status: 'MISSING',
+      generatedAt: null,
+      requirements: [],
+      mappedFrameworks: [],
+      maxAgeHours: MAX_RECORD_AGE_HOURS,
+    };
   }
   const age = now.getTime() - Date.parse(record.generatedAt);
   if (record.status !== 'OK' || !(age >= 0 && age <= MAX_RECORD_AGE_MS)) {
@@ -59,6 +71,7 @@ export function publishableFrom(
       generatedAt: record.generatedAt,
       requirements: [],
       mappedFrameworks: [],
+      maxAgeHours: MAX_RECORD_AGE_HOURS,
     };
   }
   const requirements: PublishableRequirement[] = [];
@@ -81,7 +94,13 @@ export function publishableFrom(
     ? deriveMappedPublishable(cisPublishable, baselineStatuses)
     : [];
 
-  return { status: 'OK', generatedAt: record.generatedAt, requirements, mappedFrameworks };
+  return {
+    status: 'OK',
+    generatedAt: record.generatedAt,
+    requirements,
+    mappedFrameworks,
+    maxAgeHours: MAX_RECORD_AGE_HOURS,
+  };
 }
 
 export function deriveMappedPublishable(

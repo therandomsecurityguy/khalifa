@@ -7,6 +7,11 @@
   "title": "Khalifa Trust Center",
   "description": "Continuously evaluated AWS security posture from Khalifa's security graph.",
   "links": [],
+  "monitoring": {
+    "assessmentCadence": "every 4 hours",
+    "publishCadence": "nightly",
+    "staleAfterHours": 24
+  },
   "theme": {
     "primary": "#1e3a8a"
   },

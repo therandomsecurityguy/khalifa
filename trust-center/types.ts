@@ -14,6 +14,16 @@ export interface SiteConfig {
   links?: Array<{ label: string; href: string }>;
   theme?: { primary?: string };
   footerNote?: string;
+  /**
+   * How this deployment monitors itself, rendered in the continuous-monitoring
+   * section. staleAfterHours is optional: when set it must match the API's
+   * published window, and the build fails on contradiction.
+   */
+  monitoring?: {
+    assessmentCadence?: string;
+    publishCadence?: string;
+    staleAfterHours?: number;
+  };
 }
 
 export type ControlStatus = 'implemented' | 'partial' | 'planned';
@@ -43,7 +53,14 @@ export interface GeneratedConfig {
 
 export interface BuildMeta {
   generatedAt: string;
-  source?: { recordStatus?: string; recordGeneratedAt?: string | null };
+  source?: {
+    recordStatus?: string;
+    recordGeneratedAt?: string | null;
+    /** Age of the assessed record at build time, in whole hours. */
+    recordAgeHours?: number;
+    /** The staleness window the API enforces, as published by the endpoint. */
+    maxAgeHours?: number;
+  };
 }
 
 export type GeneratedFramework = NonNullable<GeneratedConfig['frameworks']>[number];

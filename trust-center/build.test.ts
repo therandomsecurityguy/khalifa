@@ -49,17 +49,19 @@ describe('buildSite', () => {
     rmSync(workspace, { recursive: true, force: true });
   });
 
-  function writeFixtures(options: { skipMeta?: boolean } = {}): {
+  function writeFixtures(
+    options: { skipMeta?: boolean; config?: SiteConfig; meta?: BuildMeta } = {}
+  ): {
     configPath: string;
     generatedDir: string;
   } {
     const configPath = join(workspace, 'site.config.json');
     const generatedDir = join(workspace, 'generated');
     mkdirSync(generatedDir, { recursive: true });
-    writeFileSync(configPath, JSON.stringify(siteConfig));
+    writeFileSync(configPath, JSON.stringify(options.config ?? siteConfig));
     writeFileSync(join(generatedDir, 'trust.config.json'), JSON.stringify(generated));
     if (!options.skipMeta) {
-      writeFileSync(join(generatedDir, 'build-meta.json'), JSON.stringify(meta));
+      writeFileSync(join(generatedDir, 'build-meta.json'), JSON.stringify(options.meta ?? meta));
     }
     return { configPath, generatedDir };
   }
@@ -76,7 +78,7 @@ describe('buildSite', () => {
     expect(html).toContain('Implemented');
     expect(html).toContain('Partial');
     expect(html).toContain('CloudTrail enabled');
-    expect(html).toContain('Page generated 2026-10-16T12:00:00.000Z');
+    expect(html).toContain('last build 2026-10-16T12:00:00.000Z');
     expect(html).toContain('security@example.com');
     expect(readFileSync(join(outDir, 'styles.css'), 'utf8')).toContain('--accent: #1e3a8a');
   });
@@ -111,6 +113,44 @@ describe('buildSite', () => {
 
     writeFileSync(configPath, 'not json');
     expect(() => loadSiteConfig(configPath)).toThrow('not valid JSON');
+  });
+
+  it('publishes the staleness window only when it matches the API', () => {
+    const outDir = join(workspace, 'dist');
+    const withWindow = writeFixtures({
+      config: { ...siteConfig, monitoring: { staleAfterHours: 24 } },
+      meta: { ...meta, source: { ...meta.source, maxAgeHours: 24 } },
+    });
+    expect(() =>
+      buildSite({
+        siteConfigPath: withWindow.configPath,
+        generatedDir: withWindow.generatedDir,
+        outDir,
+      })
+    ).not.toThrow();
+    const html = readFileSync(join(outDir, 'index.html'), 'utf8');
+    expect(html).toContain('older than 24 hours');
+
+    const contradiction = writeFixtures({
+      config: { ...siteConfig, monitoring: { staleAfterHours: 24 } },
+      meta: { ...meta, source: { ...meta.source, maxAgeHours: 12 } },
+    });
+    expect(() =>
+      buildSite({
+        siteConfigPath: contradiction.configPath,
+        generatedDir: contradiction.generatedDir,
+        outDir: join(workspace, 'dist2'),
+      })
+    ).toThrow('contradicts the API');
+  });
+
+  it('rejects an invalid configured staleness window', () => {
+    const configPath = join(workspace, 'site.config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({ company: { name: 'x' }, monitoring: { staleAfterHours: 0 } })
+    );
+    expect(() => loadSiteConfig(configPath)).toThrow('monitoring.staleAfterHours');
   });
 
   it('rejects generated files with the wrong shape', () => {

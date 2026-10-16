@@ -60,7 +60,7 @@ export function renderSite(
 <main class="wrap">
 ${frameworks.map((framework) => renderFramework(framework)).join('\n')}
 ${renderControlsGrouped(frameworks, controls)}
-${renderProvenance(generatedAt, recordAt)}
+${renderProvenance(generatedAt, recordAt, config.monitoring, meta?.source?.maxAgeHours)}
 ${renderContact(config)}
 </main>
 <footer class="site-footer">
@@ -161,10 +161,26 @@ ${[...domain.items]
 </section>`;
 }
 
-function renderProvenance(generatedAt: string, recordAt: string | null): string {
-  return `<section class="provenance" aria-label="Publication details">
-  <h2>Publication details</h2>
-  <p>Page generated ${escapeHtml(generatedAt)}${recordAt ? ` from an assessment recorded ${escapeHtml(recordAt)}` : ''}. Requirements appear here only after repeated agreement with the account's Security Hub configuration and an explicit publish allowlist.</p>
+function renderProvenance(
+  generatedAt: string,
+  recordAt: string | null,
+  monitoring: SiteConfig['monitoring'],
+  maxAgeHours: number | undefined
+): string {
+  const cadence = monitoring?.assessmentCadence?.trim();
+  const publishCadence = monitoring?.publishCadence?.trim() ?? 'on a schedule';
+  const monitored = cadence
+    ? `Continuously monitored by Khalifa: assessments run ${escapeHtml(cadence)} against the AWS configuration.`
+    : 'Continuously monitored by Khalifa.';
+  const published = `The page is rebuilt ${escapeHtml(publishCadence)}; last build ${escapeHtml(generatedAt)}${recordAt ? `, assessment recorded ${escapeHtml(recordAt)}` : ''}.`;
+  const unpublish =
+    maxAgeHours !== undefined && maxAgeHours > 0
+      ? ` When the last assessment is older than ${escapeHtml(String(maxAgeHours))} hours, every framework unpublishes automatically until assessments resume.`
+      : '';
+  return `<section class="provenance" aria-label="Continuous monitoring">
+  <h2>Continuous monitoring</h2>
+  <p>${monitored} ${published}</p>
+  <p>Requirements appear here only after repeated agreement with the account's Security Hub configuration and an explicit publish allowlist.${unpublish}</p>
 </section>`;
 }
 
