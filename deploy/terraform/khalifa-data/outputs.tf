@@ -63,6 +63,11 @@ output "runtime_secret_arn" {
   value       = aws_secretsmanager_secret.runtime.arn
 }
 
+output "runtime_secret_name" {
+  description = "Secrets Manager name of the runtime secret, for External Secrets remoteRef keys."
+  value       = aws_secretsmanager_secret.runtime.name
+}
+
 output "neptune_secret_arn" {
   value = aws_secretsmanager_secret.neptune.arn
 }
