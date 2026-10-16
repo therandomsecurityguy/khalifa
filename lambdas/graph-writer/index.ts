@@ -1,122 +1,219 @@
+import {
+  createSigV4Headers,
+  isNeptuneRetryable,
+  normalizeNeptuneEndpoint,
+  withTimeout,
+  type NeptuneEndpoint,
+} from '@khalifa/risk-engine';
 import Gremlin from 'gremlin';
-import type { GraphNode, GraphEdge } from '../shared/types';
+import { GraphRepository, type GraphWriteResult } from '../shared/graph-repository';
+import type { GraphEdge, GraphNode, GraphReconcile } from '../shared/types';
 import { Logger } from '../shared/types';
-import { getSecret } from '../shared/secrets-client';
 
 const logger = new Logger('graph-writer');
 
-let client: Gremlin.driver.Client | null = null;
-
-async function getClient(): Promise<Gremlin.driver.Client> {
-  if (!client) {
-    const endpoint = process.env.NEPTUNE_ENDPOINT || '';
-    const secretArn = process.env.NEPTUNE_AUTH_SECRET_ARN || '';
-
-    let credentials = {};
-    if (secretArn) {
-      const secret = await getSecret(secretArn);
-      credentials = { username: secret.username, password: secret.password };
-    }
-
-    client = new Gremlin.driver.Client(`wss://${endpoint}:8182/gremlin`, {
-      traversalSource: 'g',
-      connectTimeout: 10000,
-      messageMaxChunkSize: 65536,
-      ...credentials,
-    });
-  }
-  return client;
-}
-
-interface WriterEvent {
+export interface WriterEvent {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  observedAt?: string;
+  reconcile?: GraphReconcile;
 }
 
-export const handler = async (
+export { createSigV4Headers, normalizeNeptuneEndpoint } from '@khalifa/risk-engine';
+
+interface RuntimeConnection {
+  readonly isOpen: boolean;
+  open(): Promise<void>;
+  close(): Promise<void>;
+}
+
+interface WriterRepository {
+  write(event: WriterEvent, observedAt?: string): Promise<GraphWriteResult>;
+}
+
+export interface WriterDependencies {
+  createHeaders: (endpoint: NeptuneEndpoint, region: string) => Promise<Record<string, string>>;
+  createConnection: (url: string, headers: Record<string, string>) => RuntimeConnection;
+  createRepository: (connection: RuntimeConnection) => WriterRepository;
+  sleep: (ms: number) => Promise<void>;
+}
+
+export interface WriterConfig {
+  endpoint: NeptuneEndpoint;
+  region: string;
+  timeoutMs: number;
+  maxAttempts: number;
+}
+
+export class NeptuneGraphWriter {
+  private connection: RuntimeConnection | null = null;
+  private repository: WriterRepository | null = null;
+  private connecting: Promise<WriterRepository> | null = null;
+  private generation = 0;
+
+  constructor(
+    private readonly config: WriterConfig,
+    private readonly dependencies: WriterDependencies
+  ) {}
+
+  async write(event: WriterEvent): Promise<GraphWriteResult> {
+    for (let attempt = 1; attempt <= this.config.maxAttempts; attempt += 1) {
+      try {
+        const repository = await withTimeout(
+          this.getRepository(),
+          this.config.timeoutMs,
+          'Neptune connection'
+        );
+        return await withTimeout(
+          repository.write(event, event.observedAt),
+          this.config.timeoutMs,
+          'Neptune graph write'
+        );
+      } catch (error) {
+        const retryable = isNeptuneRetryable(error);
+        if (retryable) await this.reset(error);
+        if (!retryable || attempt === this.config.maxAttempts) throw error;
+        await this.dependencies.sleep(100 * 2 ** (attempt - 1));
+      }
+    }
+    throw new Error('Neptune graph write failed without an error');
+  }
+
+  async close(): Promise<void> {
+    this.generation++;
+    const connection = this.connection;
+    this.connection = null;
+    this.repository = null;
+    this.connecting = null;
+    if (connection) {
+      await withTimeout(connection.close(), this.config.timeoutMs, 'Neptune connection close');
+    }
+  }
+
+  private async getRepository(): Promise<WriterRepository> {
+    if (this.connection?.isOpen && this.repository) return this.repository;
+    if (this.connecting) return this.connecting;
+
+    const generation = this.generation;
+    const connecting = (async () => {
+      const headers = await this.dependencies.createHeaders(
+        this.config.endpoint,
+        this.config.region
+      );
+      if (generation !== this.generation) throw new Error('Neptune connection closed');
+      const connection = this.dependencies.createConnection(this.config.endpoint.url, headers);
+      this.connection = connection;
+      try {
+        await connection.open();
+        if (generation !== this.generation) throw new Error('Neptune connection closed');
+      } catch (error) {
+        if (this.connection === connection) this.connection = null;
+        await connection
+          .close()
+          .catch((closeError) =>
+            logger.error('Failed to close rejected Neptune connection', { closeError, error })
+          );
+        throw error;
+      }
+      this.repository = this.dependencies.createRepository(connection);
+      return this.repository;
+    })();
+    this.connecting = connecting;
+    try {
+      return await connecting;
+    } finally {
+      if (this.connecting === connecting) this.connecting = null;
+    }
+  }
+
+  private async reset(originalError: unknown): Promise<void> {
+    try {
+      await this.close();
+    } catch (error) {
+      logger.error('Failed to reset Neptune connection', { error, originalError });
+    }
+  }
+}
+
+export function createGraphWriterHandler(writer?: Pick<NeptuneGraphWriter, 'write'>): (
   event: WriterEvent
-): Promise<{ success: boolean; written: number }> => {
-  const { nodes, edges } = event;
-  logger.info(`Starting Neptune write: ${nodes.length} nodes, ${edges.length} edges`);
-
-  const BATCH_SIZE = 50;
-  let written = 0;
-
-  try {
-    const gremlinClient = await getClient();
-
-    for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
-      await writeNodesBatch(gremlinClient, nodes.slice(i, i + BATCH_SIZE));
-      written += Math.min(BATCH_SIZE, nodes.length - i);
+) => Promise<{
+  success: true;
+  written: number;
+  skipped: number;
+  tombstoned: number;
+}> {
+  let runtimeWriter: NeptuneGraphWriter | undefined;
+  return async (event) => {
+    if (!event || !Array.isArray(event.nodes) || !Array.isArray(event.edges)) {
+      throw new Error('Graph writer event must contain nodes and edges arrays');
     }
 
-    for (let i = 0; i < edges.length; i += BATCH_SIZE) {
-      await writeEdgesBatch(gremlinClient, edges.slice(i, i + BATCH_SIZE));
-      written += Math.min(BATCH_SIZE, edges.length - i);
+    try {
+      runtimeWriter ||= writer ? undefined : createRuntimeWriter();
+      const result = await (writer || runtimeWriter!).write(event);
+      return {
+        success: true,
+        written: result.nodes + result.edges,
+        skipped: result.skippedEdges,
+        tombstoned: result.tombstoned,
+      };
+    } catch (error) {
+      logger.error('Neptune write failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-
-    logger.info(`Neptune write complete: ${written} items`);
-    return { success: true, written };
-  } catch (error) {
-    logger.error(`Neptune write failed: ${error}`);
-    throw error;
-  }
-};
-
-async function writeNodesBatch(client: Gremlin.driver.Client, nodes: GraphNode[]): Promise<void> {
-  const statements: string[] = [];
-  const bindings: Record<string, any> = {};
-  let idx = 0;
-
-  for (const node of nodes) {
-    const lblKey = `lbl_${idx}`;
-    const arnKey = `arn_${idx}`;
-    bindings[lblKey] = node.label;
-    bindings[arnKey] = node.id;
-
-    const propParts: string[] = [];
-    let propIdx = 0;
-    for (const [k, v] of Object.entries(node.properties)) {
-      if (v === undefined || v === null) continue;
-      const pk = `pk_${idx}_${propIdx}`;
-      const pv = `pv_${idx}_${propIdx}`;
-      bindings[pk] = k;
-      bindings[pv] = v;
-      propParts.push(`property(${pk}, ${pv})`);
-      propIdx++;
-    }
-
-    const propsClause = propParts.length > 0 ? '.' + propParts.join('.') : '';
-    statements.push(
-      `g.V().has(${lblKey}, 'arn', ${arnKey}).fold().coalesce(unfold(), addV(${lblKey}).property('arn', ${arnKey})${propsClause}).next()`
-    );
-    idx++;
-  }
-
-  const script = statements.join('\n');
-  await client.submit(script, bindings);
+  };
 }
 
-async function writeEdgesBatch(client: Gremlin.driver.Client, edges: GraphEdge[]): Promise<void> {
-  const statements: string[] = [];
-  const bindings: Record<string, any> = {};
-  let idx = 0;
+export const handler = createGraphWriterHandler();
 
-  for (const edge of edges) {
-    const fromKey = `ef_${idx}`;
-    const toKey = `et_${idx}`;
-    const lblKey = `el_${idx}`;
-    bindings[fromKey] = edge.from;
-    bindings[toKey] = edge.to;
-    bindings[lblKey] = edge.label;
+export function createRuntimeWriter(): NeptuneGraphWriter {
+  const timeoutMs = envInteger('NEPTUNE_WRITE_TIMEOUT_MS', 30_000);
+  const maxConcurrency = envInteger('NEPTUNE_WRITE_CONCURRENCY', 2);
+  const chunkSize = envInteger('NEPTUNE_MUTATION_CHUNK', 25);
+  return new NeptuneGraphWriter(
+    {
+      endpoint: normalizeNeptuneEndpoint(process.env.NEPTUNE_ENDPOINT || ''),
+      region: process.env.AWS_REGION || 'us-east-1',
+      timeoutMs,
+      maxAttempts: envInteger('NEPTUNE_MAX_ATTEMPTS', 3),
+    },
+    {
+      createHeaders: createSigV4Headers,
+      createConnection: (url, headers) =>
+        new Gremlin.driver.DriverRemoteConnection(url, {
+          traversalSource: 'g',
+          headers,
+          messageMaxChunkSize: 65_536,
+        }),
+      createRepository: (connection) =>
+        new GraphRepository(
+          createRemoteTraversal(connection, timeoutMs),
+          maxConcurrency,
+          chunkSize
+        ),
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    }
+  );
+}
 
-    statements.push(
-      `g.V().has('arn', ${fromKey}).as('from').V().has('arn', ${toKey}).as('to').coalesce(` +
-        `__.select('from').out(${lblKey}).where(__.as('to')), __.addE(${lblKey}).from('from').to('to')).next()`
-    );
-    idx++;
+export function createRemoteTraversal(
+  connection: RuntimeConnection,
+  timeoutMs: number
+): Gremlin.process.GraphTraversalSource {
+  return Gremlin.process
+    .traversal()
+    .withRemote(connection as unknown as Gremlin.driver.RemoteConnection)
+    .with_('evaluationTimeout', timeoutMs);
+}
+
+function envInteger(name: string, fallback: number): number {
+  const value = process.env[name];
+  const parsed = value ? Number(value) : fallback;
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`${name} must be a positive integer`);
   }
-
-  const script = statements.join('\n');
-  await client.submit(script, bindings);
+  return parsed;
 }

@@ -3,8 +3,9 @@ import type {
   UnusedPermissions,
   RightsizingRecommendation,
   ParsedStatement,
-} from './types';
-import { isActionMatched, parsePolicyDocument } from './policy-parser';
+} from '../policy-evaluator/types';
+import { isActionMatched, parsePolicyDocument } from '../policy-evaluator/policy-parser';
+import { appendAll } from './arrays';
 
 export interface UsedActionEntry {
   principalArn: string;
@@ -115,7 +116,7 @@ export function generateRightsizingRecommendation(
   for (const json of currentPolicyJsons) {
     try {
       const doc = parsePolicyDocument(json);
-      currentPolicy.push(...doc.Statement);
+      appendAll(currentPolicy, doc.Statement);
     } catch (e) {}
   }
 

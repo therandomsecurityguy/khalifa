@@ -2,40 +2,49 @@
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { SecurityGraphIngestionStack } from '../lib/khalifa-stack';
-import { SecurityGraphEksStack } from '../lib/eks-infrastructure';
 
 const app = new cdk.App();
 
-const accountIds = process.env.ACCOUNT_IDS
-  ? process.env.ACCOUNT_IDS.split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-  : [process.env.MASTER_ACCOUNT_ID || '123456789012'];
+const parseList = (value: string | undefined) =>
+  (value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+const required = (name: string) => {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+};
 
-const ingestionStack = new SecurityGraphIngestionStack(app, 'SecurityGraphIngestionStack', {
+const accountIds = parseList(process.env.COLLECTION_ACCOUNT_IDS);
+const parentIds = parseList(process.env.COLLECTION_PARENT_IDS);
+if (accountIds.length === 0 && parentIds.length === 0) {
+  throw new Error('COLLECTION_ACCOUNT_IDS or COLLECTION_PARENT_IDS is required');
+}
+const neptuneClusterResourceId = process.env.NEPTUNE_CLUSTER_RESOURCE_ID;
+if (!neptuneClusterResourceId) throw new Error('NEPTUNE_CLUSTER_RESOURCE_ID is required');
+const region = process.env.AWS_REGION || 'us-east-1';
+const homeAccountId = required('HOME_ACCOUNT_ID');
+if (!/^\d{12}$/.test(homeAccountId))
+  throw new Error('HOME_ACCOUNT_ID must be a 12-digit account ID');
+
+new SecurityGraphIngestionStack(app, 'SecurityGraphIngestionStack', {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.AWS_REGION || 'us-east-1',
+    region,
   },
   description: 'Security Graph Ingestion Pipeline',
-  neptuneEndpoint: process.env.NEPTUNE_ENDPOINT || 'neptune-cluster.us-east-1.amazonaws.com',
-  masterAccountId: process.env.MASTER_ACCOUNT_ID || '123456789012',
+  neptuneEndpoint: process.env.NEPTUNE_ENDPOINT || `neptune-cluster.${region}.amazonaws.com`,
+  neptuneClusterResourceId,
+  homeAccountId,
   accountIds,
+  parentIds,
+  collectionRegions: parseList(process.env.COLLECTION_REGIONS || region),
+  enableCanaries: process.env.ENABLE_CANARIES === 'true',
+  scannerVpcId: process.env.SCANNER_VPC_ID,
+  scannerPrivateSubnetIds: parseList(process.env.SCANNER_PRIVATE_SUBNET_IDS),
+  scannerAvailabilityZones: parseList(process.env.SCANNER_AVAILABILITY_ZONES),
+  scannerSecurityGroupId: process.env.SCANNER_SECURITY_GROUP_ID,
+  enableDspmEventTrigger: process.env.ENABLE_DSPM_EVENT_TRIGGER === 'true',
+  dspmBucketAllowlist: parseList(process.env.DSPM_BUCKET_ALLOWLIST),
 });
-
-if (process.env.DEPLOY_EKS === 'true' && process.env.EKS_VPC_ID) {
-  new SecurityGraphEksStack(app, 'SecurityGraphEksStack', {
-    env: {
-      account: process.env.CDK_DEFAULT_ACCOUNT,
-      region: process.env.AWS_REGION || 'us-east-1',
-    },
-    vpcId: process.env.EKS_VPC_ID,
-    neptuneEndpoint: process.env.NEPTUNE_ENDPOINT || 'neptune-cluster.us-east-1.amazonaws.com',
-    issuesTableName: ingestionStack.issuesTable.tableName,
-    evidenceTableName: ingestionStack.evidenceTable.tableName,
-    reportsTableName: ingestionStack.reportsTable.tableName,
-    certificateArn: process.env.EKS_CERTIFICATE_ARN || '',
-    cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID || '',
-    cognitoClientId: process.env.COGNITO_CLIENT_ID || '',
-  });
-}

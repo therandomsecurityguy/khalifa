@@ -1,5 +1,5 @@
-import { computeUnusedPermissions, generateRightsizingRecommendation } from './rightsizer';
-import type { UsedActionEntry } from './rightsizer';
+import { computeUnusedPermissions, generateRightsizingRecommendation } from '../shared/rightsizer';
+import type { UsedActionEntry } from '../shared/rightsizer';
 
 describe('computeUnusedPermissions', () => {
   const principalArn = 'arn:aws:iam::123456:role/TestRole';

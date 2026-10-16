@@ -23,6 +23,18 @@ export {
   runScheduledComplianceAssessment,
 };
 export type { GraphClient, ReportStore };
+export { effectivePermissionId } from './graph-ids';
+export {
+  NeptuneRuntimeClient,
+  createNeptuneRuntimeClient,
+  createSigV4Headers,
+  isNeptuneRetryable,
+  normalizeNeptuneEndpoint,
+  withTimeout,
+  type NeptuneEndpoint,
+  type NeptuneRuntimeClientConfig,
+  type NeptuneRuntimeClientDependencies,
+} from './neptune-client';
 
 const NEPTUNE_ENDPOINT =
   process.env.NEPTUNE_ENDPOINT || 'wss://neptune-cluster.us-east-1.amazonaws.com:8182/gremlin';

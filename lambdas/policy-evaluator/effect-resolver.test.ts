@@ -1,5 +1,5 @@
 import { resolveEffectivePermissions, checkActionAllowed } from './effect-resolver';
-import type { ResolveInput, PermissionBoundary } from './effect-resolver';
+import type { ResolveInput } from './effect-resolver';
 import type { EffectivePermission } from './types';
 
 const makePolicy = (

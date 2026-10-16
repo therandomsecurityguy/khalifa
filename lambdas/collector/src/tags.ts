@@ -2,10 +2,29 @@ import {
   ResourceGroupsTaggingAPIClient,
   GetResourcesCommand,
 } from '@aws-sdk/client-resource-groups-tagging-api';
+import { mapBounded } from '../../shared/concurrency';
 
 const TAGGING_PAGE_SIZE = 100;
+// Tag lookups are independent per ARN chunk; a few in flight keeps a large
+// account from serializing hundreds of GetResources calls.
+const TAGGING_CHUNK_CONCURRENCY = 4;
 
 export type TagMap = Record<string, string>;
+
+// The Resource Groups Tagging API rejects a whole GetResources call when any
+// ARN is not a taggable resource: a resource segment without a type delimiter
+// (IAM `:root`, `:password-policy`), an account that is not 12 digits (AWS-managed
+// policies), or a service it does not know (Khalifa synthetic vertices). S3 bucket
+// ARNs are the one delimiter-less form it accepts.
+const TAGGABLE_ARN = /^arn:[^:]+:([^:]+):[^:]*:(?:\d{12})?:(.+)$/;
+
+export function isTaggableArn(arn: string): boolean {
+  const match = TAGGABLE_ARN.exec(arn);
+  if (!match) return false;
+  const [, service, resource] = match;
+  if (service === 'khalifa') return false;
+  return service === 's3' || /[/:]/.test(resource);
+}
 
 export const PROP_ALIASES: Record<string, string[]> = {
   env: ['env', 'environment'],
@@ -13,52 +32,68 @@ export const PROP_ALIASES: Record<string, string[]> = {
   crown_jewel: ['crown_jewel', 'crown-jewel', 'crownJewel'],
   owner: ['owner', 'team', 'owning-team', 'owning_team'],
   business_unit: ['business_unit', 'business-unit', 'businessUnit'],
+  canary: ['canary'],
+};
+
+// Tag keys are matched without regard to case (Env, ENVIRONMENT), and the
+// usual spellings of an environment fold into the three that scoring knows.
+const ENV_VALUES: Record<string, string> = {
+  prod: 'prod',
+  prd: 'prod',
+  production: 'prod',
+  staging: 'staging',
+  stage: 'staging',
+  stg: 'staging',
+  dev: 'dev',
+  development: 'dev',
 };
 
 export async function fetchTagsForArns(
   client: ResourceGroupsTaggingAPIClient,
-  arns: string[]
+  arns: string[],
+  options: { concurrency?: number } = {}
 ): Promise<Map<string, TagMap>> {
   const tagMap = new Map<string, TagMap>();
   if (arns.length === 0) return tagMap;
 
-  let paginationToken: string | undefined;
-  do {
-    const response = await client.send(
-      new GetResourcesCommand({
-        ResourceARNList: arns,
-        PaginationToken: paginationToken,
-      })
-    );
+  await mapBounded(
+    chunk(arns, TAGGING_PAGE_SIZE),
+    options.concurrency ?? TAGGING_CHUNK_CONCURRENCY,
+    async (arnBatch) => {
+      // GetResources pages when a resource carries more tags than TagsPerPage
+      // (default 50). Ignoring PaginationToken silently dropped those tags,
+      // which changes data_classification / crown_jewel and therefore risk
+      // scoring, so always drain the pages for a chunk.
+      let paginationToken: string | undefined;
+      do {
+        const response = await client.send(
+          new GetResourcesCommand({
+            ResourceARNList: arnBatch,
+            ...(paginationToken ? { PaginationToken: paginationToken } : {}),
+          })
+        );
 
-    for (const rm of response.ResourceTagMappingList || []) {
-      const tags: TagMap = {};
-      for (const t of rm.Tags || []) {
-        if (t.Key && t.Value !== undefined) {
-          tags[t.Key] = t.Value;
+        for (const rm of response.ResourceTagMappingList || []) {
+          const tags: TagMap = {};
+          for (const t of rm.Tags || []) {
+            if (t.Key && t.Value !== undefined) {
+              tags[t.Key] = t.Value;
+            }
+          }
+          if (rm.ResourceARN) {
+            // A resource's tags can span several pages, so merge rather than
+            // overwrite: page two carries a different slice of the same tag set.
+            const existing = tagMap.get(rm.ResourceARN);
+            tagMap.set(rm.ResourceARN, existing ? { ...existing, ...tags } : tags);
+          }
         }
-      }
-      if (rm.ResourceARN) {
-        tagMap.set(rm.ResourceARN, tags);
-      }
-    }
 
-    paginationToken = response.PaginationToken;
-  } while (paginationToken);
+        paginationToken = response.PaginationToken;
+      } while (paginationToken);
+    }
+  );
 
   return tagMap;
-}
-
-export async function fetchAllTags(
-  client: ResourceGroupsTaggingAPIClient,
-  arnProvider: () => AsyncIterable<string[]>
-): Promise<Map<string, TagMap>> {
-  const result = new Map<string, TagMap>();
-  for await (const batch of arnProvider()) {
-    const partial = await fetchTagsForArns(client, batch);
-    partial.forEach((v, k) => result.set(k, v));
-  }
-  return result;
 }
 
 export function extractCommonProperties(
@@ -67,19 +102,30 @@ export function extractCommonProperties(
   const props: Record<string, string | boolean> = {};
   if (!tags) return props;
 
+  const byKey = new Map(
+    Object.entries(tags).map(([key, value]) => [key.trim().toLowerCase(), value])
+  );
   for (const [prop, aliases] of Object.entries(PROP_ALIASES)) {
     for (const alias of aliases) {
-      const value = tags[alias];
+      const value = byKey.get(alias.toLowerCase());
       if (value !== undefined) {
-        props[prop] = value.toLowerCase();
+        props[prop] = value.trim().toLowerCase();
         break;
       }
     }
   }
 
+  const env = props.env;
+  if (typeof env === 'string') props.env = ENV_VALUES[env] ?? env;
+
   const crown = props.crown_jewel;
   if (typeof crown === 'string') {
     props.crown_jewel = crown === 'true' || crown === 'yes' || crown === '1';
+  }
+
+  const canary = props.canary;
+  if (typeof canary === 'string') {
+    props.canary = canary === 'true' || canary === 'yes' || canary === '1';
   }
 
   return props;
@@ -92,5 +138,3 @@ export function chunk<T>(items: T[], size: number): T[][] {
   }
   return chunks;
 }
-
-export const TAG_BATCH_SIZE = TAGGING_PAGE_SIZE;

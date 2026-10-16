@@ -1,35 +1,78 @@
-import { OrganizationsClient, ListAccountsCommand } from '@aws-sdk/client-organizations';
+import { randomUUID } from 'crypto';
+import { OrganizationsClient } from '@aws-sdk/client-organizations';
+import {
+  buildWorkItems,
+  discoverAccounts,
+  parseCollectionConfig,
+  type InventoryAccount,
+  type OrganizationsReader,
+  type WorkItem,
+} from '../shared/account-inventory';
+import type { GraphWriter } from '../shared/graph-batch-writer';
+import { invokeGraphWriter } from '../shared/graph-writer-client';
+import type { GraphNode } from '../shared/types';
 import { Logger } from '../shared/types';
 
 const logger = new Logger('list-accounts');
-const orgClient = new OrganizationsClient({});
 
-export const handler = async (): Promise<{ accounts: string[] }> => {
-  logger.info('Starting account listing');
+function accountNodes(
+  accounts: InventoryAccount[],
+  observedAt: string,
+  runId: string
+): GraphNode[] {
+  return accounts.map((account) => ({
+    id: `arn:aws:iam::${account.accountId}:root`,
+    label: 'AwsAccount',
+    observedAt,
+    properties: {
+      id: account.accountId,
+      arn: `arn:aws:iam::${account.accountId}:root`,
+      account_id: account.accountId,
+      name: account.name,
+      state: account.state,
+      parent_id: account.parentId,
+      inventory_observed_at: observedAt,
+      collection_scope: 'organization-inventory',
+      collection_run_id: runId,
+      active: true,
+    },
+  }));
+}
 
-  const mockMode = process.env.MOCK_MODE === 'true';
+export function createHandler(
+  client: OrganizationsReader,
+  writeGraph: GraphWriter = invokeGraphWriter,
+  environment: NodeJS.ProcessEnv = process.env
+) {
+  return async (): Promise<{
+    workItems: WorkItem[];
+    accountCount: number;
+    activeAccountCount: number;
+  }> => {
+    const config = parseCollectionConfig(environment);
+    const accounts = await discoverAccounts(client, config, { nameListed: true });
+    const workItems = buildWorkItems(accounts, config.regions);
+    const observedAt = new Date().toISOString();
+    const runId = randomUUID();
 
-  if (mockMode) {
-    logger.info('Mock mode enabled, returning mock accounts');
-    return { accounts: ['123456789012', '223456789012', '323456789012'] };
-  }
+    await writeGraph({
+      nodes: accountNodes(accounts, observedAt, runId),
+      edges: [],
+      observedAt,
+      reconcile: { scope: 'organization-inventory', runId, observedAt },
+    });
+    logger.info('Organization inventory complete', {
+      accountCount: accounts.length,
+      activeAccountCount: workItems.length / config.regions.length,
+      workItemCount: workItems.length,
+    });
 
-  const accounts: string[] = [];
-  let nextToken: string | undefined;
+    return {
+      workItems,
+      accountCount: accounts.length,
+      activeAccountCount: workItems.length / config.regions.length,
+    };
+  };
+}
 
-  do {
-    const command = new ListAccountsCommand({ NextToken: nextToken });
-    const response = await orgClient.send(command);
-
-    for (const account of response.Accounts || []) {
-      if (account.Status === 'ACTIVE') {
-        accounts.push(account.Id!);
-      }
-    }
-
-    nextToken = response.NextToken;
-  } while (nextToken);
-
-  logger.info(`Found ${accounts.length} active accounts`);
-  return { accounts };
-};
+export const handler = createHandler(new OrganizationsClient({ maxAttempts: 3 }));

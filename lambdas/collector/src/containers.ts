@@ -1,4 +1,5 @@
 import { ECRClient, DescribeRepositoriesCommand, ListImagesCommand } from '@aws-sdk/client-ecr';
+import { collectPaginated } from '../../shared/pagination';
 import type { GraphNode, GraphEdge } from '../../shared/types';
 import type { TagMap } from './tags';
 import { extractCommonProperties } from './tags';
@@ -11,9 +12,14 @@ export async function collectContainerImages(
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
+  const seenImages = new Set<string>();
 
-  const reposResponse = await client.send(new DescribeRepositoriesCommand({}));
-  for (const repo of reposResponse.repositories || []) {
+  const repositories = await collectPaginated(
+    (token) => client.send(new DescribeRepositoriesCommand({ nextToken: token, maxResults: 100 })),
+    (page) => page.repositories,
+    (page) => page.nextToken
+  );
+  for (const repo of repositories) {
     if (!repo.repositoryArn) continue;
 
     const tags = tagsByArn.get(repo.repositoryArn);
@@ -33,37 +39,44 @@ export async function collectContainerImages(
       },
     });
 
-    try {
-      const imagesResponse = await client.send(
-        new ListImagesCommand({ repositoryName: repo.repositoryName, maxResults: 50 })
-      );
-      for (const image of imagesResponse.imageIds || []) {
-        if (!image.imageDigest) continue;
-        const imageArn = `${repo.repositoryArn}@${image.imageDigest}`;
+    const images = await collectPaginated(
+      (token) =>
+        client.send(
+          new ListImagesCommand({
+            repositoryName: repo.repositoryName,
+            maxResults: 100,
+            nextToken: token,
+          })
+        ),
+      (page) => page.imageIds,
+      (page) => page.nextToken
+    );
+    for (const image of images) {
+      if (!image.imageDigest) continue;
+      const imageArn = `${repo.repositoryArn}@${image.imageDigest}`;
 
-        const seen = new Set(nodes.map((n) => n.id));
-        if (seen.has(imageArn)) continue;
+      if (seenImages.has(imageArn)) continue;
+      seenImages.add(imageArn);
 
-        nodes.push({
-          id: imageArn,
-          label: 'ContainerImage',
-          properties: {
-            id: image.imageDigest,
-            arn: imageArn,
-            account_id: accountId,
-            repository: repo.repositoryName,
-            digest: image.imageDigest,
-            tag: image.imageTag,
-          },
-        });
+      nodes.push({
+        id: imageArn,
+        label: 'ContainerImage',
+        properties: {
+          id: image.imageDigest,
+          arn: imageArn,
+          account_id: accountId,
+          repository: repo.repositoryName,
+          digest: image.imageDigest,
+          tag: image.imageTag,
+        },
+      });
 
-        edges.push({
-          from: imageArn,
-          to: repo.repositoryArn,
-          label: 'BELONGS_TO',
-        });
-      }
-    } catch (e) {}
+      edges.push({
+        from: imageArn,
+        to: repo.repositoryArn,
+        label: 'BELONGS_TO',
+      });
+    }
   }
 
   return { nodes, edges };

@@ -5,7 +5,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:lambda && npm run build:compliance-lambda",
+    "build:lambda": "esbuild src/lambda.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/lambda/index.js",
+    "build:compliance-lambda": "esbuild src/compliance-lambda.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/compliance-lambda/index.js",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
@@ -14,8 +16,11 @@
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.400.0",
+    "@aws-sdk/credential-provider-node": "^3.972.0",
     "@aws-sdk/lib-dynamodb": "^3.400.0",
     "@aws-sdk/util-dynamodb": "^3.996.2",
+    "@smithy/core": "^3.29.0",
+    "@smithy/signature-v4": "^5.6.0",
     "gremlin": "^3.7.0",
     "@khalifa/integrations": "*"
   },

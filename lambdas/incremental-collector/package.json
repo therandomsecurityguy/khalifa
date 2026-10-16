@@ -1,25 +1,24 @@
 {
   "name": "incremental-collector",
   "version": "1.0.0",
+  "private": true,
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild index.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/index.js --sourcemap --sources-content=false",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"**/*.ts\"",
     "format:check": "prettier --check \"**/*.ts\"",
     "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
+    "@aws-sdk/client-lambda": "^3.400.0",
     "@aws-sdk/client-ec2": "^3.400.0",
-    "@aws-sdk/client-eks": "^3.400.0",
     "@aws-sdk/client-iam": "^3.400.0",
-    "@aws-sdk/client-kms": "^3.400.0",
-    "@aws-sdk/client-rds": "^3.400.0",
-    "@aws-sdk/client-s3": "^3.400.0",
+    "@aws-sdk/client-organizations": "^3.400.0",
+    "@aws-sdk/client-secrets-manager": "^3.400.0",
     "@aws-sdk/client-sqs": "^3.400.0",
-    "@aws-sdk/client-sts": "^3.400.0",
-    "@types/gremlin": "^3.6.7",
-    "gremlin": "^3.6.2"
+    "@aws-sdk/client-sts": "^3.400.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

@@ -1,4 +1,9 @@
-import { Macie2Client, ListFindingsCommand, GetFindingsCommand } from '@aws-sdk/client-macie2';
+import {
+  Macie2Client,
+  ListFindingsCommand,
+  GetFindingsCommand,
+  DescribeBucketsCommand,
+} from '@aws-sdk/client-macie2';
 import type { Classifier, ClassificationMatch, PiiType } from './classifier';
 
 const MACIE_TYPE_MAP: Record<string, PiiType> = {
@@ -11,7 +16,14 @@ const MACIE_TYPE_MAP: Record<string, PiiType> = {
   Private_Key: 'private_key',
 };
 
-export class MacieClassifier implements Classifier {
+export interface MacieScanner {
+  getFindingsForBucket(name: string): Promise<ClassificationMatch[]>;
+  hasCoverage(name: string): Promise<boolean>;
+  /** Buckets Macie knows about (admin + enabled members) in this Region. */
+  listBuckets(): Promise<{ name: string; accountId: string }[]>;
+}
+
+export class MacieClassifier implements Classifier, MacieScanner {
   readonly name = 'macie';
   private client: Macie2Client;
 
@@ -21,6 +33,37 @@ export class MacieClassifier implements Classifier {
 
   async classify(_content: string): Promise<ClassificationMatch[]> {
     return [];
+  }
+
+  async hasCoverage(bucketName: string): Promise<boolean> {
+    try {
+      const result = await this.client.send(
+        new DescribeBucketsCommand({
+          criteria: { bucketName: { eq: [bucketName] } },
+          maxResults: 1,
+        })
+      );
+      return result.buckets?.[0]?.automatedDiscoveryMonitoringStatus === 'MONITORED';
+    } catch {
+      return false;
+    }
+  }
+
+  async listBuckets(): Promise<{ name: string; accountId: string }[]> {
+    const buckets: { name: string; accountId: string }[] = [];
+    let nextToken: string | undefined;
+    do {
+      const result = await this.client.send(
+        new DescribeBucketsCommand({ maxResults: 50, nextToken })
+      );
+      for (const bucket of result.buckets || []) {
+        if (bucket.bucketName) {
+          buckets.push({ name: bucket.bucketName, accountId: bucket.accountId || '' });
+        }
+      }
+      nextToken = result.nextToken;
+    } while (nextToken);
+    return buckets;
   }
 
   async getFindingsForBucket(bucketName: string): Promise<ClassificationMatch[]> {
@@ -57,7 +100,6 @@ export class MacieClassifier implements Classifier {
         matches.push({
           piiType,
           count,
-          sample: '[macie]',
           confidence: 0.95,
         });
       }

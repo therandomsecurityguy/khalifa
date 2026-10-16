@@ -1,17 +1,20 @@
 {
   "name": "graph-writer",
   "version": "1.0.0",
+  "private": true,
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild index.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/index.js --sourcemap --sources-content=false",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"**/*.ts\"",
     "format:check": "prettier --check \"**/*.ts\"",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "cd ../.. && jest --selectProjects graph-writer --passWithNoTests"
   },
   "dependencies": {
+    "@khalifa/risk-engine": "*",
     "@types/gremlin": "^3.6.7",
-    "gremlin": "^3.6.2"
+    "gremlin": "^3.8.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

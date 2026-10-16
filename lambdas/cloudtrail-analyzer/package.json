@@ -1,10 +1,12 @@
 {
   "name": "cloudtrail-analyzer",
   "version": "1.0.0",
+  "private": true,
   "description": "CloudTrail log analyzer for unused permission detection via Athena",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild index.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/index.js --sourcemap --sources-content=false",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"**/*.ts\"",
     "format:check": "prettier --check \"**/*.ts\"",
