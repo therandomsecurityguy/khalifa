@@ -133,20 +133,23 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
+    env:
+      # A release tag is cut once this many commits have landed since the
+      # previous release tag (every commit counts, merge commits included).
+      # Override with the KHALIFA_RELEASE_MIN_COMMITS repository variable.
+      MIN_COMMITS: ${{ vars.KHALIFA_RELEASE_MIN_COMMITS || '10' }}
     steps:
       # Tag pushes made with the workflow token do not trigger the Release
-      # workflow. Set a fine-grained PAT with contents: write as the
-      # GH_KHALIFA secret to chain the release; without it the tag is still
-      # created and the release can be dispatched manually.
+      # workflow, so without a GH_KHALIFA PAT the release is dispatched
+      # explicitly below. With the PAT set, the tag push triggers it.
       - name: Select tag token
         id: token
         env:
           GH_KHALIFA: ${{ secrets.GH_KHALIFA }}
         run: |
           if [[ -z "$GH_KHALIFA" ]]; then
-            echo "GH_KHALIFA is not set; falling back to the workflow token." >&2
-            echo "The Release workflow will not trigger automatically; run it with:" >&2
-            echo "  gh workflow run Release --ref main -f version=<tag>" >&2
+            echo "GH_KHALIFA is not set; using the workflow token and dispatching the release explicitly." >&2
             echo "use_pat=false" >>"$GITHUB_OUTPUT"
           else
             echo "use_pat=true" >>"$GITHUB_OUTPUT"
@@ -159,17 +162,40 @@ jobs:
           token: ${{ secrets.GH_KHALIFA || github.token }}
 
       - name: Bump version and push tag
+        id: tag
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           set -euo pipefail
+          if [[ ! "$MIN_COMMITS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "KHALIFA_RELEASE_MIN_COMMITS must be a positive integer: $MIN_COMMITS" >&2
+            exit 1
+          fi
+
           existing="$(git tag --points-at "$GITHUB_SHA" --sort=-version:refname | sed -nE '/^v[0-9]+\.[0-9]+\.[0-9]+$/ {p;q;}')"
           if [[ -n "$existing" ]]; then
             echo "Commit already tagged: $existing"
+            echo "tagged=false" >>"$GITHUB_OUTPUT"
             exit 0
           fi
 
           latest="$(git tag --sort=-version:refname | sed -nE '/^v[0-9]+\.[0-9]+\.[0-9]+$/ {p;q;}')"
+          if [[ -z "$latest" ]]; then
+            commits="$(git rev-list --count HEAD)"
+          else
+            commits="$(git rev-list --count "$latest"..HEAD)"
+          fi
+          if (( commits < MIN_COMMITS )); then
+            echo "Only $commits commit(s) since ${latest:-the first commit}; $MIN_COMMITS required. Skipping tag."
+            {
+              echo "### No release yet"
+              echo
+              echo "$commits of $MIN_COMMITS commits since ${latest:-the first commit} (threshold from KHALIFA_RELEASE_MIN_COMMITS)."
+            } >>"$GITHUB_STEP_SUMMARY"
+            echo "tagged=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if [[ -z "$latest" ]]; then
             next="v1.0.0"
           else
@@ -181,17 +207,35 @@ jobs:
             fi
           fi
 
-          echo "Latest: ${latest:-none}; next: $next"
+          echo "Latest: ${latest:-none}; commits since: $commits; next: $next"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "$next"
           git push origin "$next"
+          echo "tagged=true" >>"$GITHUB_OUTPUT"
+          echo "version=$next" >>"$GITHUB_OUTPUT"
 
-          if [[ "${{ steps.token.outputs.use_pat }}" != "true" ]]; then
-            {
-              echo "### Tagged $next"
-              echo
-              echo "The Release workflow was not triggered automatically (no GH_KHALIFA PAT)."
-              echo "Dispatch it with: \`gh workflow run Release --ref main -f version=$next\`"
-            } >>"$GITHUB_STEP_SUMMARY"
-          fi
+      - name: Dispatch release
+        if: steps.tag.outputs.tagged == 'true' && steps.token.outputs.use_pat != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --ref main -f version="$RELEASE_VERSION" -f dry_run=false
+          {
+            echo "### Tagged $RELEASE_VERSION"
+            echo
+            echo "Release workflow dispatched for $RELEASE_VERSION."
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Note PAT-chained release
+        if: steps.tag.outputs.tagged == 'true' && steps.token.outputs.use_pat == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          {
+            echo "### Tagged $RELEASE_VERSION"
+            echo
+            echo "The tag push triggers the Release workflow through GH_KHALIFA."
+          } >>"$GITHUB_STEP_SUMMARY"
