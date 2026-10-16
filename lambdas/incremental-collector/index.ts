@@ -1,97 +1,164 @@
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
-import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { EC2Client, DescribeSecurityGroupsCommand } from '@aws-sdk/client-ec2';
 import { IAMClient, GetUserCommand } from '@aws-sdk/client-iam';
+import { OrganizationsClient } from '@aws-sdk/client-organizations';
+import {
+  discoverAccounts,
+  parseCollectionConfig,
+  type OrganizationsReader,
+} from '../shared/account-inventory';
+import type { GraphWriter } from '../shared/graph-batch-writer';
 import type { GraphNode, GraphEdge } from '../shared/types';
 import { Logger } from '../shared/types';
-import { getSecret } from '../shared/secrets-client';
+import { invokeGraphWriter } from '../shared/graph-writer-client';
+import { getTargetCredentials } from '../shared/aws-credentials';
 
 const logger = new Logger('incremental-processor');
-const sqsClient = new SQSClient({ region: process.env.AWS_REGION || 'us-east-1' });
-const stsClient = new STSClient({ region: process.env.AWS_REGION || 'us-east-1' });
+interface CollectionScope {
+  accountIds: ReadonlySet<string>;
+  regions: ReadonlySet<string>;
+}
 
-export const handler = async (): Promise<{ processed: number }> => {
-  const queueUrl = process.env.SQS_QUEUE_URL || '';
-  const masterAccountId = process.env.MASTER_ACCOUNT_ID || '';
+const EVENT_SOURCES = new Set(['aws.ec2', 'aws.eks', 'aws.iam', 'aws.kms', 'aws.rds', 'aws.s3']);
+
+export function requireApprovedEventTarget(
+  event: unknown,
+  scope: CollectionScope
+): { accountId: string; region: string; detail: Record<string, any> } {
+  if (!event || typeof event !== 'object') throw new Error('Invalid EventBridge event');
+  const envelope = event as Record<string, any>;
+  const accountId = envelope.account;
+  const region = envelope.region;
+  const source = envelope.source;
+  const detail = envelope.detail;
+
+  if (
+    envelope['detail-type'] !== 'AWS API Call via CloudTrail' ||
+    !EVENT_SOURCES.has(source) ||
+    !detail ||
+    typeof detail !== 'object'
+  ) {
+    throw new Error('Invalid EventBridge event');
+  }
+  if (typeof accountId !== 'string' || !scope.accountIds.has(accountId)) {
+    throw new Error('Event account is outside the approved collection scope');
+  }
+  if (typeof region !== 'string' || !scope.regions.has(region)) {
+    throw new Error('Event Region is outside the approved collection scope');
+  }
+  if (detail.eventSource !== `${source.slice(4)}.amazonaws.com`) {
+    throw new Error('Event source does not match its CloudTrail detail');
+  }
+  if (detail.recipientAccountId && detail.recipientAccountId !== accountId) {
+    throw new Error('Event account does not match its CloudTrail detail');
+  }
+  if (detail.awsRegion && detail.awsRegion !== region) {
+    throw new Error('Event Region does not match its CloudTrail detail');
+  }
+
+  return { accountId, region, detail };
+}
+
+interface IncrementalDependencies {
+  sqsClient?: SQSClient;
+  organizationsClient?: OrganizationsReader;
+  writeGraph?: GraphWriter;
+  environment?: NodeJS.ProcessEnv;
+  abortSignal?: AbortSignal;
+}
+
+export async function processBatch(
+  dependencies: IncrementalDependencies = {}
+): Promise<{ processed: number; failed: number }> {
+  const environment = dependencies.environment || process.env;
+  const queueUrl = environment.SQS_QUEUE_URL || '';
+  if (!queueUrl.trim()) throw new Error('SQS_QUEUE_URL is required');
+  const sqsClient =
+    dependencies.sqsClient || new SQSClient({ region: environment.AWS_REGION || 'us-east-1' });
+  const organizationsClient =
+    dependencies.organizationsClient || new OrganizationsClient({ maxAttempts: 3 });
+  const writeGraph = dependencies.writeGraph || invokeGraphWriter;
 
   const response = await sqsClient.send(
     new ReceiveMessageCommand({
       QueueUrl: queueUrl,
       MaxNumberOfMessages: 10,
       WaitTimeSeconds: 10,
-    })
+    }),
+    dependencies.abortSignal ? { abortSignal: dependencies.abortSignal } : undefined
   );
 
   const messages = response.Messages || [];
   logger.info(`Received ${messages.length} messages from queue`);
+  if (messages.length === 0) return { processed: 0, failed: 0 };
+
+  const config = parseCollectionConfig(environment);
+  const accounts = await discoverAccounts(organizationsClient, config);
+  const scope: CollectionScope = {
+    accountIds: new Set(
+      accounts.filter((account) => account.state === 'ACTIVE').map((account) => account.accountId)
+    ),
+    regions: new Set(config.regions),
+  };
 
   let processed = 0;
+  let failed = 0;
 
   for (const msg of messages) {
     try {
+      if (!msg.ReceiptHandle) throw new Error('SQS message is missing ReceiptHandle');
       const event = JSON.parse(msg.Body || '{}');
-      const { nodes, edges } = await processEvent(event, masterAccountId);
+      const { nodes, edges } = await processEvent(event, scope, environment);
 
       if (nodes.length > 0 || edges.length > 0) {
-        await writeToNeptune({ nodes, edges });
+        await writeGraph({
+          nodes,
+          edges,
+          observedAt: event.detail?.eventTime || event.time || new Date().toISOString(),
+        });
       }
 
-      if (msg.ReceiptHandle) {
-        await sqsClient.send(
-          new DeleteMessageCommand({
-            QueueUrl: queueUrl,
-            ReceiptHandle: msg.ReceiptHandle,
-          })
-        );
-      }
+      await sqsClient.send(
+        new DeleteMessageCommand({
+          QueueUrl: queueUrl,
+          ReceiptHandle: msg.ReceiptHandle,
+        })
+      );
 
       processed++;
     } catch (error) {
+      failed++;
       logger.error(`Failed to process message: ${error}`);
     }
   }
 
-  return { processed };
-};
+  return { processed, failed };
+}
+
+export const handler = () => processBatch();
 
 async function processEvent(
   event: any,
-  masterAccountId: string
+  scope: CollectionScope,
+  environment: NodeJS.ProcessEnv = process.env
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
-  const detail = event.detail || event;
-  const _eventName = detail.eventName || '';
+  const { accountId, region, detail } = requireApprovedEventTarget(event, scope);
   const eventSource = detail.eventSource || '';
   const requestParameters = detail.requestParameters || {};
-  const userIdentity = detail.userIdentity || {};
-  const accountId = userIdentity.arn?.split(':')[4] || userIdentity.accountId || '';
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
-
-  if (!accountId) {
-    return { nodes, edges };
-  }
-
-  const region = detail.awsRegion || process.env.AWS_REGION || 'us-east-1';
-  const isMaster = accountId === masterAccountId;
-
-  let credentials: any;
-  if (!isMaster) {
-    credentials = await stsClient
-      .send(
-        new AssumeRoleCommand({
-          RoleArn: `arn:aws:iam::${accountId}:role/SecurityGraphCollectorRole`,
-          RoleSessionName: `SecurityGraphInc-${Date.now()}`,
-          DurationSeconds: 900,
-          ExternalId: process.env.EXTERNAL_ID || 'khalifa-collector',
-        })
-      )
-      .then((res) => res.Credentials);
-  }
+  const credentials = await getTargetCredentials({
+    accountId,
+    region,
+    homeAccountId: environment.HOME_ACCOUNT_ID,
+    externalId: environment.COLLECTOR_EXTERNAL_ID,
+    roleName: environment.COLLECTOR_ROLE_NAME || 'SecurityGraphCollectorRole',
+  });
 
   try {
     if (eventSource.includes('ec2') && requestParameters.groupId) {
-      const client = new EC2Client({ region, credentials: isMaster ? undefined : credentials });
+      const client = new EC2Client({ region, credentials });
       const sg = await client.send(
         new DescribeSecurityGroupsCommand({ GroupIds: [requestParameters.groupId] })
       );
@@ -122,7 +189,7 @@ async function processEvent(
         },
       });
     } else if (eventSource.includes('iam') && requestParameters.userName) {
-      const client = new IAMClient({ region, credentials: isMaster ? undefined : credentials });
+      const client = new IAMClient({ region, credentials });
       const user = await client.send(new GetUserCommand({ UserName: requestParameters.userName }));
       if (user.User) {
         nodes.push({
@@ -138,48 +205,8 @@ async function processEvent(
     }
   } catch (error) {
     logger.error(`Error processing event: ${error}`);
+    throw error;
   }
 
   return { nodes, edges };
-}
-
-async function writeToNeptune(data: { nodes: GraphNode[]; edges: GraphEdge[] }): Promise<void> {
-  const endpoint = process.env.NEPTUNE_ENDPOINT || '';
-  const secretArn = process.env.NEPTUNE_AUTH_SECRET_ARN || '';
-
-  const secret = await getSecret(secretArn);
-  const client = new (await import('gremlin')).driver.Client(`wss://${endpoint}:8182/gremlin`, {
-    traversalSource: 'g',
-    username: secret.username,
-    password: secret.password,
-  });
-
-  try {
-    for (const node of data.nodes) {
-      const bindings: Record<string, any> = { lbl: node.label, arn: node.id };
-      const propParts: string[] = [];
-      let pi = 0;
-      for (const [k, v] of Object.entries(node.properties)) {
-        if (v === undefined) continue;
-        bindings[`pk_${pi}`] = k;
-        bindings[`pv_${pi}`] = v;
-        propParts.push(`property(pk_${pi}, pv_${pi})`);
-        pi++;
-      }
-      const propsClause = propParts.length > 0 ? '.' + propParts.join('.') : '';
-      await client.submit(
-        `g.V().has(lbl, 'arn', arn).fold().coalesce(unfold(), addV(lbl).property('arn', arn)${propsClause}).next()`,
-        bindings
-      );
-    }
-
-    for (const edge of data.edges) {
-      await client.submit(
-        `g.V().has('arn', ef).as('from').V().has('arn', et).as('to').coalesce(__.select('from').out(el).where(__.as('to')), __.addE(el).from('from').to('to')).next()`,
-        { ef: edge.from, et: edge.to, el: edge.label }
-      );
-    }
-  } finally {
-    await client.close();
-  }
 }

@@ -2,6 +2,7 @@ export interface GraphNode {
   id: string;
   label: string;
   properties: Record<string, any>;
+  observedAt?: string;
 }
 
 export interface GraphEdge {
@@ -9,6 +10,15 @@ export interface GraphEdge {
   to: string;
   label: string;
   properties?: Record<string, any>;
+  observedAt?: string;
+}
+
+export interface GraphReconcile {
+  scope: string;
+  runId: string;
+  observedAt: string;
+  accountId?: string;
+  region?: string;
 }
 
 export class Logger {

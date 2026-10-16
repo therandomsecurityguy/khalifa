@@ -44,7 +44,7 @@ jobs:
             cdk/package-lock.json
 
       - name: Install all workspace deps
-        run: npm ci --workspaces
+        run: npm ci --workspaces --include-workspace-root
 
       - name: Check formatting (API service)
         working-directory: api-service
@@ -68,7 +68,7 @@ jobs:
 
       - name: Check formatting (Lambdas)
         run: |
-          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer lambdas/dspm-scanner; do
+          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer lambdas/policy-evaluator lambdas/cloudtrail-analyzer lambdas/least-privilege-sweep lambdas/runtime lambdas/dspm-scanner; do
             if [ -f "$dir/package.json" ]; then
               echo "Checking $dir..."
               npx prettier --check "$dir/**/*.ts" || exit 1
@@ -97,7 +97,7 @@ jobs:
 
       - name: Lint Lambdas
         run: |
-          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer lambdas/dspm-scanner; do
+          for dir in lambdas/collector lambdas/incremental-collector lambdas/list-accounts lambdas/graph-writer lambdas/policy-evaluator lambdas/cloudtrail-analyzer lambdas/least-privilege-sweep lambdas/runtime lambdas/dspm-scanner; do
             if [ -f "$dir/package.json" ] && [ -f "$dir/.eslintrc.js" -o -f "$dir/.eslintrc.json" ]; then
               echo "Linting $dir..."
               (cd "$dir" && npx eslint . --ext .ts) || exit 1
@@ -131,7 +131,7 @@ jobs:
             cdk/package-lock.json
 
       - name: Install all workspace deps
-        run: npm ci --workspaces
+        run: npm ci --workspaces --include-workspace-root
 
       - name: Build Integrations (required by risk-engine & api-service)
         working-directory: packages/integrations
@@ -163,6 +163,22 @@ jobs:
 
       - name: Type check DSPM Scanner
         working-directory: lambdas/dspm-scanner
+        run: npx tsc --noEmit
+
+      - name: Type check Policy Evaluator
+        working-directory: lambdas/policy-evaluator
+        run: npx tsc --noEmit
+
+      - name: Type check CloudTrail Analyzer
+        working-directory: lambdas/cloudtrail-analyzer
+        run: npx tsc --noEmit
+
+      - name: Type check Least Privilege Sweep
+        working-directory: lambdas/least-privilege-sweep
+        run: npx tsc --noEmit
+
+      - name: Type check Runtime
+        working-directory: lambdas/runtime
         run: npx tsc --noEmit
 
       - name: Type check UI
@@ -201,7 +217,7 @@ jobs:
             cdk/package-lock.json
 
       - name: Install all workspace deps
-        run: npm ci --workspaces
+        run: npm ci --workspaces --include-workspace-root
 
       - name: Build Integrations (must build first — risk-engine imports it)
         working-directory: packages/integrations
@@ -231,6 +247,22 @@ jobs:
         working-directory: lambdas/dspm-scanner
         run: npm run build
 
+      - name: Build Policy Evaluator
+        working-directory: lambdas/policy-evaluator
+        run: npm run build
+
+      - name: Build CloudTrail Analyzer
+        working-directory: lambdas/cloudtrail-analyzer
+        run: npm run build
+
+      - name: Build Least Privilege Sweep
+        working-directory: lambdas/least-privilege-sweep
+        run: npm run build
+
+      - name: Build Runtime
+        working-directory: lambdas/runtime
+        run: npm run build
+
       - name: Build API service
         working-directory: api-service
         run: npm run build
@@ -245,6 +277,13 @@ jobs:
 
       - name: Synthesize CDK (dry-run)
         working-directory: cdk
+        env:
+          AWS_REGION: us-east-1
+          CDK_DEFAULT_ACCOUNT: '111122223333'
+          CDK_DEFAULT_REGION: us-east-1
+          COLLECTION_ACCOUNT_IDS: '111122223333'
+          NEPTUNE_CLUSTER_RESOURCE_ID: cluster-00000000000000000000000000000000
+          HOME_ACCOUNT_ID: '111122223333'
         run: npx cdk synth --no-lookups --app "npx ts-node --prefer-ts-exts bin/khalifa.ts"
 
   test:
@@ -275,7 +314,7 @@ jobs:
             cdk/package-lock.json
 
       - name: Install all workspace deps
-        run: npm ci --workspaces
+        run: npm ci --workspaces --include-workspace-root
 
       - name: Build Integrations (required by risk-engine tests)
         working-directory: packages/integrations

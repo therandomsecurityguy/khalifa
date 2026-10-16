@@ -9,3 +9,11 @@ export async function getSecret(
   const response = await smClient.send(command);
   return JSON.parse(response.SecretString || '{}');
 }
+
+/** Reads a JSON secret as a string map (for non-credential secrets). */
+export async function getSecretRecord(secretId: string): Promise<Record<string, string>> {
+  const command = new GetSecretValueCommand({ SecretId: secretId });
+  const response = await smClient.send(command);
+  const parsed = JSON.parse(response.SecretString || '{}');
+  return parsed && typeof parsed === 'object' ? parsed : {};
+}

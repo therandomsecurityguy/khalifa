@@ -1,5 +1,5 @@
 import type { EscalationPath } from './types';
-import { ADMIN_ACTIONS, PRIVILEGE_ESCALATION_ACTIONS } from './types';
+import { PRIVILEGE_ESCALATION_ACTIONS } from './types';
 import { isActionMatched } from './policy-parser';
 
 export interface TrustEdge {
@@ -23,7 +23,6 @@ export function detectEscalationPaths(
   maxHops: number = 3
 ): EscalationPath[] {
   const paths: EscalationPath[] = [];
-  const rolesByArn = new Map(rolesWithPermissions.map((r) => [r.arn, r]));
 
   const adjacency = new Map<string, TrustEdge[]>();
   for (const edge of trustEdges) {
@@ -123,7 +122,7 @@ function deduplicatePaths(paths: EscalationPath[]): EscalationPath[] {
 export function detectLateralMovement(
   trustEdges: TrustEdge[],
   rolesWithPermissions: RoleWithPermissions[],
-  maxHops: number = 3
+  _maxHops: number = 3
 ): EscalationPath[] {
   const paths: EscalationPath[] = [];
   const crossAccountTrusts = trustEdges.filter((e) => e.isCrossAccount);

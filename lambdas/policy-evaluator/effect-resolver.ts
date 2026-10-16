@@ -1,10 +1,5 @@
-import type {
-  ParsedStatement,
-  EffectivePermission,
-  ConditionalGrant,
-  IamConditionBlock,
-} from './types';
-import { parsePolicyDocument, isActionMatched, isResourceMatched } from './policy-parser';
+import type { ParsedStatement, EffectivePermission, ConditionalGrant } from './types';
+import { parsePolicyDocument, isActionMatched } from './policy-parser';
 import { evaluateConditionBlock } from './condition-evaluator';
 import type { ConditionEvaluationContext } from './types';
 

@@ -6,6 +6,7 @@ import {
   ListAttachedRolePoliciesCommand,
 } from '@aws-sdk/client-iam';
 import type { GraphNode, GraphEdge } from '../../shared/types';
+import { collectPaginated } from '../../shared/pagination';
 import type { TagMap } from './tags';
 import { extractCommonProperties } from './tags';
 
@@ -28,23 +29,26 @@ function isCrossAccountPrincipal(principal: unknown): string | null {
   return null;
 }
 
-function extractTrustAccountIds(trustPolicy: string | undefined): string[] {
+function parsePolicyDocument(policyDocument: string): Record<string, unknown> {
+  const document = policyDocument.trim().startsWith('{')
+    ? policyDocument
+    : decodeURIComponent(policyDocument);
+  return JSON.parse(document) as Record<string, unknown>;
+}
+
+export function extractTrustAccountIds(trustPolicy: string | undefined): string[] {
   if (!trustPolicy) return [];
-  try {
-    const parsed = JSON.parse(trustPolicy);
-    const statements = Array.isArray(parsed.Statement) ? parsed.Statement : [parsed.Statement];
-    const accountIds = new Set<string>();
-    for (const stmt of statements || []) {
-      if (!stmt || stmt.Effect !== 'Allow') continue;
-      const principal = stmt.Principal;
-      if (!principal) continue;
-      const id = isCrossAccountPrincipal(principal);
-      if (id) accountIds.add(id);
-    }
-    return Array.from(accountIds);
-  } catch {
-    return [];
+  const parsed = parsePolicyDocument(trustPolicy);
+  const statements = Array.isArray(parsed.Statement) ? parsed.Statement : [parsed.Statement];
+  const accountIds = new Set<string>();
+  for (const statement of statements || []) {
+    if (!statement || typeof statement !== 'object') continue;
+    const item = statement as Record<string, unknown>;
+    if (item.Effect !== 'Allow' || !item.Principal) continue;
+    const id = isCrossAccountPrincipal(item.Principal);
+    if (id) accountIds.add(id);
   }
+  return [...accountIds];
 }
 
 export async function collectCrossAccountTrust(
@@ -56,13 +60,14 @@ export async function collectCrossAccountTrust(
   const edges: GraphEdge[] = [];
   const seenAccounts = new Set<string>();
 
-  const rolesResponse = await client.send(new ListRolesCommand({ MaxItems: 1000 }));
-
-  for (const role of rolesResponse.Roles || []) {
+  const roles = await collectPaginated(
+    (marker) => client.send(new ListRolesCommand({ MaxItems: 1000, Marker: marker })),
+    (page) => page.Roles,
+    (page) => (page.IsTruncated ? page.Marker : undefined)
+  );
+  for (const role of roles) {
     if (!role.RoleName || !role.Arn) continue;
     const trustAccountIds = extractTrustAccountIds(role.AssumeRolePolicyDocument);
-
-    const isAdminRole = await checkIsAdminRole(client, role.RoleName);
 
     for (const trustedAccount of trustAccountIds) {
       if (seenAccounts.has(trustedAccount)) continue;
@@ -76,12 +81,17 @@ export async function collectCrossAccountTrust(
           id: trustedAccount,
           arn: externalArn,
           account_id: trustedAccount,
+          external_account_id: trustedAccount,
           name: `Account ${trustedAccount}`,
         },
       });
     }
 
     if (trustAccountIds.length > 0) {
+      // Only roles with a cross-account trust get the (expensive) admin check;
+      // it reads attached and inline policies and is only reported for roles
+      // that carry a TRUSTS edge.
+      const isAdminRole = await checkIsAdminRole(client, role.RoleName);
       const tags = tagsByArn.get(role.Arn);
       const tagProps = extractCommonProperties(tags);
 
@@ -111,30 +121,41 @@ export async function collectCrossAccountTrust(
 }
 
 async function checkIsAdminRole(client: IAMClient, roleName: string): Promise<boolean> {
-  try {
-    const policies = await client.send(new ListAttachedRolePoliciesCommand({ RoleName: roleName }));
+  const attachedPolicies = await collectPaginated(
+    (marker) =>
+      client.send(new ListAttachedRolePoliciesCommand({ RoleName: roleName, Marker: marker })),
+    (page) => page.AttachedPolicies,
+    (page) => (page.IsTruncated ? page.Marker : undefined)
+  );
+  for (const policy of attachedPolicies) {
+    if (!policy.PolicyArn) continue;
+    if (policy.PolicyArn.includes('AdministratorAccess')) return true;
+    if (policy.PolicyName?.toLowerCase().includes('admin')) return true;
+  }
 
-    for (const policy of policies.AttachedPolicies || []) {
-      if (!policy.PolicyArn) continue;
-      if (policy.PolicyArn.includes('AdministratorAccess')) return true;
-      if (policy.PolicyName?.toLowerCase().includes('admin')) return true;
+  const inlinePolicies = await collectPaginated(
+    (marker) => client.send(new ListRolePoliciesCommand({ RoleName: roleName, Marker: marker })),
+    (page) => page.PolicyNames,
+    (page) => (page.IsTruncated ? page.Marker : undefined)
+  );
+  for (const name of inlinePolicies) {
+    const policy = await client.send(
+      new GetRolePolicyCommand({ RoleName: roleName, PolicyName: name })
+    );
+    if (policy.PolicyDocument && grantsAllActions(parsePolicyDocument(policy.PolicyDocument))) {
+      return true;
     }
-
-    const inlinePolicies = await client.send(new ListRolePoliciesCommand({ RoleName: roleName }));
-    for (const name of inlinePolicies.PolicyNames || []) {
-      try {
-        const policy = await client.send(
-          new GetRolePolicyCommand({ RoleName: roleName, PolicyName: name })
-        );
-        if (
-          policy.PolicyDocument?.includes('"Action": "*"') ||
-          policy.PolicyDocument?.includes('"Action":"*"')
-        ) {
-          return true;
-        }
-      } catch (e) {}
-    }
-  } catch (e) {}
+  }
 
   return false;
+}
+
+function grantsAllActions(policy: Record<string, unknown>): boolean {
+  const statements = Array.isArray(policy.Statement) ? policy.Statement : [policy.Statement];
+  return statements.some((statement) => {
+    if (!statement || typeof statement !== 'object') return false;
+    const item = statement as Record<string, unknown>;
+    const actions = Array.isArray(item.Action) ? item.Action : [item.Action];
+    return item.Effect === 'Allow' && actions.includes('*');
+  });
 }

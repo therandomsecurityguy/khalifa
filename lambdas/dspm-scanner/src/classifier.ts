@@ -6,6 +6,9 @@ export type PiiType =
   | 'jwt'
   | 'credit_card'
   | 'high_entropy_secret'
+  | 'github_token'
+  | 'slack_token'
+  | 'stripe_key'
   | 'email'
   | 'phone'
   | 'ssn';
@@ -13,7 +16,6 @@ export type PiiType =
 export interface ClassificationMatch {
   piiType: PiiType;
   count: number;
-  sample: string;
   confidence: number;
 }
 
@@ -22,6 +24,7 @@ export interface ClassificationResult {
   secretCount: number;
   matches: ClassificationMatch[];
   sampleSize: number;
+  skippedKms: number;
   confidence: number;
   scannedAt: string;
   classifier: string;
@@ -42,7 +45,10 @@ export function promoteClassification(result: ClassificationResult): {
     result.piiTypes.includes('private_key') ||
     result.piiTypes.includes('aws_secret_key') ||
     result.piiTypes.includes('gcp_service_account') ||
-    result.piiTypes.includes('high_entropy_secret');
+    result.piiTypes.includes('high_entropy_secret') ||
+    result.piiTypes.includes('github_token') ||
+    result.piiTypes.includes('slack_token') ||
+    result.piiTypes.includes('stripe_key');
   const hasRestricted =
     result.piiTypes.includes('aws_access_key') ||
     result.piiTypes.includes('jwt') ||

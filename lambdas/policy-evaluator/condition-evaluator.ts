@@ -25,9 +25,10 @@ export function evaluateCondition(
     case 'StringNotLike':
       return values.every((v) => !wildcardMatch(v, cv));
     case 'IpAddress':
-    case 'NotIpAddress':
+    case 'NotIpAddress': {
       const ipResult = values.some((v) => isIpInCidr(cv, v));
       return operator === 'IpAddress' ? ipResult : !ipResult;
+    }
     case 'ArnEquals':
     case 'ArnLike':
       return values.some((v) => arnMatch(v, cv));
@@ -60,9 +61,10 @@ export function evaluateCondition(
       return values.some((v) => new Date(cv).getTime() < new Date(v).getTime());
     case 'DateGreaterThan':
       return values.some((v) => new Date(cv).getTime() > new Date(v).getTime());
-    case 'Null':
+    case 'Null': {
       const isNull = cv === '';
       return values[0]?.toLowerCase() === 'true' ? isNull : !isNull;
+    }
     default:
       return 'conditional';
   }

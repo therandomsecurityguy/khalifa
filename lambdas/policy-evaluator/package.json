@@ -1,10 +1,12 @@
 {
   "name": "policy-evaluator",
   "version": "1.0.0",
+  "private": true,
   "description": "CIEM policy evaluation engine for effective permissions, escalation paths, and rightsizing",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild index.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/index.js --sourcemap --sources-content=false",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"**/*.ts\"",
     "format:check": "prettier --check \"**/*.ts\"",
@@ -14,7 +16,8 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.400.0",
     "@aws-sdk/util-dynamodb": "^3.996.2",
-    "gremlin": "^3.7.0"
+    "@khalifa/risk-engine": "*",
+    "gremlin": "^3.8.2"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.131",
