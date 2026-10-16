@@ -44,7 +44,7 @@ jobs:
             cdk/package-lock.json
 
       - name: Install all workspace deps
-        run: npm ci --workspaces
+        run: npm ci --workspaces --include-workspace-root
 
       - name: Check formatting (API service)
         working-directory: api-service
@@ -131,7 +131,7 @@ jobs:
             cdk/package-lock.json
 
       - name: Install all workspace deps
-        run: npm ci --workspaces
+        run: npm ci --workspaces --include-workspace-root
 
       - name: Build Integrations (required by risk-engine & api-service)
         working-directory: packages/integrations
@@ -217,7 +217,7 @@ jobs:
             cdk/package-lock.json
 
       - name: Install all workspace deps
-        run: npm ci --workspaces
+        run: npm ci --workspaces --include-workspace-root
 
       - name: Build Integrations (must build first — risk-engine imports it)
         working-directory: packages/integrations
@@ -314,7 +314,7 @@ jobs:
             cdk/package-lock.json
 
       - name: Install all workspace deps
-        run: npm ci --workspaces
+        run: npm ci --workspaces --include-workspace-root
 
       - name: Build Integrations (required by risk-engine tests)
         working-directory: packages/integrations
