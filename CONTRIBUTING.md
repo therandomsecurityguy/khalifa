@@ -5,18 +5,20 @@ Khalifa is an open-source AWS security graph and risk engine. Contributions are 
 ## Development Setup
 
 ```bash
-npm ci --workspaces
-npm test
+npm ci
+npm run ci:quality   # format, lint, typecheck, tests, build, packaging smoke
 ```
 
 ## Project Structure
 
-- `lambdas/collector/` — Agentless resource ingestion (EC2, S3, IAM, RDS, etc.)
-- `packages/risk-engine/` — Gremlin-based risk rules + compliance evaluators
+- `lambdas/` — collector, incremental collector, graph writer, policy evaluator, CloudTrail analyzer, DSPM scanner, least-privilege sweep, runtime dispatcher
+- `packages/risk-engine/` — Gremlin-based risk rules, CIEM issue lifecycle, compliance evaluators, CIS reconciliation
 - `api-service/` — REST API (Express on EKS or Lambda)
 - `ui/` — Next.js dashboard
 - `cdk/` — Lambda ingestion infrastructure
-- `deploy/` — Helm chart and Terraform wrapper for existing EKS environments
+- `deploy/` — Helm chart, Terraform modules, and the `examples/complete` root module for existing EKS environments
+- `trust-center/` + `scripts/trust-center-sync/` — publishable CIS posture sync and the static trust-center site
+- `scripts/` — packaging, smoke, and deployment validation scripts
 
 ## Adding a New Risk Rule
 
@@ -79,8 +81,7 @@ npm test
 
 ## Pull Request Checklist
 
-- [ ] `npm test` passes
-- [ ] `npm run lint` passes
+- [ ] `npm run ci:quality` passes
 - [ ] New rules/controls have tests
 - [ ] CHANGELOG.md updated under "Unreleased"
-- [ ] README.md updated if behavior changes
+- [ ] README.md (and OPERATIONAL.md/ARCHITECTURE.md where affected) updated if behavior changes

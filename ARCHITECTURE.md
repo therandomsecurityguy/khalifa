@@ -35,8 +35,8 @@
                            ▼                            ▼
               ┌──────────────────────────────────────────────────────┐
               │  Risk Engine Lambda    │  │  Compliance Evaluators   │
-              │  (every 1h)            │  │  (CIS/SOC2/ISO27001)     │
-              │  - 24 Gremlin rules    │  │  - per-control evaluators│
+              │  (every 1h)            │  │  (CIS + baseline)        │
+              │  - 30 Gremlin rules    │  │  - per-control evaluators│
               │  - Risk scoring        │  │  - DynamoDB persistence  │
               └────────────┬───────────┘  └─────────────┬────────────┘
                            ▼                            ▼
@@ -96,8 +96,8 @@ flowchart LR
         direction TB
         PE["Policy Evaluator (6h):<br/>effective permissions,<br/>escalation paths"]
         LPS["Least-Privilege Sweep (daily):<br/>rightsizing vs CloudTrail usage"]
-        RE["Risk Engine (hourly):<br/>24 rules, attack paths, scoring"]
-        COMP["Compliance:<br/>CIS / SOC 2 / ISO 27001"]
+        RE["Risk Engine (hourly):<br/>30 rules, attack paths, scoring"]
+        COMP["Compliance:<br/>CIS v3.0.0 + Khalifa baseline<br/>(Security Hub reconciliation)"]
     end
 
     subgraph STORE["State"]
@@ -162,6 +162,32 @@ A scheduled Lambda (`lambdas/cloudtrail-analyzer`) runs daily (02:00 UTC) and ex
 ## Least-Privilege Sweep
 
 A scheduled Lambda (`lambdas/least-privilege-sweep`) runs daily (03:00 UTC, after the CloudTrail analyzer) and iterates every `IamUser` and `IamRole` across all accounts. For each principal it joins the `EffectivePermission` vertex (Neptune) with actual usage from `AccessAnalyzerCache` (DynamoDB), computes a rightsizing recommendation via the shared `rightsizer` module, and persists the result to the `LeastPrivilegeFindings` table. Service-linked roles (`/aws-service-role/`) and principals with only AWS-managed policies are skipped.
+
+## Compliance reconciliation and the trust center
+
+The compliance job evaluates the CIS AWS Foundations v3.0.0 and Khalifa
+baseline controls against the graph, then reconciles CIS with Security Hub:
+it assumes the audit account's read-only reader role (granted through
+`khalifa-data.securityhub_reader_role_arn`) and compares each requirement per
+account (and Region for regional controls) with Security Hub's CIS v3.0.0
+findings. The result is stored as a `CIS_RECONCILIATION` record in the reports
+table: per-requirement agreement streaks and the disagreeing accounts. None of
+that detail ever reaches the public page.
+
+A requirement becomes publishable only after `reconciliation.minAgreementDays`
+consecutive days of agreement and only when listed in
+`reconciliation.publishAllowlist` (empty by default, so nothing is).
+`GET /compliance/reconciliation/publishable` exposes exactly those
+requirements as `{requirement, title, section, status}`, gated to the
+Cloudflare Access service token identified by
+`reconciliation.trustCenterSyncClientId`; staff roles, Admin included, cannot
+call it.
+
+The nightly `Trust center sync` workflow (`scripts/trust-center-sync`) reads
+that endpoint, fails closed on `STALE`/`MISSING` records or transport errors,
+and builds the static site in `trust-center/` (plain HTML/CSS, statuses only),
+which is deployed to Cloudflare Pages. See
+[OPERATIONAL.md](OPERATIONAL.md) section J.
 
 ## Graph Schema
 

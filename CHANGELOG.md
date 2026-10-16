@@ -2,6 +2,23 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Upstream parity (2026-10)
+
+### Added
+
+- **In-repo trust center**: `scripts/trust-center-sync` reads the sanitized publishable endpoint through the Cloudflare Access service token and writes `trust.config.json` + `build-meta.json` — statuses only, failing closed on `STALE`/`MISSING` records or transport errors. `trust-center/` renders those plus a hand-edited `site.config.json` into a dependency-free static site, deployed nightly to Cloudflare Pages by the `Trust center sync` workflow. No external fork; a tripwire rejects ARNs, account IDs, and access-key patterns before anything is published.
+- **Batched auto releases**: the auto-tag job cuts a release only after `KHALIFA_RELEASE_MIN_COMMITS` commits (repository variable, default 10) have landed since the previous tag — merge commits bump minor, everything else patch — and dispatches the Release workflow itself when the optional `GH_KHALIFA` PAT is absent.
+- **Complete EKS example**: `deploy/terraform/examples/complete` wires `khalifa-registry` → `khalifa-data` → `khalifa-eks` against an existing cluster, creates the External Secrets IRSA role for the runtime secret, and supports a two-phase apply (infrastructure and images first, then the release).
+- **Terraform test coverage**: the `khalifa-eks` module and the complete example now have `terraform test` suites (release settings and values pass-through; chart-value composition, IRSA annotations, ExternalSecret mapping, ESO role scope), `khalifa-data` pins the `runtime_secret_name` output, and the deployment validation script runs them.
+- **Upstream parity port**: the deployed fork's lambdas (runtime dispatcher, least-privilege sweep, DSPM scanner, IAM posture, GuardDuty findings, policy statements), CIEM/policy evaluator, SigV4 Neptune client, issue lifecycle and CIS reconciliation engine, API/UI surfaces, Helm chart, and Terraform modules were ported into this repository, with deployment identifiers scrubbed and configurable.
+
+### Changed
+
+- **Releases no longer require AWS configuration**: digest-only image publishing activates only when `KHALIFA_AWS_ROLE_ARN` and the ECR repository variables are set; without them a release ships Lambda archives, the Helm chart, the `khalifa-eks` bundle, the SBOM, and checksums, recording `published: false` in `release-manifest.json`.
+- **`khalifa-registry` takes `github_repository`** (plus an optional `github_oidc_subject_prefix`) instead of hardcoding the publishing repository, and the S3 access-log destination is implemented with inline module resources rather than a private external module.
+- **Helm schema allows `mountIn: dspmScanner`**, matching the scanner template, so the DSPM scanner can receive the graph-writer token through External Secrets.
+- **Compliance documentation corrected**: the evaluated frameworks are CIS AWS Foundations v3.0.0 (47 controls) and the Khalifa baseline (41 controls), 55 automated; the README no longer claims SOC 2 or ISO 27001 evaluations.
+
 ## [Unreleased] - Phase 0
 
 ### Added
