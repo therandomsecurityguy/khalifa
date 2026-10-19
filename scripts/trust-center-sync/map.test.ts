@@ -47,6 +47,8 @@ describe('buildTrustFragment', () => {
       ['CIS_AWS_FOUNDATIONS', 'in-progress'],
       ['SOC2', 'planned'],
       ['ISO27001', 'planned'],
+      ['PCI_DSS', 'planned'],
+      ['NIST_800_53', 'planned'],
     ]);
     expect(fragment.controls.every((domain) => domain.framework === 'CIS_AWS_FOUNDATIONS')).toBe(
       true
@@ -78,6 +80,8 @@ describe('buildTrustFragment', () => {
       'in-progress',
       'in-progress',
       'in-progress',
+      'planned',
+      'planned',
     ]);
     const soc2 = fragment.controls.find(
       (domain) => domain.framework === 'SOC2' && domain.domain === 'Availability'

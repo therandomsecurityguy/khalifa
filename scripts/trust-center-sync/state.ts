@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CIS_NAME, ISO27001_NAME, SOC2_NAME, assertSanitizedValue } from './map';
+import { FRAMEWORK_NAMES, assertSanitizedValue } from './map';
 import type {
   ChangelogEntry,
   PostureState,
@@ -11,11 +11,7 @@ import type {
 export const CHANGELOG_LIMIT = 20;
 const FETCH_TIMEOUT_MS = 10_000;
 
-const NAMES: Record<string, string> = {
-  CIS_AWS_FOUNDATIONS: CIS_NAME,
-  SOC2: SOC2_NAME,
-  ISO27001: ISO27001_NAME,
-};
+const NAMES: Record<string, string> = FRAMEWORK_NAMES;
 
 const ANSWER: Record<'PASS' | 'FAIL', TrustControlStatus> = {
   PASS: 'implemented',

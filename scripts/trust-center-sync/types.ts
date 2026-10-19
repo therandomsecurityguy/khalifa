@@ -7,7 +7,21 @@ export interface PublishableRequirement {
   status: PublishableStatus;
 }
 
-export type PublishedFramework = 'CIS_AWS_FOUNDATIONS' | 'SOC2' | 'ISO27001';
+export type PublishedFramework =
+  'CIS_AWS_FOUNDATIONS' | 'SOC2' | 'ISO27001' | 'PCI_DSS' | 'NIST_800_53';
+
+/** Canonical first, then the mapped frameworks in display order. */
+export const PUBLISHED_FRAMEWORKS: PublishedFramework[] = [
+  'CIS_AWS_FOUNDATIONS',
+  'SOC2',
+  'ISO27001',
+  'PCI_DSS',
+  'NIST_800_53',
+];
+
+export const MAPPED_PUBLISHED_FRAMEWORKS: Array<
+  Exclude<PublishedFramework, 'CIS_AWS_FOUNDATIONS'>
+> = ['SOC2', 'ISO27001', 'PCI_DSS', 'NIST_800_53'];
 
 export interface PublishableMappedRequirement extends PublishableRequirement {
   framework: Exclude<PublishedFramework, 'CIS_AWS_FOUNDATIONS'>;

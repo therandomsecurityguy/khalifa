@@ -133,7 +133,7 @@ describe('control details: mapped frameworks', () => {
     const mapped = await details('ISO27001', 'A.8.24');
     expect(mapped.statusCode).toBe(404);
 
-    const unknown = await details('PCI_DSS', '1.1');
+    const unknown = await details('HIPAA', '1.1');
     expect(unknown.statusCode).toBe(400);
     expect(unknown.body.code).toBe('INVALID_FRAMEWORK');
   });

@@ -36,6 +36,32 @@ describe('FRAMEWORK_CITATIONS', () => {
       'ISO27001:A.8.20',
       'ISO27001:A.8.21',
       'ISO27001:A.8.24',
+      'PCI_DSS:1.3',
+      'PCI_DSS:1.4',
+      'PCI_DSS:2.2',
+      'PCI_DSS:3.5',
+      'PCI_DSS:4.2',
+      'PCI_DSS:6.3',
+      'PCI_DSS:7.2',
+      'PCI_DSS:8.3',
+      'PCI_DSS:8.6',
+      'PCI_DSS:10.2',
+      'PCI_DSS:10.4',
+      'NIST_800_53:AC-2',
+      'NIST_800_53:AC-6',
+      'NIST_800_53:AU-2',
+      'NIST_800_53:AU-6',
+      'NIST_800_53:CM-6',
+      'NIST_800_53:CP-9',
+      'NIST_800_53:IA-2',
+      'NIST_800_53:IA-5',
+      'NIST_800_53:RA-5',
+      'NIST_800_53:SC-7',
+      'NIST_800_53:SC-8',
+      'NIST_800_53:SC-12',
+      'NIST_800_53:SC-13',
+      'NIST_800_53:SI-2',
+      'NIST_800_53:SI-4',
     ]);
   });
 
@@ -66,6 +92,8 @@ describe('FRAMEWORK_CITATIONS', () => {
   it('classifies pluggable frameworks correctly', () => {
     expect(isMappedFramework('SOC2')).toBe(true);
     expect(isMappedFramework('ISO27001')).toBe(true);
+    expect(isMappedFramework('PCI_DSS')).toBe(true);
+    expect(isMappedFramework('NIST_800_53')).toBe(true);
     expect(isMappedFramework('CIS_AWS_FOUNDATIONS')).toBe(false);
     expect(isMappedFramework('KHALIFA_BASELINE')).toBe(false);
   });
@@ -73,9 +101,13 @@ describe('FRAMEWORK_CITATIONS', () => {
   it('filters by framework and resolves the reverse index', () => {
     expect(citationsByFramework('SOC2')).toHaveLength(9);
     expect(citationsByFramework('ISO27001')).toHaveLength(17);
+    expect(citationsByFramework('PCI_DSS')).toHaveLength(11);
+    expect(citationsByFramework('NIST_800_53')).toHaveLength(15);
     const citing = citationsForControl('1.5').map((c) => `${c.framework}:${c.requirement}`);
     expect(citing).toContain('SOC2:CC6.1');
     expect(citing).toContain('ISO27001:A.5.17');
+    expect(citing).toContain('PCI_DSS:8.3');
+    expect(citing).toContain('NIST_800_53:IA-2');
   });
 });
 

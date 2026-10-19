@@ -1,3 +1,4 @@
+import { MAPPED_PUBLISHED_FRAMEWORKS, PUBLISHED_FRAMEWORKS } from './types';
 import type {
   PublishableMappedRequirement,
   PublishableRequirement,
@@ -10,6 +11,8 @@ import type {
 export const CIS_NAME = 'CIS AWS Foundations Benchmark v3.0.0';
 export const SOC2_NAME = 'SOC 2 Trust Services Criteria';
 export const ISO27001_NAME = 'ISO/IEC 27001:2022 Annex A';
+export const PCI_DSS_NAME = 'PCI DSS v4.0';
+export const NIST_800_53_NAME = 'NIST SP 800-53 Rev. 5';
 
 const MAPPED_FRAMEWORK_META: Record<
   Exclude<PublishedFramework, 'CIS_AWS_FOUNDATIONS'>,
@@ -25,7 +28,23 @@ const MAPPED_FRAMEWORK_META: Record<
     description:
       'Annex A requirements mapped to the controls Khalifa evaluates. Continuous posture, not a certification.',
   },
+  PCI_DSS: {
+    name: PCI_DSS_NAME,
+    description:
+      'PCI DSS v4.0 requirements mapped to the controls Khalifa evaluates. Continuous posture, not a certification.',
+  },
+  NIST_800_53: {
+    name: NIST_800_53_NAME,
+    description:
+      'NIST SP 800-53 Rev. 5 controls mapped to the controls Khalifa evaluates. Continuous posture, not a certification.',
+  },
 };
+
+/** Display names keyed by framework id, for changelog and questionnaire text. */
+export const FRAMEWORK_NAMES: Record<PublishedFramework, string> = {
+  CIS_AWS_FOUNDATIONS: CIS_NAME,
+  ...Object.fromEntries(Object.entries(MAPPED_FRAMEWORK_META).map(([id, meta]) => [id, meta.name])),
+} as Record<PublishedFramework, string>;
 
 const CONTROL_STATUS: Record<PublishableRequirement['status'], TrustControlStatus> = {
   PASS: 'implemented',
@@ -72,20 +91,17 @@ export function buildTrustFragment(response: PublishableResponse): TrustConfigFr
         'Continuous posture from automated graph evaluation against the AWS configuration. Not a certification.',
       lastVerified: response.generatedAt ?? undefined,
     }),
-    frameworkEntry('SOC2', SOC2_NAME, countFramework(mapped, 'SOC2'), {
-      description: MAPPED_FRAMEWORK_META.SOC2.description,
-      lastVerified:
-        countFramework(mapped, 'SOC2') > 0 ? (response.generatedAt ?? undefined) : undefined,
-    }),
-    frameworkEntry('ISO27001', ISO27001_NAME, countFramework(mapped, 'ISO27001'), {
-      description: MAPPED_FRAMEWORK_META.ISO27001.description,
-      lastVerified:
-        countFramework(mapped, 'ISO27001') > 0 ? (response.generatedAt ?? undefined) : undefined,
+    ...MAPPED_PUBLISHED_FRAMEWORKS.map((framework) => {
+      const count = countFramework(mapped, framework);
+      return frameworkEntry(framework, MAPPED_FRAMEWORK_META[framework].name, count, {
+        description: MAPPED_FRAMEWORK_META[framework].description,
+        lastVerified: count > 0 ? (response.generatedAt ?? undefined) : undefined,
+      });
     }),
   ];
 
   const controls: TrustConfigFragment['controls'] = [];
-  for (const framework of ['CIS_AWS_FOUNDATIONS', 'SOC2', 'ISO27001'] as PublishedFramework[]) {
+  for (const framework of PUBLISHED_FRAMEWORKS) {
     const domains = new Map<string, TrustConfigFragment['controls'][number]['items']>();
     for (const requirement of all
       .filter((entry) => entry.framework === framework)

@@ -228,7 +228,7 @@ What it sends: only the requirements that agreed with Security Hub for
 `reconciliation.publishAllowlist`, as `{requirement, title, section, status}`.
 No accounts, Regions, counts, evidence, or disagreements.
 
-Mapped frameworks (SOC 2 / ISO 27001) publish through the same endpoint: a
+Mapped frameworks (SOC 2, ISO 27001, PCI DSS, NIST SP 800-53) publish through the same endpoint: a
 requirement appears only while every mapped control is reconciliation-
 publishable (CIS) or assessed PASS/FAIL in the latest Khalifa baseline report
 (`REPORTS_TABLE`). If that report is unreadable, the endpoint serves CIS only —

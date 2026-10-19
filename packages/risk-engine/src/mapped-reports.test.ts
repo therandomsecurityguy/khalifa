@@ -147,6 +147,8 @@ describe('ComplianceEngine mapped frameworks', () => {
       'KHALIFA_BASELINE',
       'SOC2',
       'ISO27001',
+      'PCI_DSS',
+      'NIST_800_53',
     ]);
     const soc2 = await store.getLatestReport('SOC2');
     expect(soc2?.controls.length).toBe(9);
@@ -180,6 +182,11 @@ describe('ComplianceEngine mapped frameworks', () => {
     expect(soc2.summary.totalControls).toBe(9);
     const iso = await engine.getFrameworkSummary('ISO27001');
     expect(iso.totalControls).toBe(17);
+    const pci = await engine.getFrameworkSummary('PCI_DSS');
+    expect(pci.totalControls).toBe(11);
+    expect(pci.version).toBe('4.0');
+    const nist = await engine.getFrameworkSummary('NIST_800_53');
+    expect(nist.totalControls).toBe(15);
   });
 
   it('aggregates evidence for a mapped requirement from the canonical reports', async () => {

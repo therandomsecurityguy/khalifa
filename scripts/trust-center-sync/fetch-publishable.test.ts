@@ -209,7 +209,7 @@ describe('parsePublishableResponse', () => {
         status: 'OK',
         requirements: [],
         mappedFrameworks: [
-          { framework: 'PCI_DSS', requirement: 'x', title: 't', section: 's', status: 'PASS' },
+          { framework: 'HIPAA', requirement: 'x', title: 't', section: 's', status: 'PASS' },
         ],
       })
     ).toThrow('unknown framework');

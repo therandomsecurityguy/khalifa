@@ -241,10 +241,12 @@ requirements that agreed for `reconciliation.minAgreementDays` and appear in
 `reconciliation.publishAllowlist`; runbooks in
 [OPERATIONAL.md](OPERATIONAL.md), section J.
 
-SOC 2 and ISO 27001 are integrated by **mapping**: 26 curated requirements cite
-the canonical controls above (`packages/risk-engine/src/framework-citations.ts`),
-so one evaluation pass and one evidence store serve every framework — e.g.
-SOC 2 CC9.1 cites KH-2.5, KH-2.8 and KH-2.10. A mapped requirement passes only
+SOC 2, ISO 27001, PCI DSS v4.0, and NIST SP 800-53 Rev. 5 are integrated by
+**mapping**: 52 curated requirements (SOC 2 CC6/CC7/CC9, ISO Annex A, PCI DSS
+v4.0, and selected NIST SP 800-53 Rev. 5 controls) cite the canonical controls
+above (`packages/risk-engine/src/framework-citations.ts`), so one evaluation
+pass and one evidence store serve every framework — e.g. SOC 2 CC9.1 cites
+KH-2.5, KH-2.8 and KH-2.10. A mapped requirement passes only
 while every mapped control passes; manual or unevaluated controls keep it from
 passing. The API serves them like any other framework, control pages link both
 ways ("Evidenced by" / "Cited by framework requirements"), and nothing is ever

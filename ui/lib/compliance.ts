@@ -18,6 +18,16 @@ export const FRAMEWORKS: Record<string, { label: string; description: string }> 
     description:
       'ISO/IEC 27001:2022 Annex A requirements mapped to the controls Khalifa evaluates; nothing here is certified',
   },
+  PCI_DSS: {
+    label: 'PCI DSS',
+    description:
+      'PCI DSS v4.0 requirements mapped to the controls Khalifa evaluates; nothing here is certified',
+  },
+  NIST_800_53: {
+    label: 'NIST 800-53',
+    description:
+      'NIST SP 800-53 Rev. 5 controls mapped to the controls Khalifa evaluates; nothing here is certified',
+  },
 };
 
 export function frameworkLabel(id: string): string {

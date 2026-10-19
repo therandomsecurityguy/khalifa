@@ -68,7 +68,7 @@ describe('runSync', () => {
 
       const config = JSON.parse(readFileSync(join(outDir, 'trust.config.json'), 'utf8'));
       expect(config.frameworks[0].status).toBe('in-progress');
-      expect(config.frameworks).toHaveLength(3);
+      expect(config.frameworks).toHaveLength(5);
       expect(config.controls.map((domain: { domain: string }) => domain.domain)).toEqual([
         '1. Identity',
         '2. Logging',
