@@ -22,6 +22,7 @@ npm run trust-center:sync
 | `CF_ACCESS_CLIENT_ID`     | yes      | Access service token client id; must equal the API's `reconciliation.trustCenterSyncClientId` |
 | `CF_ACCESS_CLIENT_SECRET` | yes      | Access service token secret                                                                   |
 | `TRUST_CENTER_OUT_DIR`    | no       | Output directory (default `trust-center-config`)                                              |
+| `TRUST_CENTER_PUBLIC_URL` | no       | Deployed site URL; reads the previous `posture-state.json` to compute the posture changelog   |
 
 Outputs, written atomically only when the record is `OK`:
 
@@ -34,6 +35,14 @@ Outputs, written atomically only when the record is `OK`:
   (`recordGeneratedAt`, `recordAgeHours`), the API's published staleness window
   (`maxAgeHours`, absent on older endpoints — a warning is logged and the page
   omits the window), and counts for the pipeline log
+- `questionnaire.json` — machine-readable answer sheet built from publishable
+  requirements only (`implemented`/`partial`) for security questionnaires
+- `posture-state.json` — the published posture map plus the rolling changelog
+  (newest first, capped at 20). The sync diffs it between publishes and writes
+  the changelog into `trust.config.json`; it reads the previous state from the
+  output directory first, then from `TRUST_CENTER_PUBLIC_URL/posture-state.json`
+  (needed in CI, where the output directory is fresh). Unreadable state simply
+  means no changelog
 
 The endpoint also publishes `maxAgeHours`, the window after which a record is
 `STALE`; the site's continuous-monitoring statement derives from it, so the

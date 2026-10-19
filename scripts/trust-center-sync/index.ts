@@ -1,7 +1,9 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fetchPublishable } from './fetch-publishable';
-import { CIS_NAME, buildTrustFragment } from './map';
+import { CIS_NAME, assertSanitized, buildTrustFragment } from './map';
+import { buildQuestionnaire } from './questionnaire';
+import { currentPosture, diffPosture, loadPreviousState, nextState } from './state';
 import type { BuildMeta, TrustConfigFragment } from './types';
 
 export class FailClosedError extends Error {}
@@ -11,6 +13,8 @@ export interface SyncEnvironment {
   CF_ACCESS_CLIENT_ID?: string;
   CF_ACCESS_CLIENT_SECRET?: string;
   TRUST_CENTER_OUT_DIR?: string;
+  /** Optional deployed site URL; reads the previous posture-state.json for the changelog. */
+  TRUST_CENTER_PUBLIC_URL?: string;
 }
 
 export interface SyncDependencies {
@@ -24,6 +28,8 @@ export interface SyncResult {
   frameworkStatus: TrustConfigFragment['frameworks'][number]['status'];
   requirementCount: number;
   domains: number;
+  /** Posture transitions recorded since the previous publish. */
+  changes: number;
 }
 
 const DEFAULT_OUT_DIR = 'trust-center-config';
@@ -58,19 +64,40 @@ export async function runSync(
     );
   }
 
+  const builtAt = now();
+  const previous = await loadPreviousState({
+    outDir,
+    publicUrl: environment.TRUST_CENTER_PUBLIC_URL,
+    fetchImpl: dependencies.fetchImpl,
+    log,
+  });
+  const posture = currentPosture(response);
+  const changes = diffPosture(previous?.posture ?? null, posture, builtAt.toISOString());
+  const state = nextState(previous, posture, changes, builtAt);
+
   const fragment = buildTrustFragment(response);
-  const meta = buildMeta(response, apiUrl, now(), log);
+  if (state.changelog.length > 0) fragment.changelog = state.changelog;
+  assertSanitized(fragment);
+
+  const meta = buildMeta(response, apiUrl, builtAt, log);
+  const questionnaire = buildQuestionnaire(response, builtAt);
 
   mkdirSync(outDir, { recursive: true });
   writeAtomic(join(outDir, 'trust.config.json'), JSON.stringify(fragment, null, 2));
   writeAtomic(join(outDir, 'build-meta.json'), JSON.stringify(meta, null, 2));
+  writeAtomic(join(outDir, 'questionnaire.json'), JSON.stringify(questionnaire, null, 2));
+  writeAtomic(join(outDir, 'posture-state.json'), JSON.stringify(state, null, 2));
 
-  log(`wrote ${outDir}/trust.config.json from ${response.requirements.length} requirement(s)`);
+  log(
+    `wrote ${outDir}/trust.config.json from ${response.requirements.length} requirement(s)` +
+      (changes.length > 0 ? `; ${changes.length} posture change(s) recorded` : '')
+  );
   return {
     outDir,
     frameworkStatus: fragment.frameworks[0].status,
     requirementCount: response.requirements.length,
     domains: fragment.controls.length,
+    changes: changes.length,
   };
 }
 
@@ -127,7 +154,8 @@ async function main(): Promise<void> {
   try {
     const result = await runSync(process.env, { log: (line) => console.log(line) });
     console.log(
-      `trust-center config written to ${result.outDir}: ${result.requirementCount} requirement(s) in ${result.domains} domain(s), framework ${result.frameworkStatus}`
+      `trust-center config written to ${result.outDir}: ${result.requirementCount} requirement(s) in ${result.domains} domain(s), framework ${result.frameworkStatus}` +
+        (result.changes > 0 ? `, ${result.changes} posture change(s)` : '')
     );
     process.exit(0);
   } catch (error) {

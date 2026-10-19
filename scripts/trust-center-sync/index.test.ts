@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -101,6 +101,37 @@ describe('runSync', () => {
       expect(meta.source.maxAgeHours).toBeUndefined();
       expect(meta.source.recordAgeHours).toBe(12);
       expect(logs.join(' ')).toContain('did not publish maxAgeHours');
+    });
+  });
+
+  it('records posture changes across runs and writes the answer sheet and state', async () => {
+    await withServer(okPayload, 200, async (apiUrl) => {
+      const first = await runSync(environment(apiUrl, outDir), {
+        now: () => new Date('2026-10-16T12:00:00.000Z'),
+      });
+      expect(first.changes).toBe(0);
+      expect(existsSync(join(outDir, 'questionnaire.json'))).toBe(true);
+      expect(existsSync(join(outDir, 'posture-state.json'))).toBe(true);
+
+      const changed = {
+        ...okPayload,
+        requirements: okPayload.requirements.map((requirement) =>
+          requirement.requirement === '1.5' ? { ...requirement, status: 'FAIL' } : requirement
+        ),
+      };
+      await withServer(changed, 200, async (secondApiUrl) => {
+        const second = await runSync(environment(secondApiUrl, outDir), {
+          now: () => new Date('2026-10-17T12:00:00.000Z'),
+        });
+        expect(second.changes).toBe(1);
+
+        const config = JSON.parse(readFileSync(join(outDir, 'trust.config.json'), 'utf8'));
+        expect(config.changelog[0].title).toContain('1.5 moved to partial');
+        expect(config.changelog[0].description).toBe('Previously implemented.');
+
+        const state = JSON.parse(readFileSync(join(outDir, 'posture-state.json'), 'utf8'));
+        expect(state.posture['CIS_AWS_FOUNDATIONS:1.5']).toBe('partial');
+      });
     });
   });
 

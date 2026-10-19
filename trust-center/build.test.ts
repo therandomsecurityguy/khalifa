@@ -71,7 +71,7 @@ describe('buildSite', () => {
     const outDir = join(workspace, 'dist');
     const result = buildSite({ siteConfigPath: configPath, generatedDir, outDir });
 
-    expect(result.files.sort()).toEqual(['index.html', 'styles.css']);
+    expect(result.files.sort()).toEqual(['.well-known/security.txt', 'index.html', 'styles.css']);
     const html = readFileSync(join(outDir, 'index.html'), 'utf8');
     expect(html).toContain('Example Corp');
     expect(html).toContain('CIS AWS Foundations Benchmark v3.0.0');
@@ -113,6 +113,57 @@ describe('buildSite', () => {
 
     writeFileSync(configPath, 'not json');
     expect(() => loadSiteConfig(configPath)).toThrow('not valid JSON');
+  });
+
+  it('emits RFC 9116 security.txt from the configured contact', () => {
+    const { configPath, generatedDir } = writeFixtures();
+    const outDir = join(workspace, 'dist');
+    buildSite({ siteConfigPath: configPath, generatedDir, outDir });
+    const securityTxt = readFileSync(join(outDir, '.well-known', 'security.txt'), 'utf8');
+    expect(securityTxt).toContain('Contact: mailto:security@example.com');
+    // 180 days after the build-meta timestamp.
+    expect(securityTxt).toContain('Expires: 2027-04-14T12:00:00.000Z');
+    expect(securityTxt).toContain('Preferred-Languages: en');
+    expect(securityTxt).not.toContain('Policy:');
+
+    const withPolicy = writeFixtures({
+      config: {
+        ...siteConfig,
+        securityTxt: { expiresDays: 30, policyUrl: 'https://example.com/disclosure' },
+      },
+    });
+    buildSite({
+      siteConfigPath: withPolicy.configPath,
+      generatedDir: withPolicy.generatedDir,
+      outDir: join(workspace, 'dist2'),
+    });
+    const policy = readFileSync(join(workspace, 'dist2', '.well-known', 'security.txt'), 'utf8');
+    expect(policy).toContain('Policy: https://example.com/disclosure');
+    expect(policy).toContain('Expires: 2026-11-15T12:00:00.000Z');
+  });
+
+  it('omits security.txt when no security contact is configured', () => {
+    const { configPath, generatedDir } = writeFixtures({
+      config: { company: { name: 'No Contact Corp' } },
+    });
+    const outDir = join(workspace, 'dist');
+    const result = buildSite({ siteConfigPath: configPath, generatedDir, outDir });
+    expect(result.files).not.toContain('.well-known/security.txt');
+    expect(() => readFileSync(join(outDir, '.well-known', 'security.txt'))).toThrow();
+  });
+
+  it('copies the questionnaire and posture state assets into dist', () => {
+    const { configPath, generatedDir } = writeFixtures();
+    writeFileSync(join(generatedDir, 'questionnaire.json'), '{"frameworks":[]}');
+    writeFileSync(join(generatedDir, 'posture-state.json'), '{"posture":{}}');
+    const outDir = join(workspace, 'dist');
+    const result = buildSite({ siteConfigPath: configPath, generatedDir, outDir });
+    expect(result.files).toEqual(
+      expect.arrayContaining(['questionnaire.json', 'posture-state.json'])
+    );
+    expect(readFileSync(join(outDir, 'questionnaire.json'), 'utf8')).toBe('{"frameworks":[]}');
+    const html = readFileSync(join(outDir, 'index.html'), 'utf8');
+    expect(html).toContain('Download the security questionnaire answer sheet');
   });
 
   it('publishes the staleness window only when it matches the API', () => {

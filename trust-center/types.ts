@@ -23,6 +23,32 @@ export interface SiteConfig {
     assessmentCadence?: string;
     publishCadence?: string;
     staleAfterHours?: number;
+    /** Optional status/uptime page this deployment links to. */
+    statusPageUrl?: string;
+  };
+  /** What this deployment actually does, one short paragraph each. */
+  practices?: string[];
+  /** Vendors that process data for this deployment; render "None" when empty. */
+  subprocessors?: Array<{
+    name: string;
+    purpose: string;
+    location: string;
+    dpaUrl?: string;
+  }>;
+  subprocessorsLastUpdated?: string;
+  /** Public documents (privacy policy, DPA, ...). Request-only entries use requestEmail. */
+  documents?: Array<{
+    label: string;
+    url?: string;
+    requestEmail?: string;
+  }>;
+  faqs?: Array<{ question: string; answer: string }>;
+  /** RFC 9116 security.txt emitted into the site when securityEmail is set. */
+  securityTxt?: {
+    /** Days until Expires (default 180). */
+    expiresDays?: number;
+    /** Optional Policy URL (e.g. the vulnerability disclosure policy). */
+    policyUrl?: string;
   };
 }
 
@@ -49,6 +75,8 @@ export interface GeneratedConfig {
       status: ControlStatus;
     }>;
   }>;
+  /** Posture transitions recorded by the sync tool, newest first. */
+  changelog?: Array<{ date: string; title: string; description?: string }>;
 }
 
 export interface BuildMeta {

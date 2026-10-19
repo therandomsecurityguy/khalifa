@@ -47,6 +47,40 @@ export interface TrustConfigFragment {
       status: TrustControlStatus;
     }>;
   }>;
+  /** Posture transitions since the previous publish, newest first. */
+  changelog?: ChangelogEntry[];
+}
+
+export interface ChangelogEntry {
+  date: string;
+  title: string;
+  description?: string;
+}
+
+/** Machine-readable answer sheet, statuses only. */
+export interface Questionnaire {
+  generatedAt: string;
+  source: 'khalifa-trust-center-sync';
+  note: string;
+  recordGeneratedAt: string | null;
+  maxAgeHours?: number;
+  frameworks: Array<{
+    id: PublishedFramework;
+    name: string;
+    requirements: Array<{
+      id: string;
+      title: string;
+      section: string;
+      answer: TrustControlStatus;
+    }>;
+  }>;
+}
+
+/** Persisted between publishes (locally and as a public static asset). */
+export interface PostureState {
+  updatedAt: string;
+  posture: Record<string, TrustControlStatus>;
+  changelog: ChangelogEntry[];
 }
 
 export interface BuildMeta {

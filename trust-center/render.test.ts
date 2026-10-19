@@ -141,6 +141,70 @@ describe('renderSite', () => {
     expect(html).toContain('Controls by domain');
   });
 
+  it('renders the deployment sections: practices, documents, subprocessors, FAQ, changelog, status', () => {
+    const html = renderSite(
+      {
+        ...config,
+        practices: ['Only statuses are published.'],
+        documents: [
+          { label: 'Privacy policy', url: 'https://example.com/privacy' },
+          { label: 'SOC 2 report', requestEmail: 'security@example.com' },
+        ],
+        subprocessors: [
+          {
+            name: 'Example CDN',
+            purpose: 'Content delivery',
+            location: 'US',
+            dpaUrl: 'https://example.com/dpa',
+          },
+        ],
+        subprocessorsLastUpdated: '2026-10-01',
+        faqs: [{ question: 'What is this page?', answer: 'Continuous posture.' }],
+        monitoring: {
+          assessmentCadence: 'every 4 hours',
+          statusPageUrl: 'https://status.example.com',
+        },
+        securityTxt: { policyUrl: 'https://example.com/disclosure' },
+      },
+      {
+        ...generated,
+        changelog: [
+          {
+            date: '2026-10-16T00:00:00.000Z',
+            title: 'CIS 1.5 moved to partial',
+            description: 'Previously implemented.',
+          },
+        ],
+      },
+      null
+    )['index.html'];
+
+    expect(html).toContain('Security practices');
+    expect(html).toContain('Only statuses are published.');
+    expect(html).toContain('<a href="https://example.com/privacy">Privacy policy</a>');
+    expect(html).toContain('request access');
+    expect(html).toContain('Example CDN');
+    expect(html).toContain('Last updated 2026-10-01');
+    expect(html).toContain('Frequently asked questions');
+    expect(html).toContain('Recent posture changes');
+    expect(html).toContain('CIS 1.5 moved to partial');
+    expect(html).toContain('status page');
+    expect(html).toContain('disclosure policy');
+  });
+
+  it('renders an explicit none for subprocessors and omits empty sections', () => {
+    const html = renderSite({ ...config, subprocessors: [] }, generated, null)['index.html'];
+    expect(html).toContain('None. This deployment processes data inside its own AWS account.');
+    expect(html).not.toContain('Security practices');
+    expect(html).not.toContain('Frequently asked questions');
+    expect(html).not.toContain('Recent posture changes');
+  });
+
+  it('points at the emitted security.txt when no disclosure policy URL is set', () => {
+    const html = renderSite(config, generated, null)['index.html'];
+    expect(html).toContain('./.well-known/security.txt');
+  });
+
   it('trips on identifiers that must never reach the page', () => {
     expect(() =>
       renderSite(

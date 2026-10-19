@@ -1,6 +1,6 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { renderSite } from './render';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { renderSite, type SiteAssets } from './render';
 import type { BuildMeta, GeneratedConfig, SiteConfig } from './types';
 
 export interface BuildOptions {
@@ -35,6 +35,10 @@ export function loadSiteConfig(path: string): SiteConfig {
     (!Number.isSafeInteger(staleAfterHours) || staleAfterHours < 1)
   ) {
     throw new Error(`${path} monitoring.staleAfterHours must be a positive integer`);
+  }
+  const expiresDays = config.securityTxt?.expiresDays;
+  if (expiresDays !== undefined && (!Number.isSafeInteger(expiresDays) || expiresDays < 1)) {
+    throw new Error(`${path} securityTxt.expiresDays must be a positive integer`);
   }
   return config;
 }
@@ -88,14 +92,52 @@ export function buildSite(options: BuildOptions = {}): BuildResult {
     );
   }
 
-  const rendered = renderSite(config, generated, meta);
+  const assets: SiteAssets = {
+    questionnaire: existsSync(join(generatedDir, 'questionnaire.json')),
+  };
+  const rendered: Record<string, string> = {
+    ...renderSite(config, generated, meta, new Date(), assets),
+  };
+
+  const securityEmail = config.company.securityEmail?.trim();
+  if (securityEmail) {
+    rendered['.well-known/security.txt'] = buildSecurityTxt(config, securityEmail, meta);
+  }
 
   mkdirSync(outDir, { recursive: true });
   const files = Object.keys(rendered);
   for (const file of files) {
-    writeFileSync(join(outDir, file), rendered[file as keyof typeof rendered]);
+    const path = join(outDir, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, rendered[file]);
   }
-  return { outDir, files };
+
+  // Generated assets the sync tool publishes alongside the config.
+  for (const name of ['questionnaire.json', 'posture-state.json']) {
+    const source = join(generatedDir, name);
+    if (existsSync(source)) {
+      copyFileSync(source, join(outDir, name));
+      files.push(name);
+    }
+  }
+
+  return { outDir, files: files.sort() };
+}
+
+// RFC 9116 security.txt, emitted only when the deployment configures a
+// security contact. Expires is 180 days (configurable) from the build.
+function buildSecurityTxt(config: SiteConfig, email: string, meta: BuildMeta | null): string {
+  const generatedAt = meta?.generatedAt ?? new Date().toISOString();
+  const expiresDays = config.securityTxt?.expiresDays ?? 180;
+  const expires = new Date(Date.parse(generatedAt) + expiresDays * 24 * 60 * 60 * 1000);
+  const lines = [
+    `Contact: mailto:${email}`,
+    `Expires: ${expires.toISOString()}`,
+    'Preferred-Languages: en',
+  ];
+  const policy = config.securityTxt?.policyUrl?.trim();
+  if (policy) lines.push(`Policy: ${policy}`);
+  return `${lines.join('\n')}\n`;
 }
 
 function readFile(path: string): string {

@@ -10,7 +10,35 @@
   "monitoring": {
     "assessmentCadence": "every 4 hours",
     "publishCadence": "nightly",
-    "staleAfterHours": 24
+    "staleAfterHours": 24,
+    "statusPageUrl": ""
+  },
+  "practices": [
+    "Collection and evaluation run inside this deployment's own AWS account; posture data never leaves it.",
+    "Only statuses are published: no account IDs, resource identifiers, counts, or evidence appear on this page.",
+    "Workloads use least-privilege IRSA roles; runtime credentials live in Secrets Manager and reach pods through External Secrets.",
+    "Encryption at rest and in transit is verified continuously by the cited controls, for example ISO A.8.24 maps the encryption checks."
+  ],
+  "subprocessors": [],
+  "subprocessorsLastUpdated": "",
+  "documents": [],
+  "faqs": [
+    {
+      "question": "What is this page?",
+      "answer": "A continuously updated view of the security posture Khalifa evaluates against this deployment's AWS configuration. It is not a certification or an audit report."
+    },
+    {
+      "question": "Why are no frameworks certified?",
+      "answer": "Khalifa reports automated configuration posture only. Certification requires an independent audit, which this page never claims."
+    },
+    {
+      "question": "How fresh is this page?",
+      "answer": "Assessments run continuously and the page is rebuilt nightly. When assessments stop, every framework unpublishes automatically."
+    }
+  ],
+  "securityTxt": {
+    "expiresDays": 180,
+    "policyUrl": ""
   },
   "theme": {
     "primary": "#1e3a8a"

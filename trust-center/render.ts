@@ -28,11 +28,17 @@ const FRAMEWORK_LABELS: Record<FrameworkStatus, string> = {
 const DEFAULT_PRIMARY = '#1e3a8a';
 const DEFAULT_FRAMEWORK = 'CIS_AWS_FOUNDATIONS';
 
+export interface SiteAssets {
+  /** questionnaire.json was published into dist; render its download link. */
+  questionnaire?: boolean;
+}
+
 export function renderSite(
   config: SiteConfig,
   generated: GeneratedConfig,
   meta: BuildMeta | null,
-  now: Date = new Date()
+  now: Date = new Date(),
+  assets: SiteAssets = {}
 ): RenderedSite {
   const title = config.title?.trim() || `${config.company.name} Trust Center`;
   const frameworks = generated.frameworks ?? [];
@@ -60,7 +66,12 @@ export function renderSite(
 <main class="wrap">
 ${frameworks.map((framework) => renderFramework(framework)).join('\n')}
 ${renderControlsGrouped(frameworks, controls)}
+${renderPractices(config)}
+${renderDocuments(config, assets)}
+${renderSubprocessors(config)}
+${renderChangelog(generated.changelog)}
 ${renderProvenance(generatedAt, recordAt, config.monitoring, meta?.source?.maxAgeHours)}
+${renderFaq(config)}
 ${renderContact(config)}
 </main>
 <footer class="site-footer">
@@ -177,10 +188,101 @@ function renderProvenance(
     maxAgeHours !== undefined && maxAgeHours > 0
       ? ` When the last assessment is older than ${escapeHtml(String(maxAgeHours))} hours, every framework unpublishes automatically until assessments resume.`
       : '';
+  const statusPage = monitoring?.statusPageUrl?.trim()
+    ? ` Service availability: <a href="${escapeHtml(monitoring.statusPageUrl.trim())}">status page</a>.`
+    : '';
   return `<section class="provenance" aria-label="Continuous monitoring">
   <h2>Continuous monitoring</h2>
-  <p>${monitored} ${published}</p>
+  <p>${monitored} ${published}${statusPage}</p>
   <p>Requirements appear here only after repeated agreement with the account's Security Hub configuration and an explicit publish allowlist.${unpublish}</p>
+</section>`;
+}
+
+function renderPractices(config: SiteConfig): string {
+  const practices = (config.practices ?? []).filter((entry) => entry.trim().length > 0);
+  if (practices.length === 0) return '';
+  return `<section class="provenance" aria-label="Security practices">
+  <h2>Security practices</h2>
+  <ul class="plain-list">
+${practices.map((entry) => `    <li>${escapeHtml(entry)}</li>`).join('\n')}
+  </ul>
+</section>`;
+}
+
+function renderDocuments(config: SiteConfig, assets: SiteAssets): string {
+  const documents = config.documents ?? [];
+  const questionnaire = assets.questionnaire === true;
+  if (documents.length === 0 && !questionnaire) return '';
+  return `<section class="provenance" aria-label="Documents">
+  <h2>Documents</h2>
+  <ul class="plain-list">
+${documents
+  .map((document) => {
+    const label = escapeHtml(document.label);
+    if (document.url) return `    <li><a href="${escapeHtml(document.url)}">${label}</a></li>`;
+    if (document.requestEmail)
+      return `    <li>${label} — <a href="mailto:${escapeHtml(document.requestEmail)}?subject=Document%20request%3A%20${encodeURIComponent(document.label)}">request access</a></li>`;
+    return `    <li>${label}</li>`;
+  })
+  .join('\n')}
+${questionnaire ? '    <li><a href="./questionnaire.json">Download the security questionnaire answer sheet (JSON, statuses only)</a></li>' : ''}
+  </ul>
+</section>`;
+}
+
+function renderSubprocessors(config: SiteConfig): string {
+  if (config.subprocessors === undefined) return '';
+  const subprocessors = config.subprocessors;
+  const updated = config.subprocessorsLastUpdated?.trim();
+  const items =
+    subprocessors.length === 0
+      ? '    <li>None. This deployment processes data inside its own AWS account.</li>'
+      : subprocessors
+          .map((vendor) => {
+            const dpa = vendor.dpaUrl ? ` · <a href="${escapeHtml(vendor.dpaUrl)}">DPA</a>` : '';
+            return `    <li><strong>${escapeHtml(vendor.name)}</strong> — ${escapeHtml(vendor.purpose)} (${escapeHtml(vendor.location)})${dpa}</li>`;
+          })
+          .join('\n');
+  return `<section class="provenance" aria-label="Subprocessors">
+  <h2>Subprocessors</h2>
+  <ul class="plain-list">
+${items}
+  </ul>
+  ${updated ? `<p class="muted">Last updated ${escapeHtml(updated)}</p>` : ''}
+</section>`;
+}
+
+function renderChangelog(changelog: GeneratedConfig['changelog']): string {
+  const entries = changelog ?? [];
+  if (entries.length === 0) return '';
+  return `<section class="provenance" aria-label="Posture changes">
+  <h2>Recent posture changes</h2>
+  <ul class="plain-list">
+${entries
+  .slice(0, 20)
+  .map(
+    (entry) =>
+      `    <li><span class="muted">${escapeHtml(entry.date)}</span> — ${escapeHtml(entry.title)}${entry.description ? ` <span class="control-description">${escapeHtml(entry.description)}</span>` : ''}</li>`
+  )
+  .join('\n')}
+  </ul>
+</section>`;
+}
+
+function renderFaq(config: SiteConfig): string {
+  const faqs = config.faqs ?? [];
+  if (faqs.length === 0) return '';
+  return `<section class="provenance" aria-label="Frequently asked questions">
+  <h2>Frequently asked questions</h2>
+  <dl class="faq">
+${faqs
+  .map(
+    (faq) =>
+      `    <dt>${escapeHtml(faq.question)}</dt>
+    <dd>${escapeHtml(faq.answer)}</dd>`
+  )
+  .join('\n')}
+  </dl>
 </section>`;
 }
 
@@ -188,9 +290,15 @@ function renderContact(config: SiteConfig): string {
   const email = config.company.securityEmail?.trim();
   const website = config.company.website?.trim();
   if (!email && !website) return '';
+  const policy = config.securityTxt?.policyUrl?.trim();
+  const disclosure = policy
+    ? ` Report a vulnerability per the <a href="${escapeHtml(policy)}">disclosure policy</a>.`
+    : email
+      ? ' To report a vulnerability, email the security team; see <a href="./.well-known/security.txt">security.txt</a>.'
+      : '';
   return `<section class="contact" aria-label="Contact">
   <h2>Security questions</h2>
-  <p>${email ? `Contact the security team at <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>.` : ''}${website ? ` More at <a href="${escapeHtml(website)}">${escapeHtml(website)}</a>.` : ''}</p>
+  <p>${email ? `Contact the security team at <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>.` : ''}${website ? ` More at <a href="${escapeHtml(website)}">${escapeHtml(website)}</a>.` : ''}${disclosure}</p>
 </section>`;
 }
 
@@ -263,6 +371,10 @@ h2 { font-size: 1.1rem; margin: 0; }
   margin-top: 1.5rem;
 }
 .provenance p, .contact p { color: var(--muted); margin: 0.5rem 0 0; }
+.plain-list { margin: 0.75rem 0 0; padding-left: 1.1rem; color: var(--text); }
+.plain-list li { margin: 0.35rem 0; }
+.faq dt { font-weight: 600; margin-top: 0.75rem; }
+.faq dd { margin: 0.25rem 0 0; color: var(--muted); }
 a { color: var(--accent); }
 .site-footer { border-top: 1px solid var(--border); padding: 1.5rem 0 2.5rem; color: var(--muted); font-size: 0.9rem; background: var(--surface); }
 .site-footer nav { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem; }

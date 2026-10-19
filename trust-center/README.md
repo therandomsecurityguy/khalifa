@@ -23,13 +23,26 @@ npx serve trust-center/dist
 | `--generated` | `trust-center-config`           | Directory with `trust.config.json` + `build-meta.json` |
 | `--out`       | `trust-center/dist`             | Output directory                                       |
 
-`site.config.json` is deployment-owned: company name, optional security email,
-website, links, accent color, footer note, and the `monitoring` block
-(assessment/publication cadence, plus an optional `staleAfterHours` claim).
-The monitoring statement is derived from the generated `build-meta.json` — the
-API's published staleness window — and the build fails if the configured claim
-contradicts it. Everything posture-related comes from the generated files and
-is never hand-edited.
+`site.config.json` is deployment-owned. All fields are optional except
+`company.name`:
+
+| Field                                                 | Renders                                                                                                                                                                                   |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `company.name` / `securityEmail` / `website`          | header and contact section; a set email also emits `/.well-known/security.txt`                                                                                                            |
+| `links`                                               | footer links                                                                                                                                                                              |
+| `theme.primary`, `footerNote`, `title`, `description` | presentation                                                                                                                                                                              |
+| `monitoring`                                          | the Continuous monitoring section: `assessmentCadence`, `publishCadence`, optional `staleAfterHours` (must match the API's published window or the build fails), optional `statusPageUrl` |
+| `practices`                                           | Security practices bullets                                                                                                                                                                |
+| `subprocessors` + `subprocessorsLastUpdated`          | Subprocessors list (an empty array renders an explicit "None")                                                                                                                            |
+| `documents`                                           | Documents list; a `url` links, a `requestEmail` renders a request-access mailto                                                                                                           |
+| `faqs`                                                | Frequently asked questions                                                                                                                                                                |
+| `securityTxt.expiresDays` / `policyUrl`               | RFC 9116 security.txt fields (emitted only with a security email)                                                                                                                         |
+
+Everything posture-related comes from the generated files and is never
+hand-edited: `trust.config.json` (framework cards, grouped controls, posture
+changelog), `build-meta.json` (monitoring statement), `questionnaire.json`
+(downloadable answer sheet, linked from Documents), and `posture-state.json`
+(published so the next sync can compute the changelog).
 
 The page shows framework and control statuses only, rendered from the
 sanitized publishable endpoint (requirements that agreed with Security Hub for

@@ -19,6 +19,8 @@ All notable changes to Khalifa.
 
 - **Continuous-monitoring proof on the trust center**: the publishable endpoint now publishes the staleness window it enforces (`maxAgeHours`, 24h), the sync records the assessment age (`recordAgeHours`), and the site's "Continuous monitoring" section states the assessment and publication cadence plus the automatic-unpublish rule — when the last assessment is older than the window, every framework leaves the page until assessments resume. A `monitoring.staleAfterHours` claim in `site.config.json` that contradicts the API's value fails the build, so the page cannot promise a window the API does not enforce.
 
+- **Trust-center transparency sections**: `site.config.json` now drives security practices, subprocessors (with last-updated), public documents (link or request-access mailto), FAQs, a status-page link, and an RFC 9116 `/.well-known/security.txt` emitted when a security email is configured. The sync publishes a machine-readable questionnaire answer sheet (`questionnaire.json`, statuses only) and a rolling posture changelog (diffed from `posture-state.json`, newest first, capped at 20) rendered as "Recent posture changes". `SECURITY.md` documents the disclosure policy; OPERATIONAL section J.1 is the step-by-step go-live runbook.
+
 ### Changed
 
 - **Releases no longer require AWS configuration**: digest-only image publishing activates only when `KHALIFA_AWS_ROLE_ARN` and the ECR repository variables are set; without them a release ships Lambda archives, the Helm chart, the `khalifa-eks` bundle, the SBOM, and checksums, recording `published: false` in `release-manifest.json`.
