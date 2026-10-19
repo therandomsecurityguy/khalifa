@@ -1,17 +1,6 @@
-import { CIS_NAME, ISO27001_NAME, SOC2_NAME } from './map';
-import { assertSanitizedValue } from './map';
-import type {
-  PublishedFramework,
-  PublishableResponse,
-  Questionnaire,
-  TrustControlStatus,
-} from './types';
-
-const FRAMEWORK_NAMES: Record<PublishedFramework, string> = {
-  CIS_AWS_FOUNDATIONS: CIS_NAME,
-  SOC2: SOC2_NAME,
-  ISO27001: ISO27001_NAME,
-};
+import { CIS_NAME, FRAMEWORK_NAMES, assertSanitizedValue } from './map';
+import { MAPPED_PUBLISHED_FRAMEWORKS } from './types';
+import type { PublishableResponse, Questionnaire, TrustControlStatus } from './types';
 
 const ANSWER: Record<'PASS' | 'FAIL', TrustControlStatus> = {
   PASS: 'implemented',
@@ -49,7 +38,7 @@ export function buildQuestionnaire(
 
   const allFrameworks: Questionnaire['frameworks'] = [
     { id: 'CIS_AWS_FOUNDATIONS', name: CIS_NAME, requirements: byRequirement(cis) },
-    ...(['SOC2', 'ISO27001'] as const).map((framework) => ({
+    ...MAPPED_PUBLISHED_FRAMEWORKS.map((framework) => ({
       id: framework,
       name: FRAMEWORK_NAMES[framework],
       requirements: byRequirement(

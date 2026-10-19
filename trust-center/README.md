@@ -47,7 +47,7 @@ changelog), `build-meta.json` (monitoring statement), `questionnaire.json`
 The page shows framework and control statuses only, rendered from the
 sanitized publishable endpoint (requirements that agreed with Security Hub for
 `reconciliation.minAgreementDays` and passed `reconciliation.publishAllowlist`,
-plus mapped SOC 2 / ISO 27001 requirements whose controls are all publishable
+plus mapped SOC 2 / ISO 27001 / PCI DSS / NIST SP 800-53 requirements whose controls are all publishable
 or assessed). Controls are grouped under their framework when more than one
 framework publishes.
 The renderer escapes all content, and trips on ARNs, 12-digit account IDs, or

@@ -257,7 +257,9 @@ describe('publishableFrom: mapped frameworks', () => {
       new Map([
         ['1.4', 'PASS'],
         ['1.5', 'PASS'],
+        ['1.6', 'PASS'],
         ['1.7', 'PASS'],
+        ['1.9', 'PASS'],
         ['1.10', 'PASS'],
         ['1.15', 'PASS'],
         ['KH-1.8', 'PASS'],
@@ -266,6 +268,8 @@ describe('publishableFrom: mapped frameworks', () => {
       ])
     );
     expect(withCis.mappedFrameworks.find((r) => r.requirement === 'CC6.1')?.status).toBe('PASS');
+    const pci = withCis.mappedFrameworks.find((r) => r.requirement === '8.3');
+    expect(pci).toMatchObject({ framework: 'PCI_DSS', status: 'PASS' });
   });
 
   it('leaves mapped frameworks unpublished when the baseline report is unreadable', () => {

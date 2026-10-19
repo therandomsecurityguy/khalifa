@@ -1,3 +1,4 @@
+import { MAPPED_PUBLISHED_FRAMEWORKS } from './types';
 import type {
   PublishableMappedRequirement,
   PublishableResponse,
@@ -105,7 +106,7 @@ export function parsePublishableResponse(body: unknown): PublishableResponse {
     }
     const item = entry as Record<string, unknown>;
     const framework = item.framework;
-    if (framework !== 'SOC2' && framework !== 'ISO27001') {
+    if (!MAPPED_PUBLISHED_FRAMEWORKS.includes(framework as never)) {
       throw new Error(`mapped requirement ${index} has an unknown framework: ${String(framework)}`);
     }
     const requirement = textField(item, 'requirement', index);

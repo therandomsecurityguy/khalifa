@@ -6,7 +6,7 @@ import {
   citationsByFramework,
   getControlById,
   type ComplianceControlStatus,
-  type ComplianceFramework,
+  type MappedFramework,
   type ReconciliationRecord,
   type ReconciliationStore,
 } from '@khalifa/risk-engine';
@@ -32,7 +32,7 @@ export interface PublishableRequirement {
 // baseline, from the latest report). Manual or unevaluated controls keep it
 // off the page.
 export interface PublishableMappedRequirement extends PublishableRequirement {
-  framework: Extract<ComplianceFramework, 'SOC2' | 'ISO27001'>;
+  framework: MappedFramework;
 }
 
 export interface PublishableResponse {

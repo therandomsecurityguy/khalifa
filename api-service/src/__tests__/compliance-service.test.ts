@@ -11,11 +11,15 @@ describe('ComplianceService', () => {
       'KHALIFA_BASELINE',
       'SOC2',
       'ISO27001',
+      'PCI_DSS',
+      'NIST_800_53',
     ]);
     // Mapped frameworks report their requirement counts, not canonical controls.
     const soc2 = summaries.find((s) => s.framework === 'SOC2');
     expect(soc2?.totalControls).toBe(9);
     expect(soc2?.version).toBe('2017');
+    expect(summaries.find((s) => s.framework === 'PCI_DSS')?.totalControls).toBe(11);
+    expect(summaries.find((s) => s.framework === 'NIST_800_53')?.totalControls).toBe(15);
   });
 
   it('returns framework summary with control counts', async () => {
