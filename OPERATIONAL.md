@@ -155,8 +155,8 @@ Then set `cloudtrailAnalyzer.suspend = false` in the environment's Helm values. 
 ## H. Deployment Commands
 
 > Automated and agent-driven installs must follow [`AGENTS.md`](AGENTS.md);
-the end-to-end secure workflow also lives in
-[`deploy/terraform/examples/complete/README.md`](deploy/terraform/examples/complete/README.md).
+> the end-to-end secure workflow also lives in
+> [`deploy/terraform/examples/complete/README.md`](deploy/terraform/examples/complete/README.md).
 
 ```bash
 # Deploy through the environment repository's Terraform root
@@ -270,3 +270,46 @@ Until both sides match, the endpoint accepts no one, by design.
 Provenance for a deployed page: the page's publication details show the
 generated-at time and the reconciliation record time; the same record is live
 at `GET /compliance/reconciliation/publishable`.
+
+### Making the trust center live, step by step
+
+1. Deploy a release and keep the API's public hostname and the Cloudflare
+   Access policy that fronts it (see [`AGENTS.md`](AGENTS.md) and the example
+   README).
+2. Configure the API side (Helm values): `reconciliation.securityHubRoleArn`,
+   a non-empty `reconciliation.publishAllowlist`, and
+   `reconciliation.trustCenterSyncClientId` set to the Access service token's
+   client id. Reconciliation must record `OK` before anything publishes.
+3. In Cloudflare Access, create a **service token** for the API hostname's
+   policy; you need its client id and secret once.
+4. In Cloudflare, create a Pages project and an API token that can edit Pages,
+   plus the account id.
+5. Configure this repository (the workflow stays skipped until
+   `TRUST_CENTER_PROJECT` is set):
+
+   ```bash
+   gh variable set KHALIFA_API_URL            --body "https://api.example.com"
+   gh variable set TRUST_CENTER_PROJECT       --body "khalifa-trust-center"
+   gh variable set TRUST_CENTER_PUBLIC_URL    --body "https://trust.example.com"  # optional: enables the posture changelog
+   gh secret set CF_ACCESS_CLIENT_ID
+   gh secret set CF_ACCESS_CLIENT_SECRET
+   gh secret set CLOUDFLARE_API_TOKEN
+   gh secret set CLOUDFLARE_ACCOUNT_ID
+   ```
+
+6. Dry run locally (optional): `npm run trust-center:sync` then
+   `npm run trust-center:build`, and open `trust-center/dist/index.html`.
+7. First publish: `gh workflow run "Trust center sync"` (the nightly cron takes
+   over afterwards).
+8. Verify: the job's step summary, the Pages URL, each section rendering, and
+   `/.well-known/security.txt`. Frameworks appear only when the record is `OK`
+   and the requirement is allowlisted; a `STALE`/`MISSING` record publishes
+   nothing (the previous deployment stays live).
+9. Optional extras: a status-page link
+   (`site.config.json` → `monitoring.statusPageUrl`), public documents,
+   subprocessors, FAQs, and the questionnaire answer sheet (published
+   automatically as `/questionnaire.json`).
+
+If the workflow was skipped, `TRUST_CENTER_PROJECT` is unset. If the page looks
+empty, reconciliation is `STALE`/`MISSING` or nothing is allowlisted yet — the
+fail-closed behavior, not a bug.

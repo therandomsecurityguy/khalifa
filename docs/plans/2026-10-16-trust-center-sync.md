@@ -122,3 +122,15 @@ publishable; baseline-mapped controls must be assessed PASS/FAIL).
 Still deferred: FSBP / "AWS-native controls" (no second audit-account read
 path), the audit-logging evidence section, pass-rate percentages, and live
 updates.
+
+## 8. Status update (2026-10-16, later)
+
+Phase A and B shipped: security practices, subprocessors, public documents,
+FAQs, status-page link, `SECURITY.md` + RFC 9116 `security.txt`, the
+questionnaire answer sheet (`questionnaire.json`), the rolling posture
+changelog ("Recent posture changes"), and the continuous-monitoring proof
+(`maxAgeHours` published by the API, cadence + auto-unpublish stated by the
+page, build fails on contradiction). Remaining Phase C decisions: gated
+document access (public-only for now), pass-rate aggregates (still excluded by
+the statuses-only policy), and additional framework citation tables (PCI DSS,
+NIST 800-53, C5).

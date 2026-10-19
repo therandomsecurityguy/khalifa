@@ -139,12 +139,17 @@ function frameworkName(framework: PublishedFramework): string {
 }
 
 /** Throws when a forbidden identifier survives into the generated sections. */
-export function assertSanitized(fragment: TrustConfigFragment): void {
-  const serialized = JSON.stringify(fragment);
+/** Throws when a forbidden identifier survives into the generated output. */
+export function assertSanitizedValue(value: unknown): void {
+  const serialized = JSON.stringify(value);
   for (const pattern of FORBIDDEN_PATTERNS) {
     const match = serialized.match(pattern);
     if (match) {
       throw new Error(`generated trust config contains a forbidden value: ${match[0]}`);
     }
   }
+}
+
+export function assertSanitized(fragment: TrustConfigFragment): void {
+  assertSanitizedValue(fragment);
 }
