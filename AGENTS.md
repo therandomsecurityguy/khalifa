@@ -116,22 +116,63 @@ release will roll back, which is safe but noisy.
   `cloudtrail_logs_kms_key_arn`. Confirm the trail owner has allowed the
   analyzer role before unsuspending the CronJob.
 - **CIS reconciliation**: `securityhub_reader_role_arn` (audit account,
-  read-only). Recommended before any trust-center publishing.
-- **Trust center**: `TRUST_CENTER_PROJECT` + Access/Cloudflare secrets; the
-  workflow is fail-closed and publishes statuses only.
+  read-only). Required before any trust-center publishing.
 - **Canaries / DSPM allowlist**: `ENABLE_CANARIES`, `dspm_bucket_allowlist`.
 
-### 1.8 Verification gates before declaring success
+### 1.8 Trust center (publishing the posture)
+
+Prerequisites: the install above is healthy and reconciliation has produced an
+`OK` record. The full step-by-step runbook is
+[`OPERATIONAL.md`](OPERATIONAL.md) section J.1; the summary an agent needs:
+
+1. Helm values: `reconciliation.securityHubRoleArn`, a non-empty
+   `reconciliation.publishAllowlist`, and
+   `reconciliation.trustCenterSyncClientId` (the Access service token's client
+   id). Nothing publishes until these are set.
+2. Cloudflare: create a **service token** for the Access policy that fronts the
+   API, a **Pages project**, and an API token that can edit Pages (plus the
+   account id).
+3. Configure the repository (the workflow stays skipped until
+   `TRUST_CENTER_PROJECT` is set):
+
+   ```bash
+   gh variable set KHALIFA_API_URL         --body "https://api.example.com"
+   gh variable set TRUST_CENTER_PROJECT    --body "khalifa-trust-center"
+   gh variable set TRUST_CENTER_PUBLIC_URL --body "https://trust.example.com"  # optional: enables the posture changelog
+   gh secret set CF_ACCESS_CLIENT_ID
+   gh secret set CF_ACCESS_CLIENT_SECRET
+   gh secret set CLOUDFLARE_API_TOKEN
+   gh secret set CLOUDFLARE_ACCOUNT_ID
+   ```
+
+4. Dry run locally: `npm run trust-center:sync` then
+   `npm run trust-center:build`; inspect `trust-center/dist/index.html`.
+5. First publish: `gh workflow run "Trust center sync"` (the nightly cron takes
+   over). It fails closed — `STALE`/`MISSING` records leave the previous
+   deployment live.
+6. Verify the deployed page: framework cards (CIS and the mapped SOC 2 /
+   ISO 27001 / PCI DSS / NIST SP 800-53 requirements that are publishable), the
+   continuous-monitoring section, `/.well-known/security.txt` (emitted when a
+   security email is configured), and `/questionnaire.json`.
+7. Deployment-owned content in `trust-center/site.config.json`: practices,
+   documents, subprocessors, FAQs, status-page link, security contact. Never
+   put identifiers in these — the build trips on account IDs, ARNs, and
+   access-key patterns.
+
+### 1.9 Verification gates before declaring success
 
 - `bash scripts/validate-deployment-modules.sh` (where helm/kubeconform exist)
 - all pods `Ready`; CronJobs in the intended suspend state
-- after the first compliance run: `/compliance/frameworks` lists four
-  frameworks; CIS reconciliation record (`CIS_RECONCILIATION`) is `OK`
+- after the first compliance run: `/compliance/frameworks` lists six
+  frameworks (CIS, Khalifa baseline, SOC 2, ISO 27001, PCI DSS, NIST 800-53);
+  the CIS reconciliation record (`CIS_RECONCILIATION`) is `OK`
+- trust center (when configured): the workflow's step summary, the deployed
+  page's sections, and `/.well-known/security.txt`
 - fail-closed behavior observed, not assumed: `STALE` reconciliation keeps the
   trust center unpublished; an unreadable baseline report keeps mapped
   frameworks unpublished
 
-### 1.9 Rollback
+### 1.10 Rollback
 
 - Helm operations are atomic (`cleanup_on_fail`) — a failed install rolls back.
 - `terraform destroy` is intentionally blocked: DynamoDB deletion protection
@@ -164,10 +205,10 @@ and in `CHANGELOG.md` under **Unreleased**:
   `cis-v3-source-of-truth.test.ts` — SH control → CIS requirement mapping.
 - `packages/risk-engine/src/compliance-types.ts` (`LEGACY_CONTROL_IDS`) — old
   evidence rows must resolve to current controls.
-- Sanitization tripwires: `scripts/trust-center-sync/map.ts`,
-  `trust-center/render.ts`, and `api-service/src/routes/trust-center.ts` — three
-  layers that must never be weakened so identifiers cannot reach the public
-  page.
+- Sanitization tripwires: `scripts/trust-center-sync/map.ts` (and the
+  `questionnaire.ts` / `state.ts` outputs it guards), `trust-center/render.ts`,
+  and `api-service/src/routes/trust-center.ts` — layers that must never be
+  weakened so identifiers cannot reach the public page.
 - Auth gates: `api-service/src/middleware/{auth,rbac}.ts` — the Access trusted
   domain, the service-token claim, and role floors.
 
@@ -197,8 +238,9 @@ and in `CHANGELOG.md` under **Unreleased**:
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Install on EKS, module inputs, teardown        | [`deploy/terraform/examples/complete/README.md`](deploy/terraform/examples/complete/README.md)                                             |
 | Architecture, graph model, reconciliation flow | [`ARCHITECTURE.md`](ARCHITECTURE.md)                                                                                                       |
-| Runbooks: IRSA, analyzer, trust-center sync    | [`OPERATIONAL.md`](OPERATIONAL.md) (sections B, J)                                                                                         |
+| Runbooks: IRSA, analyzer, trust-center go-live | [`OPERATIONAL.md`](OPERATIONAL.md) (sections B, J; J.1 is the step-by-step)                                                                |
 | Compliance frameworks and mappings             | [`README.md`](README.md) §Compliance, [`packages/risk-engine/src/framework-citations.ts`](packages/risk-engine/src/framework-citations.ts) |
 | Trust-center sync and site                     | [`scripts/trust-center-sync/README.md`](scripts/trust-center-sync/README.md), [`trust-center/README.md`](trust-center/README.md)           |
 | Deployment validation                          | [`scripts/validate-deployment-modules.sh`](scripts/validate-deployment-modules.sh)                                                         |
 | Contributing (humans)                          | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                                                       |
+| Vulnerability disclosure                       | [`SECURITY.md`](SECURITY.md)                                                                                                               |
