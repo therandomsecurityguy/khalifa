@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   getPropertyValues,
@@ -49,18 +49,18 @@ describe('ResourcesPage search', () => {
   it('offers the labels in the graph with their counts', async () => {
     render(<ResourcesPage />);
 
-    const dropdown = await screen.findByLabelText('Label');
-    expect(
-      (await screen.findByRole('option', { name: 'S3 bucket (1,204)' })).closest('select')
-    ).toBe(dropdown);
+    const box = await screen.findByRole('combobox', { name: 'Label' });
+    await userEvent.click(box);
+    expect(await screen.findByRole('option', { name: 'S3 bucket (1,204)' })).toBeInTheDocument();
     // All labels first, then A to Z by display name.
-    expect(Array.from(dropdown.querySelectorAll('option')).map((option) => option.value)).toEqual([
-      '*',
-      'IamRole',
-      'S3Bucket',
-    ]);
+    expect(
+      within(screen.getByRole('listbox', { name: 'Label' }))
+        .getAllByRole('option')
+        .map((option) => option.getAttribute('aria-label'))
+    ).toEqual(['All labels', 'IAM role (356)', 'S3 bucket (1,204)']);
 
-    await userEvent.selectOptions(dropdown, 'S3Bucket');
+    await userEvent.click(screen.getByRole('option', { name: 'S3 bucket (1,204)' }));
+    expect(box).toHaveValue('S3 bucket');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
     expect(push).toHaveBeenCalledWith('/resources?label=S3Bucket');
   });
@@ -72,7 +72,7 @@ describe('ResourcesPage search', () => {
     });
     render(<ResourcesPage />);
 
-    expect(await screen.findByLabelText('Label')).toHaveValue('*');
+    expect(await screen.findByRole('combobox', { name: 'Label' })).toHaveValue('All labels');
     expect(await screen.findByText('logs')).toBeInTheDocument();
     expect(mockedSearch).toHaveBeenCalledWith('*', undefined, undefined, 50, expect.anything());
     expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled();
@@ -129,6 +129,7 @@ describe('ResourcesPage search', () => {
 
     expect(await screen.findByText(/Couldn.t load the label list/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Label' }));
     expect(await screen.findByRole('option', { name: 'S3 bucket (1,204)' })).toBeInTheDocument();
     expect(screen.queryByText(/Couldn.t load the label list/)).not.toBeInTheDocument();
   });
@@ -138,7 +139,9 @@ describe('ResourcesPage search', () => {
     mockedLabels.mockReturnValue(new Promise(() => {}));
     render(<ResourcesPage />);
 
-    expect(await screen.findByLabelText('Label')).toHaveValue('EksCluster');
+    const box = await screen.findByRole('combobox', { name: 'Label' });
+    expect(box).toHaveValue('EKS cluster');
+    await userEvent.click(box);
     expect(screen.getByRole('option', { name: 'EKS cluster' })).toBeInTheDocument();
   });
 

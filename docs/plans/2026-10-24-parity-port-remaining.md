@@ -1,6 +1,6 @@
 # Plan: remaining upstream parity port (khalifa-main → this repo)
 
-Status: planned (2026-10-24); G1 merged (PR #23); G2 merged (PR #24) — mirror-workflow decision (§7.3) still open; G5 implemented on `dac/parity-g5-pass-role` (2026-10-24). Next: G3 (secrets inventory, consumes the collection + pass-role edges) then G4.
+Status: planned (2026-10-24); G1 merged (PR #23); G2 merged (PR #24); G5 merged (PR #25) — mirror-workflow decision (§7.3) still open; G3 implemented on `dac/parity-g3-secrets` (2026-10-24) with §7.2 decided (auto-ticketing stays off for RULE-006/031–034) and no mapped-framework citations added for KH-IAM-3. Next: G4 (compliance correctness), then G6.
 Source of truth for the gap list: a working-tree snapshot of the upstream repo at
 `~/Desktop/khalifa-main` (2026-10-23, no `.git`), compared against this repo's `main`.
 Read-only reference — nothing is copied wholesale; every port is scrubbed and merged.
@@ -27,7 +27,7 @@ Explicitly **out of scope** (this repo is ahead or the difference is snapshot-sp
 ## 2. Guardrails
 
 1. **Scrub on port.** The snapshot contains internal ticket refs (`SEC-*`), real
-   account IDs/regions, internal names, and a `Together`-specific auth helper.
+   account IDs/regions, internal names, and an internal-domain auth helper.
    Apply AGENTS.md §2.2 placeholders; never port those values.
 2. **Never weaken load-bearing files** (AGENTS.md §2.1). Adding RULE-031–034 and
    the KH-IAM-3 control requires deliberate, PR-called-out updates to:

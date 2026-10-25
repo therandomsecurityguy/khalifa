@@ -21,6 +21,7 @@ export const APP_SECTIONS: ReadonlyArray<{ label: string; routes: readonly AppRo
       { href: '/resources', label: 'Resources' },
       { href: '/attack-paths', label: 'Attack paths' },
       { href: '/identity', label: 'Identity', includes: ['/least-privilege'] },
+      { href: '/secrets', label: 'Secrets' },
     ],
   },
   {
@@ -75,6 +76,10 @@ export const IDENTITY_ROUTES = [
     description: 'Sweep findings across accounts.',
   },
 ] as const;
+
+export function secretHref(arn: string): string {
+  return `/secrets/detail?arn=${encodeURIComponent(arn)}`;
+}
 
 export function resourceHref(arn: string): string {
   return `/resources?arn=${encodeURIComponent(arn)}`;

@@ -5,6 +5,7 @@ import {
 } from '@khalifa/risk-engine';
 import Gremlin from 'gremlin';
 import type { GraphEdge, GraphVertex } from '../types';
+import type { ReaderRow } from './secret-readers';
 
 const graph = new Gremlin.structure.Graph();
 const __ = Gremlin.process.statics;
@@ -63,6 +64,7 @@ const VALUE_SAMPLE = 5_000;
 const MAX_VALUES = 50;
 const LABEL_COUNT_TIMEOUT_MS = 120_000;
 const ATTACK_PATH_TIMEOUT_MS = 5_000;
+const SECRET_READERS_TIMEOUT_MS = 10_000;
 const MAX_HOP_EXPANSION = 50;
 
 const ACCESS_EDGES = ['EXPOSES', 'HAS_IAM_ROLE', 'ATTACHED_TO', 'CONTAINS', 'GRANTS'];
@@ -302,6 +304,207 @@ export class NeptuneClient {
     // Vertex ids are ARNs, so this is an index lookup rather than a property scan.
     const results = await this.executeTraversal((g) => g.V(arn).limit(1).elementMap());
     return results.length && isRawMap(results[0]) ? extractVertex(results[0]) : null;
+  }
+
+  // One index lookup for many ids; ids not in the graph are simply absent.
+  async getResources(ids: string[]): Promise<GraphVertex[]> {
+    if (ids.length === 0) return [];
+    const results = await this.executeTraversal((g) =>
+      g
+        .V(...ids)
+        .limit(ids.length)
+        .elementMap()
+    );
+    return results.filter(isRawMap).map(extractVertex);
+  }
+
+  // Secrets and SecureString parameters, as a fixed set of fields: never the
+  // description, tags, key ARN or policy text. The key ARN is read only to tell
+  // an AWS-managed key from a customer one.
+  async listSecrets(limit: number): Promise<{ items: SecretRecord[]; truncated: boolean }> {
+    const [secrets, parameters, plaintext] = await Promise.all([
+      this.executeTraversal((g) =>
+        projectSecret(
+          g
+            .V()
+            .hasLabel('Secret')
+            .order()
+            .by(t.id)
+            .limit(limit + 1)
+        )
+      ),
+      this.executeTraversal((g) =>
+        projectParameter(
+          g
+            .V()
+            .hasLabel('Parameter')
+            .has('type', 'SecureString')
+            .order()
+            .by(t.id)
+            .limit(limit + 1)
+        )
+      ),
+      // Names only, matched below; a bounded scan of the plain-text parameters.
+      this.executeTraversal((g) =>
+        projectParameter(
+          g
+            .V()
+            .hasLabel('Parameter')
+            .has('type', P.within(...PLAINTEXT_TYPES))
+            .order()
+            .by(t.id)
+            .limit(MAX_PLAINTEXT_SCAN + 1)
+        )
+      ),
+    ]);
+    const suspicious = plaintext
+      .slice(0, MAX_PLAINTEXT_SCAN)
+      .map(plaintextRecord)
+      .filter((item) => looksLikeSecret(item.name));
+    const truncated =
+      secrets.length > limit ||
+      parameters.length > limit ||
+      plaintext.length > MAX_PLAINTEXT_SCAN ||
+      suspicious.length > limit;
+    const items = [
+      ...secrets.slice(0, limit).map(secretRecord),
+      ...parameters.slice(0, limit).map(parameterRecord),
+      ...suspicious.slice(0, limit),
+    ];
+    return { items: items.filter((item) => item.id), truncated };
+  }
+
+  // Secrets Manager secret ids and their accounts only, for the reader counts.
+  async listSecretAccounts(
+    limit: number
+  ): Promise<{ secrets: Array<{ id: string; accountId: string }>; truncated: boolean }> {
+    const results = await this.executeTraversal((g) =>
+      g
+        .V()
+        .hasLabel('Secret')
+        .order()
+        .by(t.id)
+        .limit(limit + 1)
+        .project('id', 'account')
+        .by(t.id)
+        .by(textValue('account_id'))
+    );
+    const secrets = results.slice(0, limit).map((row) => ({
+      id: stringValue(getMapValue(row, 'id')),
+      accountId: stringValue(getMapValue(row, 'account')),
+    }));
+    return { secrets: secrets.filter((secret) => secret.id), truncated: results.length > limit };
+  }
+
+  // One secret or SecureString parameter by id, with the same fields as the
+  // list. Any other vertex is not found, so this never reads other resources.
+  async getSecret(id: string): Promise<SecretRecord | null> {
+    const secrets = await this.executeTraversal((g) =>
+      projectSecret(g.V(id).hasLabel('Secret').limit(1))
+    );
+    if (secrets.length) return secretRecord(secrets[0]);
+    const parameters = await this.executeTraversal((g) =>
+      projectParameter(g.V(id).hasLabel('Parameter').limit(1))
+    );
+    const row = parameters[0];
+    if (!row) return null;
+    const type = stringValue(getMapValue(row, 'type'));
+    if (type === 'SecureString') return parameterRecord(row);
+    // A plain-text parameter only when its name is one the list shows.
+    const record = plaintextRecord(row);
+    return PLAINTEXT_TYPES.includes(type) && looksLikeSecret(record.name) ? record : null;
+  }
+
+  // Every statement attached to a role, user or group in one account that could
+  // bear on reading a secret: Allows that grant a secret read or use NotAction,
+  // and Denies. Matching against the secret happens in the caller.
+  async secretReaderRows(
+    accountId: string,
+    limit: number
+  ): Promise<{
+    rows: ReaderRow[];
+    truncated: boolean;
+  }> {
+    const results = await this.executeTraversal(
+      (g) =>
+        g
+          .V()
+          .hasLabel('IamRole', 'IamUser', 'IamGroup')
+          .has('account_id', accountId)
+          .as('principal')
+          .out('ATTACHED_TO')
+          .coalesce(
+            __.hasLabel('IamPolicyDocument'),
+            __.out('CONTAINS').hasLabel('IamPolicyDocument')
+          )
+          .as('doc')
+          .out('CONTAINS')
+          .hasLabel('IamPolicyStatement')
+          .or(__.has('grants_secret_read', true), __.has('not_actions'), __.has('effect', 'Deny'))
+          .as('statement')
+          .limit(limit + 1)
+          .select('principal', 'doc', 'statement')
+          .by(
+            __.project('id', 'label', 'name', 'admin', 'adminRole')
+              .by(t.id)
+              .by(t.label)
+              .by(textValue('id'))
+              .by(textValue('is_admin'))
+              .by(textValue('is_admin_role'))
+          )
+          .by(
+            __.project('type', 'arn', 'name')
+              .by(textValue('policy_type'))
+              .by(textValue('policy_arn'))
+              .by(textValue('id'))
+          )
+          .by(
+            __.project(
+              'id',
+              'effect',
+              'actions',
+              'notActions',
+              'resources',
+              'notResources',
+              'conditions'
+            )
+              .by(t.id)
+              .by(textValue('effect'))
+              .by(textValue('actions'))
+              .by(textValue('not_actions'))
+              .by(textValue('resources'))
+              .by(textValue('not_resources'))
+              .by(textValue('conditions_json'))
+          ),
+      { timeoutMs: SECRET_READERS_TIMEOUT_MS, maxAttempts: 1 }
+    );
+    const text = (row: unknown, key: string) => stringValue(getMapValue(row, key));
+    const rows = results.slice(0, limit).map((result) => {
+      const principal = getMapValue(result, 'principal');
+      const doc = getMapValue(result, 'doc');
+      const statement = getMapValue(result, 'statement');
+      return {
+        principal: {
+          id: text(principal, 'id'),
+          label: text(principal, 'label'),
+          name: text(principal, 'name'),
+          admin:
+            optionalBoolean(getMapValue(principal, 'admin')) === true ||
+            optionalBoolean(getMapValue(principal, 'adminRole')) === true,
+        },
+        policy: { type: text(doc, 'type'), arn: text(doc, 'arn'), name: text(doc, 'name') },
+        statement: {
+          id: text(statement, 'id'),
+          effect: text(statement, 'effect'),
+          actions: text(statement, 'actions') || null,
+          notActions: text(statement, 'notActions') || null,
+          resources: text(statement, 'resources') || null,
+          notResources: text(statement, 'notResources') || null,
+          conditional: text(statement, 'conditions') !== '',
+        },
+      };
+    });
+    return { rows, truncated: results.length > limit };
   }
 
   // The two collectors write TRUSTS in opposite directions, so follow both.
@@ -572,6 +775,191 @@ function extractPath(value: unknown): { nodes: GraphVertex[]; edges: GraphEdge[]
     .filter(isRawMap)
     .map((edge, index) => extractEdge(edge, nodes[index]?.id || '', nodes[index + 1]?.id || ''));
   return { nodes, edges };
+}
+
+export interface SecretShare {
+  anyone: boolean;
+  orgRestricted: boolean;
+  named: number;
+  collected: number;
+}
+
+export interface SecretRecord {
+  // ssm-plaintext: a String parameter whose name looks like a credential.
+  kind: 'secrets-manager' | 'ssm-parameter' | 'ssm-plaintext';
+  id: string;
+  name: string;
+  accountId: string;
+  customerManagedKey: boolean;
+  // From the resource's tags; null when untagged.
+  env: string | null;
+  owner: string | null;
+  rotationEnabled: boolean | null;
+  lastRotated: string | null;
+  createdAt: string | null;
+  // AWS records last access to the day; null when never read.
+  lastAccessed: string | null;
+  lastModified: string | null;
+  collectionRestricted: boolean;
+  shares: SecretShare[];
+  // Distinct collected accounts the shares name.
+  sharedAccounts: number;
+}
+
+// The cross-account Allow statements of a secret's resource policy, read the
+// way RULE-010, RULE-032 and RULE-033 read them.
+function shareStatements(): GraphTraversal {
+  return __.outE('HAS_RESOURCE_POLICY')
+    .inV()
+    .hasLabel('IamPolicyDocument')
+    .outE('CONTAINS')
+    .inV()
+    .hasLabel('IamPolicyStatement')
+    .has('effect', 'Allow')
+    .has('has_cross_account_principal', true)
+    .has('principal_account_count');
+}
+
+function secretShares(): GraphTraversal {
+  return shareStatements()
+    .project('anyone', 'org', 'named', 'collected')
+    .by(__.coalesce(__.values('principal_is_anyone'), __.constant(false)))
+    .by(__.coalesce(__.values('principal_org_restricted'), __.constant(false)))
+    .by(__.values('principal_account_count'))
+    .by(__.out('SHARES_WITH').hasLabel('AwsAccount').count())
+    .fold();
+}
+
+// Distinct collected accounts across every statement, counted in the graph so
+// no account id leaves it.
+function sharedAccountCount(): GraphTraversal {
+  return shareStatements().out('SHARES_WITH').hasLabel('AwsAccount').dedup().count();
+}
+
+function textValue(key: string): GraphTraversal {
+  return __.coalesce(__.values(key), __.constant(''));
+}
+
+function projectSecret(traversal: GraphTraversal): GraphTraversal {
+  return traversal
+    .project(
+      'id',
+      'name',
+      'account',
+      'rotation',
+      'rotated',
+      'created',
+      'accessed',
+      'key',
+      'restricted',
+      'shares',
+      'sharedAccounts',
+      'env',
+      'owner'
+    )
+    .by(t.id)
+    .by(textValue('name'))
+    .by(textValue('account_id'))
+    .by(textValue('rotation_enabled'))
+    .by(textValue('last_rotated'))
+    .by(textValue('created_at'))
+    .by(textValue('last_accessed'))
+    .by(textValue('kms_key_id'))
+    .by(textValue('collection_restricted'))
+    .by(secretShares())
+    .by(sharedAccountCount())
+    .by(textValue('env'))
+    .by(textValue('owner'));
+}
+
+function projectParameter(traversal: GraphTraversal): GraphTraversal {
+  return traversal
+    .project('id', 'name', 'account', 'modified', 'key', 'type', 'env', 'owner')
+    .by(t.id)
+    .by(textValue('name'))
+    .by(textValue('account_id'))
+    .by(textValue('last_modified'))
+    .by(textValue('key_id'))
+    .by(textValue('type'))
+    .by(textValue('env'))
+    .by(textValue('owner'));
+}
+
+const PLAINTEXT_TYPES = ['String', 'StringList'];
+const MAX_PLAINTEXT_SCAN = 20_000;
+// Names people give credentials. Matched on the name only; values are never read.
+const SECRET_NAME = /(password|passwd|secret|token|api[-_.]?key|private[-_.]?key|credential)/i;
+
+export function looksLikeSecret(name: string): boolean {
+  return SECRET_NAME.test(name);
+}
+
+function plaintextRecord(row: unknown): SecretRecord {
+  return { ...parameterRecord(row), kind: 'ssm-plaintext', customerManagedKey: false };
+}
+
+function secretRecord(row: unknown): SecretRecord {
+  return {
+    kind: 'secrets-manager',
+    ...commonSecretFields(row),
+    rotationEnabled: optionalBoolean(getMapValue(row, 'rotation')),
+    lastRotated: stringValue(getMapValue(row, 'rotated')) || null,
+    createdAt: stringValue(getMapValue(row, 'created')) || null,
+    lastAccessed: stringValue(getMapValue(row, 'accessed')) || null,
+    lastModified: null,
+    collectionRestricted: optionalBoolean(getMapValue(row, 'restricted')) === true,
+    sharedAccounts: Number(unwrapValue(getMapValue(row, 'sharedAccounts'))) || 0,
+    shares: listValue(getMapValue(row, 'shares')).map((share) => ({
+      anyone: optionalBoolean(getMapValue(share, 'anyone')) === true,
+      orgRestricted: optionalBoolean(getMapValue(share, 'org')) === true,
+      named: Number(unwrapValue(getMapValue(share, 'named'))) || 0,
+      collected: Number(unwrapValue(getMapValue(share, 'collected'))) || 0,
+    })),
+  };
+}
+
+function parameterRecord(row: unknown): SecretRecord {
+  return {
+    kind: 'ssm-parameter',
+    ...commonSecretFields(row),
+    rotationEnabled: null,
+    lastRotated: null,
+    createdAt: null,
+    lastAccessed: null,
+    lastModified: stringValue(getMapValue(row, 'modified')) || null,
+    collectionRestricted: false,
+    sharedAccounts: 0,
+    shares: [],
+  };
+}
+
+// No key, or an alias/aws/ key, is the service's AWS-managed key.
+function isCustomerManagedKey(key: string): boolean {
+  return key !== '' && !key.includes('alias/aws/');
+}
+
+function commonSecretFields(row: unknown) {
+  return {
+    id: stringValue(getMapValue(row, 'id')),
+    name: stringValue(getMapValue(row, 'name')),
+    accountId: stringValue(getMapValue(row, 'account')),
+    customerManagedKey: isCustomerManagedKey(stringValue(getMapValue(row, 'key'))),
+    env: stringValue(getMapValue(row, 'env')) || null,
+    owner: stringValue(getMapValue(row, 'owner')) || null,
+  };
+}
+
+function optionalBoolean(value: unknown): boolean | null {
+  const unwrapped = unwrapValue(value);
+  if (unwrapped === true || unwrapped === 'true') return true;
+  if (unwrapped === false || unwrapped === 'false') return false;
+  return null;
+}
+
+// A folded list stays a list even with one entry, unlike unwrapValue.
+function listValue(value: unknown): unknown[] {
+  const list = value && typeof value === 'object' && 'value' in value ? value.value : value;
+  return Array.isArray(list) ? list.filter(isRawMap) : [];
 }
 
 function isRawMap(value: unknown): value is NeptuneRawMap {

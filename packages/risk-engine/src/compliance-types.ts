@@ -1240,12 +1240,27 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
       'A chain of role trusts that ends at an admin role, or at a role that can grant itself more, gives every principal at its start that power.',
     severity: 'critical',
     automated: true,
-    relatedRules: ['RULE-030'],
+    relatedRules: ['RULE-030', 'RULE-034'],
     evidenceRequirements: [
       'RULE-030: a principal or account that can assume, in up to three hops, an admin role or a role holding privilege-escalation actions.',
+      'RULE-034: a principal that can pass an admin role to compute it creates.',
     ],
     remediationGuidance:
       'Trust specific roles instead of the account root, add trust conditions, and remove trusts no workload uses.',
+  },
+  {
+    id: 'KH-IAM-3',
+    framework: 'KHALIFA_BASELINE',
+    section: '1. Identity and Access Management',
+    title: 'Ensure no IAM user with admin access holds an active access key',
+    description:
+      'A long-lived access key on an admin user is full account access for whoever holds a copy of it.',
+    severity: 'critical',
+    automated: true,
+    relatedRules: ['RULE-031'],
+    evidenceRequirements: ['RULE-031: an admin IAM user with an active access key.'],
+    remediationGuidance:
+      'Use roles (SSO, IRSA, instance roles, OIDC) instead of user keys, or remove admin from the user.',
   },
   {
     id: 'KH-EXP-1',
@@ -1315,11 +1330,11 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
     section: 'Secrets management',
     title: 'Ensure Secrets Manager access is scoped to explicit secret ARNs',
     description:
-      'Identity and resource policies granting secret reads against wildcard resources or cross-account principals.',
+      'Identity policies granting secret reads against wildcard resources, and secret resource policies that allow an outside account or anyone, a non-prod account to read a prod secret, or another collected account.',
     severity: 'high',
     automated: true,
-    relatedRules: ['RULE-010', 'RULE-016'],
-    evidenceRequirements: ['Graph traversal result for RULE-010, RULE-016'],
+    relatedRules: ['RULE-010', 'RULE-016', 'RULE-032', 'RULE-033'],
+    evidenceRequirements: ['Graph traversal result for RULE-010, RULE-016, RULE-032, RULE-033'],
     remediationGuidance:
       'Replace wildcard resources with explicit secret ARNs and remove cross-account principals.',
   },

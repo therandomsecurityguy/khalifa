@@ -167,9 +167,9 @@ export function getRemediationHint(ruleId: string, _context: Record<string, any>
     'RULE-008':
       'Make the instance private (aws rds modify-db-instance --no-publicly-accessible) and limit its security group to private sources.',
     'RULE-009':
-      'Scope the function role to the tables and buckets it uses, and reach AWS through VPC endpoints instead of a NAT if it does not need the internet.',
+      'Put authentication on the function URL or API in front of it (AWS_IAM, an authorizer), and scope the function role to the tables and buckets it uses.',
     'RULE-010':
-      'Scope the statement to specific secret ARNs, remove cross-account principals unless required, and turn on rotation for the secret.',
+      "Remove the outside account or '*' from the secret's resource policy, or limit '*' with aws:PrincipalOrgID. If the account is ours but not collected, add it to collection; if the share is intended, suppress with the reason.",
     'RULE-011':
       'Block public access on the bucket now, then review the objects DSPM classified as restricted or secret and move or delete them.',
     'RULE-012':
@@ -207,6 +207,14 @@ export function getRemediationHint(ruleId: string, _context: Record<string, any>
       'Start the Config recorder (aws configservice start-configuration-recorder) and confirm its delivery channel delivers.',
     'RULE-029':
       'Treat as an active intrusion on an internet-facing resource: isolate or restrict its exposure, rotate credentials it holds, and investigate the GuardDuty finding.',
+    'RULE-031':
+      "Replace the user's access key with a role (SSO, IRSA, an instance role or GitHub OIDC), or move the user off admin. Deactivate the key once nothing uses it (check its last use).",
+    'RULE-032':
+      'Narrow the resource policy to the prod accounts that use the secret, or give the non-prod account its own secret. If the share is intended, suppress with the reason.',
+    'RULE-033':
+      'Confirm each account in the resource policy still needs the secret, and narrow it to the specific role ARNs that read it.',
+    'RULE-034':
+      "Scope the principal's iam:PassRole to the specific non-admin roles its workloads use, and add an iam:PassedToService condition. If it must pass this role, narrow the role instead.",
     'RULE-030':
       "Narrow the target role's trust policy to the specific roles that need it, not the account root, and add conditions (sts:ExternalId, aws:PrincipalArn). If the access is intended, suppress with the reason.",
   };

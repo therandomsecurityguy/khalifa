@@ -789,6 +789,20 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       displayName: 'Khalifa Security Issues',
     });
 
+    // A Slack webhook URL is a bearer-equivalent credential, so it must not
+    // ride along as a plaintext Lambda environment variable (readable by
+    // anyone with lambda:GetFunctionConfiguration). When a webhook is
+    // configured at deploy time it is stored in Secrets Manager and the risk
+    // engine resolves it at runtime via SLACK_WEBHOOK_SECRET_ARN, mirroring
+    // how the collector external ID is delivered.
+    const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL || '';
+    const slackWebhookSecret = slackWebhookUrl
+      ? new secretsmanager.Secret(this, 'SlackWebhookSecret', {
+          secretName: 'khalifa/slack-webhook',
+          secretStringValue: cdk.SecretValue.unsafePlainText(slackWebhookUrl),
+        })
+      : undefined;
+
     const riskEngineFn = new lambda.Function(this, 'RiskEngineFn', {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
@@ -801,7 +815,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         POSTURE_TRENDS_TABLE: postureTrendsTable.tableName,
         ISSUES_TOPIC_ARN: issuesTopic.topicArn,
         ISSUE_SINKS: process.env.ISSUE_SINKS || 'sns',
-        SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL || '',
+        SLACK_WEBHOOK_SECRET_ARN: slackWebhookSecret?.secretArn ?? '',
         SLACK_MIN_SEVERITY: process.env.SLACK_MIN_SEVERITY || 'high',
         UI_BASE_URL: process.env.UI_BASE_URL || '',
       },
@@ -819,6 +833,9 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         resources: [this.issuesTable.tableArn, this.issuesTable.tableArn + '/index/*'],
       })
     );
+    if (slackWebhookSecret) {
+      slackWebhookSecret.grantRead(riskEngineFn);
+    }
     riskEngineFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,

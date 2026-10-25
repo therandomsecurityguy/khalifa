@@ -87,6 +87,9 @@ async function managedPolicy(role: string, statement: Props): Promise<string> {
 beforeEach(() => neptune.submit('g.V().drop().iterate()'));
 afterAll(() => neptune.close());
 
+// ExternalAccount as the collector writes it (cross-account.ts).
+const external = (id: string) => ({ account_id: id, external_account_id: id });
+
 describe('rule queries against a Gremlin Server', () => {
   it('RULE-001 matches an exposed instance whose role reaches restricted S3', async () => {
     for (const [ec2, exposed, classification] of [
@@ -103,16 +106,29 @@ describe('rule queries against a Gremlin Server', () => {
     expect(starts(await run('RULE-001'))).toEqual(['ec2-hit']);
   });
 
+  it('RULE-006 reads the trusted account from external_account_id, not account_id', async () => {
+    // Before ExternalAccount was left unscoped, the collector overwrote its
+    // account_id with the collecting account, so the rule could never match.
+    await vertex('AwsAccount', 'arn:aws:iam::111111111111:root', { account_id: '111111111111' });
+    await vertex('ExternalAccount', 'ext-999', {
+      account_id: '111111111111',
+      external_account_id: '999999999999',
+    });
+    await inlinePolicy('role-trusted', { has_wildcard_resource: true });
+    await edge('role-trusted', 'TRUSTS', 'ext-999');
+    expect(starts(await run('RULE-006'))).toEqual(['role-trusted']);
+  });
+
   it('RULE-006 matches a trusted role with a wildcard Allow', async () => {
-    await vertex('ExternalAccount', 'ext-999', { account_id: '999999999999' });
+    await vertex('ExternalAccount', 'ext-999', external('999999999999'));
     await inlinePolicy('role-trusted', { has_wildcard_resource: true });
     await edge('role-trusted', 'TRUSTS', 'ext-999');
     await inlinePolicy('role-untrusted', { has_wildcard_resource: true });
     expect(starts(await run('RULE-006'))).toEqual(['role-trusted']);
   });
 
-  it('RULE-009 matches an internet-reaching Lambda whose role reaches classified data', async () => {
-    await vertex('LambdaFunction', 'fn', { is_in_vpc: true, has_internet_access: true });
+  it('RULE-009 matches an internet-exposed Lambda whose role reaches classified data', async () => {
+    await vertex('LambdaFunction', 'fn', { is_internet_exposed: true });
     const statement = await inlinePolicy('fn-role', {});
     await vertex('DynamoDBTable', 'table', { data_classification: 'internal' });
     await edge('fn', 'HAS_IAM_ROLE', 'fn-role');
@@ -120,16 +136,72 @@ describe('rule queries against a Gremlin Server', () => {
     expect(starts(await run('RULE-009'))).toEqual(['fn']);
   });
 
-  it('RULE-010 matches a database secret granted by a wildcard statement on a role', async () => {
-    for (const [secret, type] of [
-      ['secret-db', 'database'],
-      ['secret-api', 'api_key'],
-    ]) {
-      await vertex('Secret', secret, { secret_type: type });
-      const statement = await inlinePolicy(`${secret}-role`, { has_wildcard_resource: true });
-      await edge(statement, 'GRANTS', secret);
+  it('RULE-010, RULE-032 and RULE-033 split secret shares by who receives them', async () => {
+    const prod = 'arn:aws:iam::111111111111:root';
+    const nonProd = 'arn:aws:iam::222222222222:root';
+    await vertex('AwsAccount', prod, { is_prod: true });
+    await vertex('AwsAccount', nonProd, { is_prod: false });
+
+    const anyone = { principal_is_anyone: true, principal_account_count: 0 };
+    const accounts = (count: number) => ({
+      principal_is_anyone: false,
+      principal_org_restricted: false,
+      principal_account_count: count,
+    });
+    // Each statement: its properties and the collected accounts it reaches.
+    const fixtures: [string, Props, [Props, string[]][]][] = [
+      ['s-anyone', {}, [[{ ...anyone, principal_org_restricted: false }, []]]],
+      ['s-outside', {}, [[accounts(1), []]]],
+      ['s-partial', {}, [[accounts(2), [prod]]]],
+      [
+        's-mixed',
+        {},
+        [
+          [accounts(1), [prod]],
+          [accounts(1), []],
+        ],
+      ],
+      ['s-org', { env: 'dev' }, [[{ ...anyone, principal_org_restricted: true }, []]]],
+      ['s-prod-nonprod', { env: 'prod' }, [[accounts(1), [nonProd]]]],
+      ['s-prod-org', { env: 'prod' }, [[{ ...anyone, principal_org_restricted: true }, []]]],
+      ['s-prod-prod', { env: 'prod' }, [[accounts(1), [prod]]]],
+      ['s-deny', {}, [[{ ...accounts(1), effect: 'Deny' }, []]]],
+      // Collected before the principal fields existed.
+      ['s-legacy', {}, [[{}, []]]],
+    ];
+    for (const [secret, secretProps, statements] of fixtures) {
+      await vertex('Secret', secret, secretProps);
+      await vertex('IamPolicyDocument', `${secret}/policy`);
+      await edge(secret, 'HAS_RESOURCE_POLICY', `${secret}/policy`);
+      for (const [index, [props, reaches]] of statements.entries()) {
+        const statement = `${secret}/policy/${index}`;
+        await vertex('IamPolicyStatement', statement, {
+          effect: 'Allow',
+          has_cross_account_principal: true,
+          ...props,
+        });
+        await edge(`${secret}/policy`, 'CONTAINS', statement);
+        for (const account of reaches) await edge(statement, 'SHARES_WITH', account);
+      }
     }
-    expect(starts(await run('RULE-010'))).toEqual(['secret-db']);
+    // A wildcard grant in a role's own policy is RULE-016, not these rules.
+    await vertex('Secret', 'secret-role-grant');
+    const statement = await inlinePolicy('role-wildcard', {
+      has_wildcard_resource: true,
+      has_cross_account_principal: true,
+    });
+    await edge(statement, 'GRANTS', 'secret-role-grant');
+
+    expect(starts(await run('RULE-010'))).toEqual([
+      's-anyone',
+      's-mixed',
+      's-outside',
+      's-partial',
+    ]);
+    // Only the outside statement is on the path, not the internal one beside it.
+    expect((await run('RULE-010')).filter((path) => path[0] === 's-mixed')).toHaveLength(1);
+    expect(starts(await run('RULE-032'))).toEqual(['s-prod-nonprod', 's-prod-org']);
+    expect(starts(await run('RULE-033'))).toEqual(['s-org', 's-prod-prod']);
   });
 
   it('RULE-016 matches wildcard secret reads attached to a principal', async () => {
@@ -150,7 +222,7 @@ describe('rule queries against a Gremlin Server', () => {
   });
 
   it('RULE-006 follows a managed policy from a trusted role', async () => {
-    await vertex('ExternalAccount', 'ext-999', { account_id: '999999999999' });
+    await vertex('ExternalAccount', 'ext-999', external('999999999999'));
     await managedPolicy('role-managed', { has_wildcard_resource: true });
     await edge('role-managed', 'TRUSTS', 'ext-999');
     expect(starts(await run('RULE-006'))).toEqual(['role-managed']);
@@ -158,8 +230,8 @@ describe('rule queries against a Gremlin Server', () => {
 
   it('RULE-006 ignores trusts between collected accounts', async () => {
     await vertex('AwsAccount', 'arn:aws:iam::111111111111:root', { account_id: '111111111111' });
-    await vertex('ExternalAccount', 'ext-111', { account_id: '111111111111' });
-    await vertex('ExternalAccount', 'ext-999', { account_id: '999999999999' });
+    await vertex('ExternalAccount', 'ext-111', external('111111111111'));
+    await vertex('ExternalAccount', 'ext-999', external('999999999999'));
     await inlinePolicy('role-collector', { has_wildcard_resource: true });
     await edge('role-collector', 'TRUSTS', 'ext-111');
     await inlinePolicy('role-mixed', { has_wildcard_resource: true });
@@ -168,26 +240,21 @@ describe('rule queries against a Gremlin Server', () => {
     expect(starts(await run('RULE-006'))).toEqual(['role-mixed']);
   });
 
-  it('RULE-001, 009 and 010 follow managed policies', async () => {
+  it('RULE-001 and RULE-009 follow managed policies', async () => {
     await vertex('Ec2Instance', 'ec2', { is_internet_exposed: true });
     const ec2Statement = await managedPolicy('ec2-role', {});
     await vertex('S3Bucket', 'bucket', { data_classification: 'restricted' });
     await edge('ec2', 'HAS_IAM_ROLE', 'ec2-role');
     await edge(ec2Statement, 'GRANTS', 'bucket');
 
-    await vertex('LambdaFunction', 'fn', { is_in_vpc: true, has_internet_access: true });
+    await vertex('LambdaFunction', 'fn', { is_internet_exposed: true });
     const fnStatement = await managedPolicy('fn-role', {});
     await vertex('DynamoDBTable', 'table', { data_classification: 'secret' });
     await edge('fn', 'HAS_IAM_ROLE', 'fn-role');
     await edge(fnStatement, 'GRANTS', 'table');
 
-    await vertex('Secret', 'secret-db', { secret_type: 'database' });
-    const secretStatement = await managedPolicy('secret-role', { has_wildcard_resource: true });
-    await edge(secretStatement, 'GRANTS', 'secret-db');
-
     expect(starts(await run('RULE-001'))).toEqual(['ec2']);
     expect(starts(await run('RULE-009'))).toEqual(['fn']);
-    expect(starts(await run('RULE-010'))).toEqual(['secret-db']);
   });
 });
 
@@ -199,7 +266,7 @@ describe('identity and data rules', () => {
     await edge('ec2', 'HAS_IAM_ROLE', 'ec2-role');
     await edge(ec2Statement, 'GRANTS', 'bucket');
 
-    await vertex('LambdaFunction', 'fn', { is_in_vpc: true, has_internet_access: true });
+    await vertex('LambdaFunction', 'fn', { is_internet_exposed: true });
     const fnStatement = await inlinePolicy('fn-role', { effect: 'Deny' });
     await vertex('DynamoDBTable', 'table', { data_classification: 'secret' });
     await edge('fn', 'HAS_IAM_ROLE', 'fn-role');
@@ -248,8 +315,29 @@ describe('identity and data rules', () => {
     expect(starts(await run('RULE-030'))).toEqual(['acct-root', 'ci-role', 'dev-user']);
   });
 
+  it('RULE-034 matches pass_role links only, and RULE-030 leaves them out', async () => {
+    await vertex('IamRole', 'admin', { is_admin: true });
+    await vertex('IamRole', 'ci-role');
+    await vertex('IamUser', 'dev-user');
+    await vertex('IamRole', 'trust-role');
+    await edge('ci-role', 'CAN_ESCALATE_TO', 'admin', {
+      risk_level: 'critical',
+      escalation_type: 'pass_role',
+    });
+    await edge('dev-user', 'CAN_ESCALATE_TO', 'admin', {
+      risk_level: 'critical',
+      escalation_type: 'pass_role',
+    });
+    await edge('trust-role', 'CAN_ESCALATE_TO', 'admin', {
+      risk_level: 'critical',
+      escalation_type: 'admin',
+    });
+    expect(starts(await run('RULE-034'))).toEqual(['ci-role', 'dev-user']);
+    expect(starts(await run('RULE-030'))).toEqual(['trust-role']);
+  });
+
   it('RULE-006 ignores an untrusted role and a non-wildcard or Deny statement', async () => {
-    await vertex('ExternalAccount', 'ext-999', { account_id: '999999999999' });
+    await vertex('ExternalAccount', 'ext-999', external('999999999999'));
     for (const [role, statement] of [
       ['role-scoped', { has_wildcard_resource: false }],
       ['role-deny', { has_wildcard_resource: true, effect: 'Deny' }],
@@ -287,40 +375,22 @@ describe('identity and data rules', () => {
     expect(starts(await run('RULE-008'))).toEqual(['rds-hit']);
   });
 
-  it('RULE-009 ignores a Lambda without internet access and public data', async () => {
-    for (const [fn, internet, classification] of [
-      ['fn-offline', false, 'restricted'],
+  it('RULE-009 ignores an unexposed Lambda and public data', async () => {
+    for (const [fn, exposed, classification] of [
+      ['fn-unexposed', false, 'restricted'],
       ['fn-public-data', true, 'public'],
     ] as const) {
-      await vertex('LambdaFunction', fn, { is_in_vpc: true, has_internet_access: internet });
+      // Outbound internet alone is not exposure.
+      await vertex('LambdaFunction', fn, {
+        is_internet_exposed: exposed,
+        has_internet_access: true,
+      });
       const statement = await inlinePolicy(`${fn}-role`, {});
       await vertex('S3Bucket', `${fn}-bucket`, { data_classification: classification });
       await edge(fn, 'HAS_IAM_ROLE', `${fn}-role`);
       await edge(statement, 'GRANTS', `${fn}-bucket`);
     }
     expect(await run('RULE-009')).toEqual([]);
-  });
-
-  it('RULE-010 matches a cross-account statement and a secret resource policy', async () => {
-    await vertex('Secret', 'secret-cross', { secret_type: 'database' });
-    const cross = await inlinePolicy('role-cross', { has_cross_account_principal: true });
-    await edge(cross, 'GRANTS', 'secret-cross');
-
-    await vertex('Secret', 'secret-resource', { secret_type: 'database' });
-    await vertex('IamPolicyDocument', 'secret-resource/policy');
-    await vertex('IamPolicyStatement', 'secret-resource/policy/0', {
-      effect: 'Allow',
-      has_wildcard_resource: true,
-    });
-    await edge('secret-resource', 'HAS_RESOURCE_POLICY', 'secret-resource/policy');
-    await edge('secret-resource/policy', 'CONTAINS', 'secret-resource/policy/0');
-    await edge('secret-resource/policy/0', 'GRANTS', 'secret-resource');
-
-    await vertex('Secret', 'secret-scoped', { secret_type: 'database' });
-    const scoped = await inlinePolicy('role-scoped', { has_wildcard_resource: false });
-    await edge(scoped, 'GRANTS', 'secret-scoped');
-
-    expect(starts(await run('RULE-010'))).toEqual(['secret-cross', 'secret-resource']);
   });
 
   it('RULE-011 matches a public bucket with a restricted or secret DSPM finding', async () => {
@@ -392,6 +462,21 @@ describe('credential rules', () => {
     await userKey('recent', { status: 'Active', last_used_days_ago: 3 });
     await userKey('inactive', { status: 'Inactive', last_used_days_ago: 400 });
     expect(starts(await run('RULE-014'))).toEqual(['stale/key']);
+  });
+
+  it('RULE-031 matches an admin user with an active access key', async () => {
+    for (const [user, admin, status] of [
+      ['admin-active', true, 'Active'],
+      ['admin-inactive', true, 'Inactive'],
+      ['plain-active', false, 'Active'],
+    ] as const) {
+      await vertex('IamUser', user, { is_admin: admin });
+      await vertex('AccessKey', `${user}/key`, { status });
+      await edge(user, 'HAS_ACCESS_KEY', `${user}/key`);
+    }
+    // Not yet evaluated: no is_admin at all.
+    await userKey('unevaluated', { status: 'Active' });
+    expect(starts(await run('RULE-031'))).toEqual(['admin-active']);
   });
 
   it('RULE-015 matches a console user without MFA', async () => {
@@ -517,19 +602,21 @@ describe('exposure rules', () => {
     expect(starts(await run('RULE-029'))).toEqual(['backdoor', 'crypto']);
   });
 
-  // RULE-003 is disabled. It walks RUNS_ON into the CVE, but RUNS_ON runs from the
-  // image to its workload (ARCHITECTURE.md), so it can never match.
-  it.failing(
-    'RULE-003 matches a critical CVE on an image running on an exposed workload',
-    async () => {
-      await vertex('ContainerImage', 'image');
-      await vertex('Vulnerability', 'cve', { severity: 'CRITICAL', cvss_base_score: 9.8 });
-      await vertex('Ec2Instance', 'ec2', { is_internet_exposed: true });
-      await edge('image', 'HAS_CVE', 'cve');
-      await edge('image', 'RUNS_ON', 'ec2');
-      expect(starts(await run('RULE-003'))).toEqual(['image']);
+  // RULE-003 stays disabled until CVE data exists; its query is ready for it.
+  it('RULE-003 matches an exposed workload running an image with a critical CVE', async () => {
+    for (const [ec2, exposed, score] of [
+      ['ec2-hit', true, 9.8],
+      ['ec2-internal', false, 9.8],
+      ['ec2-low', true, 7.5],
+    ] as const) {
+      await vertex('ContainerImage', `${ec2}-image`);
+      await vertex('Vulnerability', `${ec2}-cve`, { severity: 'CRITICAL', cvss_base_score: score });
+      await vertex('Ec2Instance', ec2, { is_internet_exposed: exposed });
+      await edge(`${ec2}-image`, 'HAS_CVE', `${ec2}-cve`);
+      await edge(`${ec2}-image`, 'RUNS_ON', ec2);
     }
-  );
+    expect(starts(await run('RULE-003'))).toEqual(['ec2-hit']);
+  });
 });
 
 describe('detection and posture rules', () => {

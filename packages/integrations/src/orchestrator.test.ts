@@ -31,6 +31,7 @@ describe('IssueIntegrationsOrchestrator', () => {
     delete process.env.ISSUE_SINKS;
     delete process.env.ISSUES_TOPIC_ARN;
     delete process.env.SLACK_WEBHOOK_URL;
+    delete process.env.SLACK_WEBHOOK_SECRET_ARN;
     delete process.env.SLACK_MIN_SEVERITY;
   });
 

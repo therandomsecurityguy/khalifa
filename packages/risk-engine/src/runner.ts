@@ -27,6 +27,11 @@ const MAX_ISSUE_RESOURCES = 200;
 
 const SEVERITY_RANK: Record<Severity, number> = { low: 0, medium: 1, high: 2, critical: 3 };
 
+function cappedSeverity(rule: RiskRule, severity: Severity): Severity {
+  const max = rule.maxSeverity;
+  return max && SEVERITY_RANK[severity] > SEVERITY_RANK[max] ? max : severity;
+}
+
 export class RiskRuleRunner {
   constructor(
     neptuneEndpoint: string,
@@ -293,7 +298,7 @@ export class RiskRuleRunner {
       resourcesInvolved: resources,
       pathSummary: this.pathSegments(path),
       riskScore: scoreResult.score,
-      severity: scoreResult.severity,
+      severity: cappedSeverity(rule, scoreResult.severity),
       status: 'open',
       createdAt: now,
       updatedAt: now,
@@ -329,7 +334,7 @@ export class RiskRuleRunner {
       resourcesInvolved: resources,
       pathSummary: this.pathSegments(path),
       riskScore: scoreResult.score,
-      severity: scoreResult.severity,
+      severity: cappedSeverity(rule, scoreResult.severity),
       remediationHint: getRemediationHint(rule.id, {}),
       updatedAt,
       metadata: {

@@ -79,11 +79,11 @@ const REVIEWED_MAPPING: Record<string, { controls: string[]; why: string }> = {
   'RULE-008': { controls: ['2.3.3'], why: 'public RDS instance, sensitive ones only' },
   'RULE-009': {
     controls: ['KH-EXP-1'],
-    why: 'VPC Lambda with internet access reaching classified data',
+    why: 'internet-exposed Lambda whose role reaches classified data',
   },
   'RULE-010': {
     controls: ['KH-SEC-1'],
-    why: 'database secret granted by a wildcard or cross-account statement',
+    why: 'secret resource policy allowing an outside account or anyone',
   },
   'RULE-011': { controls: ['2.1.4'], why: 'public S3 bucket holding PII' },
   'RULE-012': { controls: ['KH-SEC-2'], why: 'secrets found in S3 objects or Lambda environments' },
@@ -116,9 +116,16 @@ const REVIEWED_MAPPING: Record<string, { controls: string[]; why: string }> = {
     controls: ['KH-DET-3'],
     why: 'an active GuardDuty attack finding on an internet-exposed resource',
   },
+  'RULE-031': { controls: ['KH-IAM-3'], why: 'admin IAM user with an active access key' },
+  'RULE-032': { controls: ['KH-SEC-1'], why: 'prod secret readable from a non-prod account' },
+  'RULE-033': { controls: ['KH-SEC-1'], why: 'secret shared with another collected account' },
   'RULE-030': {
     controls: ['KH-IAM-2'],
     why: 'principal that can assume its way to an admin or escalation role',
+  },
+  'RULE-034': {
+    controls: ['KH-IAM-2'],
+    why: 'principal that can pass an admin role to compute it creates',
   },
 };
 
@@ -179,6 +186,7 @@ describe('rule-backed controls', () => {
         'KH-EXP-1',
         'KH-IAM-1',
         'KH-IAM-2',
+        'KH-IAM-3',
         'KH-SH-1',
         'KH-VULN-1',
       ].sort()

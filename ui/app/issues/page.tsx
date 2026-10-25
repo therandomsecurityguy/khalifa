@@ -82,12 +82,12 @@ function IssueRow({
       <Td>
         {subject ? (
           <>
-            <div className="break-all text-gray-900">
-              {subject.name} <span className="text-xs text-gray-500">({subject.type})</span>
-            </div>
+            <div className="break-all text-gray-900">{subject.name}</div>
+            {/* Type and account on their own lines so a long name never splits them. */}
             <div className="text-xs text-gray-500">
-              {[subject.account, subject.matches].filter(Boolean).join(' · ')}
+              {[subject.type, subject.matches].filter(Boolean).join(' · ')}
             </div>
+            {subject.account && <div className="text-xs text-gray-500">{subject.account}</div>}
           </>
         ) : (
           <span className="text-gray-400">—</span>

@@ -117,10 +117,36 @@ const ICON_BY_LABEL: Record<string, string> = {
   CloudTrailAnomaly: 'alert',
 };
 
-const HIDDEN_PROPS = new Set(['id', 'arn', 'name', 'account_id', 'external_account_id']);
+const HIDDEN_PROPS = new Set([
+  'id',
+  'arn',
+  'name',
+  'account_id',
+  'external_account_id',
+  'missing',
+  'deleted_label',
+]);
+
+// The issue API stands in a placeholder for a resource no longer in the graph.
+function isDeleted(node: GraphNode | undefined): boolean {
+  return node?.vertex.properties?.missing === true;
+}
 
 function typeLabel(node: GraphNode): string {
-  return node.vertex.id === INTERNET_ID ? 'Internet' : formatNodeLabel(node.vertex.label);
+  if (node.vertex.id === INTERNET_ID) return 'Internet';
+  if (isDeleted(node)) {
+    const original = node.vertex.properties?.deleted_label;
+    return typeof original === 'string' && original
+      ? `Deleted · ${formatNodeLabel(original)}`
+      : 'Deleted';
+  }
+  return formatNodeLabel(node.vertex.label);
+}
+
+// A deleted resource keeps the icon of the type it was.
+function iconLabel(node: GraphNode): string {
+  const original = node.vertex.properties?.deleted_label;
+  return isDeleted(node) && typeof original === 'string' ? original : node.vertex.label;
 }
 
 function shortName(node: GraphNode): string {
@@ -466,6 +492,12 @@ function NodeDetails({
         {vertex.id.startsWith('arn:') && (
           <p className="mt-1 break-all font-mono text-xs text-gray-500">{vertex.id}</p>
         )}
+        {isDeleted(node) && (
+          <p className="mt-2 text-sm italic text-gray-500">
+            Deleted: no longer in AWS. This issue resolves on the next rule run if nothing else
+            matches.
+          </p>
+        )}
       </div>
       {node.risks.length > 0 && (
         <section>
@@ -589,11 +621,14 @@ const EDGE_STYLE = {
     border: '#fde68a',
   },
   deny: { stroke: '#9ca3af', dash: '2 4', width: 1.4, text: '#6b7280', border: '#e5e7eb' },
+  deleted: { stroke: '#9ca3af', dash: '5 4', width: 1.4, text: '#6b7280', border: '#e5e7eb' },
 } as const;
 type EdgeStyle = keyof typeof EDGE_STYLE;
 
-// Deny never reads as reach; otherwise cross-account, conditional, then risk.
-function edgeStyle(link: GraphLink, target: GraphNode): EdgeStyle {
+// A link to or from a deleted resource no longer exists. Deny never reads as
+// reach; otherwise cross-account, conditional, then risk.
+function edgeStyle(link: GraphLink, target: GraphNode, source?: GraphNode): EdgeStyle {
+  if (isDeleted(target) || isDeleted(source)) return 'deleted';
   if (link.kind === 'deny') return 'deny';
   if (link.crossAccount) return 'cross';
   if (link.kind === 'conditional') return 'conditional';
@@ -660,7 +695,9 @@ export function AttackGraph({
     links: new Set([...focusOriginal.links].map((key) => grouped.linkOf.get(key) ?? key)),
   };
   const stages = [...new Set(model.nodes.map((node) => node.stage))];
-  const kinds = new Set(model.links.map((link) => edgeStyle(link, byId.get(link.to)!)));
+  const kinds = new Set(
+    model.links.map((link) => edgeStyle(link, byId.get(link.to)!, byId.get(link.from)))
+  );
   const select = (id: string) =>
     setSelectedId((current) => (current === id && model.pathCount > 1 ? null : id));
   const activate = (id: string) =>
@@ -800,7 +837,7 @@ export function AttackGraph({
               const key = `${link.from}>${link.to}`;
               const p = positions.get(link.from)!;
               const q = positions.get(link.to)!;
-              const kind = edgeStyle(link, drawnNodes.get(link.to)!);
+              const kind = edgeStyle(link, drawnNodes.get(link.to)!, drawnNodes.get(link.from));
               const style = EDGE_STYLE[kind];
               const x1 = p.x + CARD_W / 2;
               const x2 = q.x - CARD_W / 2 - 2;
@@ -864,6 +901,7 @@ export function AttackGraph({
                     ? '#b45309'
                     : '#cbd5e1';
               const dim = focus && !focus.nodes.has(id);
+              const deleted = isDeleted(node);
               const fullName = nodeName(node.vertex);
               const left = x - CARD_W / 2;
               const top = y - CARD_H / 2;
@@ -879,7 +917,7 @@ export function AttackGraph({
                       ? `${group.length} ${typeLabel(node)} with the same links, grouped`
                       : `${typeLabel(node)} ${fullName}${node.risks.length ? `, ${node.risks.length} risk flags` : ''}`
                   }
-                  opacity={dim ? 0.18 : 1}
+                  opacity={dim ? 0.18 : deleted ? 0.55 : 1}
                   className="cursor-pointer outline-none"
                   onClick={() => activate(id)}
                   onKeyDown={(event) => onKey(event, id)}
@@ -889,7 +927,7 @@ export function AttackGraph({
                   <title>
                     {group
                       ? group.map((member) => nodeName(member.vertex)).join('\n')
-                      : `${fullName}${id.startsWith('arn:') ? `\n${id}` : ''}`}
+                      : `${fullName}${deleted ? ' (deleted)' : ''}${id.startsWith('arn:') ? `\n${id}` : ''}`}
                   </title>
                   {group &&
                     [6, 3].map((offset) => (
@@ -923,21 +961,28 @@ export function AttackGraph({
                     width={CARD_W}
                     height={CARD_H}
                     rx="8"
-                    fill={isSelected ? '#eef2ff' : '#ffffff'}
-                    stroke={ring}
+                    fill={isSelected ? '#eef2ff' : deleted ? '#f9fafb' : '#ffffff'}
+                    stroke={deleted && !isSelected ? '#9ca3af' : ring}
                     strokeWidth={isSelected || level ? 1.8 : 1.2}
+                    strokeDasharray={deleted ? '4 3' : undefined}
                   />
                   <g transform={`translate(${left + 10},${y - 12})`}>
                     <path
-                      d={ICONS[ICON_BY_LABEL[node.vertex.label] ?? 'dot']}
+                      d={ICONS[ICON_BY_LABEL[iconLabel(node)] ?? 'dot']}
                       fill="none"
-                      stroke={color}
+                      stroke={deleted ? '#9ca3af' : color}
                       strokeWidth="1.7"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
                   </g>
-                  <text x={left + 42} y={y - 3} fontSize="12" fontWeight="600" fill="#111827">
+                  <text
+                    x={left + 42}
+                    y={y - 3}
+                    fontSize="12"
+                    fontWeight="600"
+                    fill={deleted ? '#6b7280' : '#111827'}
+                  >
                     {group ? `${typeLabel(node)} ×${group.length}` : shortName(node)}
                   </text>
                   <text x={left + 42} y={y + 13} fontSize="10.5" fill="#6b7280">
@@ -1022,6 +1067,12 @@ export function AttackGraph({
           <span className="inline-flex items-center gap-1.5">
             <span className="w-4 border-t-2 border-amber-600" />
             Conditional grant
+          </span>
+        )}
+        {kinds.has('deleted') && (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-4 border-t-2 border-dashed border-gray-400" />
+            Deleted resource
           </span>
         )}
         {kinds.has('deny') && (

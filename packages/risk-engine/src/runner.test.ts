@@ -89,6 +89,33 @@ describe('RiskRuleRunner stale-issue fix', () => {
     expect(updated.remediationHint).not.toBe('old hint');
   });
 
+  test('caps severity at the rule maxSeverity, keeping the score', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    store.updateIssue = jest.fn().mockResolvedValue(true);
+    const path = { vertices: newPath, edges: [] };
+
+    await (runner as any).refreshExistingIssue(existingIssue, rule, path);
+    await (runner as any).refreshExistingIssue(
+      existingIssue,
+      { ...rule, maxSeverity: 'low' },
+      path
+    );
+    const created = (runner as any).createIssueFromMatch(
+      { ...rule, maxSeverity: 'low' },
+      path,
+      [],
+      ['arn:aws:s3:::bucket'],
+      1
+    ) as Issue;
+
+    const [uncapped, capped] = store.updateIssue.mock.calls.map(([issue]: [Issue]) => issue);
+    expect(uncapped.severity).not.toBe('low');
+    expect(capped.severity).toBe('low');
+    expect(capped.riskScore).toBe(uncapped.riskScore);
+    expect(created.severity).toBe('low');
+  });
+
   test('emitToIntegrations skips when autoTicketConfig disabled', async () => {
     const disabledRule: RiskRule = { ...rule, autoTicketConfig: { enabled: false } };
     const runner = new RiskRuleRunner('localhost:8182');

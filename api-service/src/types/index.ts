@@ -83,10 +83,49 @@ export interface ResourceQuery {
 
 export interface IssueDetailResponse extends Issue {
   attackPath: AttackPathDetail;
+  // Involved resources off the drawn path, as currently in the graph.
+  involvedResources: GraphVertex[];
 }
 
 // Where an attacker gets onto the path, when the path itself does not start there.
 export type AttackPathEntry = { kind: 'internet' } | { kind: 'trust'; principals: GraphVertex[] };
+
+// Metadata only: the API never returns a secret's description, tags, key ARN
+// or policy text, and Khalifa never collects its value.
+export interface SecretSharing {
+  scope: 'account' | 'collected' | 'org' | 'outside';
+  // How many collected accounts, when scope is 'collected'.
+  accounts: number;
+}
+
+export interface SecretInventoryItem {
+  id: string;
+  // ssm-plaintext: a String parameter whose name looks like a credential.
+  kind: 'secrets-manager' | 'ssm-parameter' | 'ssm-plaintext';
+  name: string;
+  accountId: string;
+  region: string;
+  encryption: 'aws-managed' | 'customer-managed' | 'none';
+  // From the resource's tags; null when untagged.
+  env: string | null;
+  owner: string | null;
+  rotationEnabled: boolean | null;
+  lastRotated: string | null;
+  // Null before the collector recorded dates; lastAccessed is null when never read.
+  createdAt: string | null;
+  lastAccessed: string | null;
+  lastModified: string | null;
+  collectionRestricted: boolean;
+  // Null for parameters, and for secrets whose policy Khalifa could not read.
+  sharing: SecretSharing | null;
+  issues: Array<{
+    id: string;
+    ruleId: string;
+    severity: Severity;
+    title: string;
+    openedAt: string;
+  }>;
+}
 
 export interface AttackPathDetail {
   nodes: GraphVertex[];

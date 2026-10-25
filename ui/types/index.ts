@@ -79,6 +79,8 @@ export interface IssueDetail extends Issue {
     edges: GraphEdge[];
     entry?: AttackPathEntry;
   };
+  // Involved resources off the drawn path, as currently in the graph.
+  involvedResources?: GraphVertex[];
 }
 
 export interface IssueFilters {
@@ -323,4 +325,87 @@ export interface CatalogRule {
   severityHint: Severity;
   ownerTeam: string;
   enabled: boolean;
+}
+
+// Metadata only: the API never returns a secret's description, tags, key ARN
+// or policy text, and Khalifa never collects its value.
+export interface SecretSharing {
+  scope: 'account' | 'collected' | 'org' | 'outside';
+  accounts: number;
+}
+
+export interface SecretInventoryItem {
+  id: string;
+  // ssm-plaintext: a String parameter whose name looks like a credential.
+  kind: 'secrets-manager' | 'ssm-parameter' | 'ssm-plaintext';
+  name: string;
+  accountId: string;
+  region: string;
+  encryption: 'aws-managed' | 'customer-managed' | 'none';
+  // From the resource's tags; null when untagged.
+  env: string | null;
+  owner: string | null;
+  rotationEnabled: boolean | null;
+  lastRotated: string | null;
+  // Null before the collector recorded dates; lastAccessed is null when never read.
+  createdAt: string | null;
+  lastAccessed: string | null;
+  lastModified: string | null;
+  collectionRestricted: boolean;
+  sharing: SecretSharing | null;
+  // Filled in on the page from the reader counts: undefined while they load,
+  // null when not evaluated (parameters, or an account that could not be read).
+  readers?: SecretReaderCount | null;
+  issues: Array<{
+    id: string;
+    ruleId: string;
+    severity: Severity;
+    title: string;
+    openedAt: string;
+  }>;
+}
+
+export interface SecretReaderCount {
+  total: number;
+  broad: number;
+  // The account had more policy rows than were read: the count is a minimum.
+  partial: boolean;
+}
+
+export interface SecretReaderCounts {
+  counts: Record<string, SecretReaderCount>;
+  unavailableAccounts: number;
+  partialAccounts: number;
+  truncated: boolean;
+}
+
+export interface SecretInventory {
+  items: SecretInventoryItem[];
+  truncated: boolean;
+  issuesUnavailable: boolean;
+}
+
+export interface SecretReaderGrant {
+  policyName: string;
+  policyKind: 'inline' | 'managed' | 'aws-managed';
+  // By the secret's own ARN, a pattern, every resource, or all but some.
+  scope: 'secret' | 'pattern' | 'all' | 'not-resource';
+  notAction: boolean;
+  conditional: boolean;
+}
+
+export interface SecretReader {
+  id: string;
+  name: string;
+  type: 'role' | 'user' | 'group';
+  admin: boolean;
+  mayBeDenied: boolean;
+  grants: SecretReaderGrant[];
+}
+
+export interface SecretDetail {
+  item: SecretInventoryItem;
+  issuesUnavailable: boolean;
+  // Null for SSM parameters, which this does not evaluate.
+  readers: { items: SecretReader[]; truncated: boolean; unavailable: boolean } | null;
 }

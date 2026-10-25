@@ -22,6 +22,8 @@ export interface RiskRule {
   name: string;
   description: string;
   severityHint: Severity;
+  // Highest severity the rule's issues get, whatever the path scores.
+  maxSeverity?: Severity;
   riskFactors: RiskFactor[];
   gremlinQueryTemplate: string;
   ownerTeam: string;
