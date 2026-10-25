@@ -26,9 +26,10 @@ One member role. Evaluation stays in-account.
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Collection**      | 30+ AWS services via [`SecurityGraphCollectorRole`](templates/SecurityGraphCollectorRole.yaml). A hub account collects; each member account gets the spoke role.                                                                                                                                                                                                                                            |
 | **Graph**           | Typed vertices and edges in Neptune. Same input, same Gremlin traversal.                                                                                                                                                                                                                                                                                                                                    |
-| **CIEM**            | IAM decomposition, effective permissions, escalation paths, CloudTrail-grounded rightsizing.                                                                                                                                                                                                                                                                                                                |
+| **CIEM**            | IAM decomposition, effective permissions, escalation paths (assume chains and `iam:PassRole` to compute, RULE-034), CloudTrail-grounded rightsizing.                                                                                                                                                                                                                                                         |
 | **Least privilege** | Sweep of roles and users. Deployable policy recommendations.                                                                                                                                                                                                                                                                                                                                                |
-| **Risk**            | Scheduled rules and attack-path traversals on the live graph.                                                                                                                                                                                                                                                                                                                                               |
+| **Secrets**         | Secrets Manager and SSM parameter inventory with who-can-read analysis from identity and resource policies, rotation and access age, sharing detection (RULE-010, RULE-032, RULE-033), and admin users holding active access keys (RULE-031).                                                                                                                                                                  |
+| **Risk**            | Scheduled rules and attack-path traversals on the live graph (34 rules).                                                                                                                                                                                                                                                                                                                                    |
 | **Detection**       | GuardDuty detector coverage per region (including `MISSING`), Security Hub findings joined to internet-exposed resources (RULE-017, RULE-018), CloudTrail anomaly signals: root activity, secret reads from unseen IPs, AccessDenied bursts (RULE-020 to RULE-022), canary credential tripwires (RULE-023), and secret scanning of Lambda environment variables plus IMDSv1-with-role detection (RULE-024). |
 | **Exposure**        | Public EKS control planes (RULE-019) plus public S3/RDS and world-open security groups, derived from collected endpoint and network config.                                                                                                                                                                                                                                                                 |
 | **Compliance**      | CIS AWS Foundations v3.0 and the Khalifa baseline, per-control evidence, mapped SOC 2 / ISO 27001 / PCI DSS / NIST 800-53 requirements, and CIS reconciliation against Security Hub before anything is publishable.                                                                                                                                                                                          |
@@ -169,6 +170,8 @@ EKS uses [`deploy/helm/khalifa/values.yaml`](deploy/helm/khalifa/values.yaml). T
 | `COLLECTION_REGIONS`              | Approved Regions                                                                  | —                               |
 | `GRAPH_WRITER_FUNCTION_NAME`      | Graph-writer Lambda for analyzer anomalies                                        | —                               |
 | `CANARY_PRINCIPAL_ARNS`           | Comma-separated canary IAM user ARNs; any CloudTrail activity becomes RULE-023    | —                               |
+| `PROD_ACCOUNT_IDS`                | Collected accounts that hold production; RULE-032 flags prod secrets shared with the rest | —                         |
+| `SLACK_WEBHOOK_SECRET_ARN`        | Secrets Manager secret with the Slack webhook URL (bare URL or `{"SLACK_WEBHOOK_URL": …}`) | —                       |
 | `RATE_LIMIT_PER_MINUTE`           | Per-identity API request limit per minute                                         | 600                             |
 | `RATE_LIMIT_EXPENSIVE_PER_MINUTE` | Per-identity limit on expensive endpoints (attack paths, resource graph, reports) | 60                              |
 | `DSPM_CLASSIFY_BUDGET_MS`         | Hard CPU budget (ms) for classifying untrusted S3 content per scan                | 30000                           |
@@ -177,6 +180,10 @@ EKS uses [`deploy/helm/khalifa/values.yaml`](deploy/helm/khalifa/values.yaml). T
 | `COLLECTION_RESOURCE_CONCURRENCY` | Per-resource fan-out within a stage, e.g. S3 buckets and tag chunks (1-20)        | 5                               |
 
 Canary credentials are deployed with `ENABLE_CANARIES=true` in the CDK environment (`cdk/bin/khalifa.ts`): two permission-less IAM users (`khalifa-canary-1/2`) whose access keys are stored in Secrets Manager (`khalifa-canary/credentials-1/2`). The keys have no legitimate use, so any CloudTrail activity from them is treated as a security incident. Off by default.
+
+The Slack sink prefers `SLACK_WEBHOOK_SECRET_ARN` (a bearer-equivalent credential should not ride along as a plaintext Lambda environment variable): the CDK stack stores `SLACK_WEBHOOK_URL` in `khalifa/slack-webhook` at deploy time and grants the risk engine read. The plaintext `SLACK_WEBHOOK_URL` remains only as a local-development fallback.
+
+On EKS, the Helm value `collection.prodAccountIds` renders the same `PROD_ACCOUNT_IDS` for the collectors, and `reconciliation.securityHubRegion` pins the Region the compliance role assumes into for Security Hub reads.
 
 The DSPM scanner reads object content only from buckets in `DSPM_BUCKET_ALLOWLIST` (Terraform: `dspm_bucket_allowlist`); with none configured it can list bucket names but read no objects. Its `DSPM_SCAN_MODE` defaults to `tagged-only`, which samples object content only from buckets tagged `dspm-scan=true`; `all` samples every bucket and `off` disables sampling. Macie-covered buckets are never downloaded in any mode.
 
@@ -206,6 +213,7 @@ Unauthenticated: `/health`, `/livez`, `/readyz`, `/metrics`. Everything else nee
 | `GET /attack-paths/search`                                                                    | Presets or a resource to start/end at, `account`, `maxPathLength` (Viewer+)                          |
 | `GET /accounts`                                                                               | Account IDs and names (Viewer+)                                                                      |
 | `GET /data-sources`                                                                           | Collection freshness per data source (Viewer+)                                                       |
+| `GET /secrets` · `/secrets/reader-counts` · `/secrets/:arn`                                   | Secret inventory, reader counts, and one secret's facts and readers (Viewer+)                        |
 | `GET /resources/:arn` · `/resources/graph`                                                    | Resource with neighbors and issues; graph slice (Viewer+)                                            |
 | `GET /resources/search` · `/resources/labels` · `/resources/properties` · `/resources/values` | Resource search and label/property explorer (Viewer+)                                                |
 | `GET /compliance/frameworks`                                                                  | List frameworks; `/:framework`, `/controls`, `/controls/:controlId`, `/report`, `/drift` (Viewer+)   |
@@ -226,20 +234,22 @@ curl "https://api.example.com/api/issues?severity=critical&status=open&limit=100
 
 ## Compliance
 
-Gremlin evaluators write pass / fail / manual evidence to DynamoDB. 88 controls, 55 automated.
+Gremlin evaluators write pass / fail / manual evidence to DynamoDB. 89 controls: 55 evaluated by automated evaluators, 10 judged from their mapped rules, and 2 manual.
 
 | Framework                | Controls | Focus                                                                          |
 | ------------------------ | -------: | ------------------------------------------------------------------------------ |
 | CIS AWS Foundations v3.0 |       47 | IAM, storage, logging, monitoring, networking, data protection                 |
-| Khalifa baseline         |       41 | Detection, Kubernetes, secrets and vulnerability management, attack paths      |
+| Khalifa baseline         |       42 | Detection, Kubernetes, secrets and vulnerability management, attack paths      |
 
 The compliance job also runs the CIS reconciliation: it reads Security Hub's CIS
 v3.0.0 control findings through the audit account's read-only reader role and
-stores a `CIS_RECONCILIATION` record (per-requirement agreement, disagreement,
-and staleness). `/compliance/reconciliation/publishable` exposes only the
-requirements that agreed for `reconciliation.minAgreementDays` and appear in
-`reconciliation.publishAllowlist`; runbooks in
-[OPERATIONAL.md](OPERATIONAL.md), section J.
+stores a `CIS_RECONCILIATION` record (per-requirement Security Hub and Khalifa
+statuses, stability and staleness; the comparison stays for triage).
+`/compliance/reconciliation/publishable` follows Security Hub, the CIS v3.0.0
+reference: it exposes only the requirements that appear in
+`reconciliation.publishAllowlist`, have a Security Hub result with no missing
+data, and whose status has held for `reconciliation.minAgreementDays`; runbooks
+in [OPERATIONAL.md](OPERATIONAL.md), section J.
 
 SOC 2, ISO 27001, PCI DSS v4.0, and NIST SP 800-53 Rev. 5 are integrated by
 **mapping**: 52 curated requirements (SOC 2 CC6/CC7/CC9, ISO Annex A, PCI DSS

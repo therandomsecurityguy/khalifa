@@ -118,6 +118,9 @@ release will roll back, which is safe but noisy.
 - **CIS reconciliation**: `securityhub_reader_role_arn` (audit account,
   read-only). Required before any trust-center publishing.
 - **Canaries / DSPM allowlist**: `ENABLE_CANARIES`, `dspm_bucket_allowlist`.
+- **Slack issue sink**: `SLACK_WEBHOOK_URL` at CDK deploy time (stored in
+  Secrets Manager and read as `SLACK_WEBHOOK_SECRET_ARN`). Never place the
+  webhook, or `PROD_ACCOUNT_IDS`, in files or chat.
 
 ### 1.8 Trust center (publishing the posture)
 
@@ -205,6 +208,9 @@ and in `CHANGELOG.md` under **Unreleased**:
   `cis-v3-source-of-truth.test.ts` — SH control → CIS requirement mapping.
 - `packages/risk-engine/src/compliance-types.ts` (`LEGACY_CONTROL_IDS`) — old
   evidence rows must resolve to current controls.
+- `packages/risk-engine/src/cis-reconciliation.ts` and
+  `cis-reconciliation.test.ts` — the publishable gate (Security Hub status,
+  stability window, `blockedBy`); published posture claims depend on it.
 - Sanitization tripwires: `scripts/trust-center-sync/map.ts` (and the
   `questionnaire.ts` / `state.ts` outputs it guards), `trust-center/render.ts`,
   and `api-service/src/routes/trust-center.ts` — layers that must never be

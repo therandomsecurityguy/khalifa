@@ -4,11 +4,12 @@ Renders Khalifa's continuously-evaluated CIS posture into the generated
 sections consumed by the in-repo trust-center site builder (`trust-center/`).
 
 The only data source is the API's sanitized publishable endpoint
-(`GET /compliance/reconciliation/publishable`): requirements that both agreed
-with Security Hub for `reconciliation.minAgreementDays` and appear in the
-`reconciliation.publishAllowlist`. Statuses only — no accounts, Regions,
-counts, evidence, or disagreements ever leave Khalifa (`map.ts` re-projects the
-payload and trips on any identifier that survives).
+(`GET /compliance/reconciliation/publishable`): requirements that appear in the
+`reconciliation.publishAllowlist`, have a Security Hub result with no missing
+data, and whose status has held for `reconciliation.minAgreementDays`
+(publication follows Security Hub, the CIS v3.0.0 reference). Statuses only —
+no accounts, Regions, counts, evidence, or disagreements ever leave Khalifa
+(`map.ts` re-projects the payload and trips on any identifier that survives).
 
 ```bash
 KHALIFA_API_URL=https://api.example.com \
