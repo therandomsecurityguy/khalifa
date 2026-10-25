@@ -16,3 +16,10 @@ tasks
 *.tsbuildinfo
 **/*.tsbuildinfo
 .DS_Store
+# Local secret files must never enter the build context or image layers.
+.env
+**/.env
+.env.*
+**/.env.*
+*.pem
+**/*.pem

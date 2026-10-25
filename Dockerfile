@@ -1,10 +1,10 @@
-FROM cgr.dev/chainguard/node:latest-dev@sha256:af8ebb3c6d92c5c949210e3e48f1a1026eb994ce569d3a0e1eef7282df970263 AS dependencies
+FROM cgr.dev/chainguard/node:latest-dev@sha256:1a4a6af741c68f1f637f9a6f4f87949bb463e8dc522f1a4e34527e0d97cef11b AS dependencies
 
 USER root
 WORKDIR /workspace
 ENV NODE_ENV=development
 
-RUN test "$(node --version)" = "v26.8.1" && npm install --global --ignore-scripts --no-audit --no-fund npm@11.19.1 && test "$(/usr/local/bin/npm --version)" = "11.19.1"
+RUN test "$(node --version)" = "v26.12.1" && npm install --global --ignore-scripts --no-audit --no-fund npm@11.19.1 && test "$(/usr/local/bin/npm --version)" = "11.19.1"
 
 COPY package.json package-lock.json ./
 COPY api-service/package.json ./api-service/
@@ -39,7 +39,7 @@ FROM dependencies AS rule-runner-build
 
 RUN /usr/local/bin/npm run build:packages && /usr/local/bin/npm run build -w lambdas/runtime
 
-FROM cgr.dev/chainguard/node:latest@sha256:63fc11a6c5a1b0dc85e13bcf7d0d5dcfed54e07dfd73a123ae4d8b393dcfbe6d AS runtime
+FROM cgr.dev/chainguard/node:latest@sha256:0cae6f0340a011674d75163e761e0935ecdc6f0aaece076ca360ccfa08366ad8 AS runtime
 
 ENV NODE_ENV=production
 USER 65532
