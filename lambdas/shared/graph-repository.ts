@@ -15,6 +15,8 @@ const __ = Gremlin.process.statics;
 
 const logger = new Logger('graph-repository');
 const SKIPPED_EDGE_SAMPLE = 5;
+export const RECONCILE_BATCH_SIZE = 1000;
+const RECONCILE_MAX_BATCHES = 1000;
 
 type TraversalSource = Gremlin.process.GraphTraversalSource;
 type AnonymousTraversal = Gremlin.process.GraphTraversal;
@@ -38,6 +40,7 @@ interface NormalizedMutation {
   id: string;
   label: string;
   properties: Record<string, string | number | boolean>;
+  clearProperties?: string[];
   observedAt: string;
 }
 
@@ -52,13 +55,17 @@ export class GraphRepository {
   constructor(
     private readonly graph: TraversalSource,
     private readonly maxConcurrency: number = 2,
-    private readonly chunkSize: number = 25
+    private readonly chunkSize: number = 25,
+    private readonly reconcileBatchSize: number = RECONCILE_BATCH_SIZE
   ) {
     if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1 || maxConcurrency > 32) {
       throw new Error('Graph write concurrency must be between 1 and 32');
     }
     if (!Number.isInteger(chunkSize) || chunkSize < 1 || chunkSize > 200) {
       throw new Error('Graph write chunk size must be between 1 and 200');
+    }
+    if (!Number.isInteger(reconcileBatchSize) || reconcileBatchSize < 1) {
+      throw new Error('Reconcile batch size must be a positive integer');
     }
   }
 
@@ -76,12 +83,13 @@ export class GraphRepository {
     await this.runChunks(nodes, async (chunk: NormalizedMutation[]) => {
       try {
         await retryTransient(async () => {
-          const results = await buildNodeUpsertChunk(this.graph, chunk).toList();
-          // Each single-element upsert yields exactly one traverser (the
-          // refreshed or newly created vertex); fewer means Neptune silently
-          // dropped part of the chain, which is re-run element by element.
-          if (results.length !== chunk.length) {
-            throw new Error(`Vertex chunk returned ${results.length} of ${chunk.length} elements`);
+          const written = writtenIds(await buildNodeUpsertChunk(this.graph, chunk).toList());
+          // Every vertex upsert writes or refreshes its vertex, so all ids must
+          // come back; anything less is re-run element by element.
+          if (!written || chunk.some((node) => !written.has(node.id))) {
+            throw new Error(
+              `Vertex chunk wrote ${written?.size ?? 'an unreadable count'} of ${chunk.length}`
+            );
           }
         });
       } catch (error) {
@@ -108,12 +116,14 @@ export class GraphRepository {
     const skipped: NormalizedEdgeMutation[] = [];
     await this.runChunks(edges, async (chunk: NormalizedEdgeMutation[]) => {
       try {
-        const results = await buildEdgeUpsertChunk(this.graph, chunk).toList();
-        if (results.length === chunk.length) return;
-        logger.warn('Edge chunk returned fewer traversers than mutations; isolating', {
-          size: chunk.length,
-          results: results.length,
-        });
+        const written = writtenIds(await buildEdgeUpsertChunk(this.graph, chunk).toList());
+        if (written) {
+          // The chain ran to the end; an edge it did not write has a missing
+          // endpoint, which is a skip, not a failure.
+          for (const edge of chunk) if (!written.has(edge.id)) skipped.push(edge);
+          return;
+        }
+        logger.warn('Edge chunk result unreadable; isolating', { size: chunk.length });
         await this.isolateEdgeChunk(chunk, skipped);
       } catch (error) {
         logger.warn('Edge chunk write failed; retrying element-by-element', {
@@ -139,21 +149,34 @@ export class GraphRepository {
     if (mutations.reconcile) {
       const reconcile = mutations.reconcile;
       for (const element of ['vertices', 'edges'] as const) {
-        let stale = 0;
-        await retryTransient(async () => {
-          const counted = await buildReconcileTraversal(this.graph, element, reconcile)
-            .count()
-            .next();
-          stale = resultCount(counted.value);
-          if (stale > 0) {
-            // next(), not iterate(): the 3.8 driver encodes iterate() as a
-            // `discard` step, which Neptune's TinkerPop 3.7 engine rejects with
-            // InvalidParameterException ("Unable to find Traversal steps for the
-            // graph operator: discard").
-            await buildReconcileTraversal(this.graph, element, reconcile).drop().next();
-          }
-        });
-        tombstoned += stale;
+        // In batches: one drop of every stale element can outlast the query
+        // timeout, as 20 days of skipped cleanup in prod would.
+        let batches = 0;
+        let stale = this.reconcileBatchSize;
+        while (stale === this.reconcileBatchSize && batches < RECONCILE_MAX_BATCHES) {
+          await retryTransient(async () => {
+            const counted = await buildReconcileTraversal(this.graph, element, reconcile)
+              .limit(this.reconcileBatchSize)
+              .count()
+              .next();
+            stale = resultCount(counted.value);
+            if (stale > 0) {
+              // next(), not iterate(): the 3.8 driver encodes iterate() as a
+              // `discard` step, which Neptune's TinkerPop 3.7 engine rejects with
+              // InvalidParameterException ("Unable to find Traversal steps for the
+              // graph operator: discard").
+              await buildReconcileTraversal(this.graph, element, reconcile)
+                .limit(this.reconcileBatchSize)
+                .drop()
+                .next();
+            }
+          });
+          tombstoned += stale;
+          batches++;
+        }
+        if (stale === this.reconcileBatchSize) {
+          logger.warn('Reconcile batch cap reached; the rest drops next run', { element });
+        }
       }
     }
 
@@ -247,12 +270,46 @@ export function normalizeNode(node: GraphNode, defaultObservedAt: string): Norma
   validateIdentity(node.id, 'node id');
   validateLabel(node.label);
 
+  const properties = normalizeProperties({ ...node.properties, arn: node.id });
+  const clearProperties = normalizeClearProperties(node.clearProperties, properties);
   return {
     id: node.id,
     label: node.label,
-    properties: normalizeProperties({ ...node.properties, arn: node.id }),
+    properties,
+    ...(clearProperties.length > 0 ? { clearProperties } : {}),
     observedAt: normalizeTimestamp(node.observedAt || defaultObservedAt),
   };
+}
+
+// Identity and reconcile bookkeeping must never be cleared by a writer.
+const UNCLEARABLE_PROPERTIES = new Set([
+  'id',
+  'arn',
+  'account_id',
+  'active',
+  'source_updated_at',
+  'collection_scope',
+  'collection_region',
+  'collection_run_id',
+]);
+
+function normalizeClearProperties(keys: unknown, properties: Record<string, unknown>): string[] {
+  if (keys === undefined) return [];
+  if (!Array.isArray(keys)) throw new Error('Graph clearProperties must be an array');
+  const unique = new Set<string>();
+  for (const key of keys) {
+    if (typeof key !== 'string' || !key.trim()) {
+      throw new Error('Graph clearProperties keys must be non-empty strings');
+    }
+    if (UNCLEARABLE_PROPERTIES.has(key)) {
+      throw new Error(`Graph property ${key} cannot be cleared`);
+    }
+    if (Object.prototype.hasOwnProperty.call(properties, key)) {
+      throw new Error(`Graph property ${key} is both set and cleared`);
+    }
+    unique.add(key);
+  }
+  return [...unique].sort();
 }
 
 export function normalizeEdge(edge: GraphEdge, defaultObservedAt: string): NormalizedEdgeMutation {
@@ -280,7 +337,7 @@ export function buildNodeUpsert(
     .coalesce(
       __.unfold().choose(
         versionPredicate(mutation.observedAt),
-        applyProperties(__.identity(), mutation, 'vertex'),
+        applyProperties(clearStaleProperties(mutation), mutation, 'vertex'),
         __.identity()
       ),
       applyProperties(__.addV(mutation.label).property(t.id, mutation.id), mutation, 'vertex')
@@ -290,19 +347,34 @@ export function buildNodeUpsert(
 // Chains N single-element upserts into ONE traversal: each appended
 // `V(id)` / `E(id)` is a graph step that restarts from the index, so the
 // chain is N id lookups in a single round trip instead of N round trips.
-// Every single-element upsert yields exactly one traverser (the refreshed or
-// newly created element, nothing when an edge endpoint is missing), so the
-// result count validates the chain.
+//
+// Each upsert replaces the traverser, so the chain's own output says nothing
+// about how many elements it wrote: a complete chain yields one traverser, and
+// an edge whose endpoint is missing yields none but does not stop the chain
+// (the next upsert's fold() emits regardless). Each written element's id is
+// aggregated instead, and the chain ends in cap(): one result, the list of ids
+// actually written.
+export const WRITTEN_IDS = 'written';
+
 export function buildNodeUpsertChunk(
   graph: TraversalSource,
   chunk: NormalizedMutation[]
 ): Gremlin.process.GraphTraversal {
   if (chunk.length === 0) throw new Error('Vertex chunk must not be empty');
-  let traversal = buildNodeUpsert(graph, chunk[0]);
+  let traversal = buildNodeUpsert(graph, chunk[0]).aggregate(WRITTEN_IDS).by(t.id);
   for (let index = 1; index < chunk.length; index++) {
-    traversal = appendNodeUpsert(traversal, chunk[index]);
+    traversal = appendNodeUpsert(traversal, chunk[index]).aggregate(WRITTEN_IDS).by(t.id);
   }
-  return traversal;
+  return traversal.cap(WRITTEN_IDS);
+}
+
+// The ids a chunk traversal reports written, or undefined if its result is not
+// the single id list cap() should yield.
+export function writtenIds(results: unknown[]): Set<string> | undefined {
+  if (results.length !== 1) return undefined;
+  const value = results[0];
+  const list = value instanceof Set ? [...value] : Array.isArray(value) ? value : undefined;
+  return list ? new Set(list.map(String)) : undefined;
 }
 
 function appendNodeUpsert(
@@ -315,7 +387,7 @@ function appendNodeUpsert(
     .coalesce(
       __.unfold().choose(
         versionPredicate(mutation.observedAt),
-        applyProperties(__.identity(), mutation, 'vertex'),
+        applyProperties(clearStaleProperties(mutation), mutation, 'vertex'),
         __.identity()
       ),
       applyProperties(__.addV(mutation.label).property(t.id, mutation.id), mutation, 'vertex')
@@ -327,11 +399,11 @@ export function buildEdgeUpsertChunk(
   chunk: NormalizedEdgeMutation[]
 ): Gremlin.process.GraphTraversal {
   if (chunk.length === 0) throw new Error('Edge chunk must not be empty');
-  let traversal = buildEdgeUpsert(graph, chunk[0]);
+  let traversal = buildEdgeUpsert(graph, chunk[0]).aggregate(WRITTEN_IDS).by(t.id);
   for (let index = 1; index < chunk.length; index++) {
-    traversal = appendEdgeUpsert(traversal, chunk[index]);
+    traversal = appendEdgeUpsert(traversal, chunk[index]).aggregate(WRITTEN_IDS).by(t.id);
   }
-  return traversal;
+  return traversal.cap(WRITTEN_IDS);
 }
 
 function appendEdgeUpsert(
@@ -384,6 +456,11 @@ export function buildEdgeUpsert(
         'edge'
       )
     );
+}
+
+function clearStaleProperties(mutation: NormalizedMutation): AnonymousTraversal {
+  const keys = mutation.clearProperties ?? [];
+  return keys.length > 0 ? __.sideEffect(__.properties(...keys).drop()) : __.identity();
 }
 
 function versionPredicate(observedAt: string): AnonymousTraversal {

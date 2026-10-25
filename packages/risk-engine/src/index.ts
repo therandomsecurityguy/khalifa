@@ -47,3 +47,4 @@ export {
   type ReconciliationStore,
   type RequirementReconciliation,
 } from './cis-reconciliation';
+export { globMatch } from './glob';

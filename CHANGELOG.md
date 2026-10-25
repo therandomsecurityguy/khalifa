@@ -23,12 +23,22 @@ All notable changes to Khalifa.
 
 - **PCI DSS and NIST SP 800-53 as mapped frameworks**: 26 further curated requirements join SOC 2 and ISO 27001 — PCI DSS v4.0 (11: network security, secure configuration, data protection, vulnerability management, access control, logging and monitoring) and selected NIST SP 800-53 Rev. 5 controls (15: AC-2/AC-6, AU-2/AU-6, CM-6, CP-9, IA-2/IA-5, RA-5, SC-7/SC-8/SC-12/SC-13, SI-2/SI-4). One canonical assessment pass serves all six frameworks; the trust center, questionnaire sheet, API, and UI pick them up automatically.
 
+- **ReDoS-safe IAM wildcard matching**: `globMatch` (`packages/risk-engine/src/glob.ts`, re-exported for the lambdas as `lambdas/shared/glob.ts`) matches `*` and `?` iteratively — at most pattern length × text length steps — so IAM policy text can no longer make a generated regex backtrack exponentially.
+
+- **`GraphNode.clearProperties`**: a writer can list properties to remove from an existing vertex because the source no longer reports them (a removed tag); the clear applies only when the write is newer, identity and reconcile bookkeeping (`id`, `arn`, `account_id`, `active`, `source_updated_at`, `collection_scope`, `collection_region`, `collection_run_id`) can never be cleared, and a key that is both set and cleared is rejected. `test/gremlin/Dockerfile` builds the hardened, pinned Gremlin 3.7.1 image, and `lambdas/graph-writer/graph-repository.graph.test.ts` (a new `graph-writer` project in `packages/risk-engine/jest.graph.config.js`, excluded from the default jest run) exercises chunked writes, reconcile, and clearing against a real server.
+
 ### Changed
 
 - **Releases no longer require AWS configuration**: digest-only image publishing activates only when `KHALIFA_AWS_ROLE_ARN` and the ECR repository variables are set; without them a release ships Lambda archives, the Helm chart, the `khalifa-eks` bundle, the SBOM, and checksums, recording `published: false` in `release-manifest.json`.
 - **`khalifa-registry` takes `github_repository`** (plus an optional `github_oidc_subject_prefix`) instead of hardcoding the publishing repository, and the S3 access-log destination is implemented with inline module resources rather than a private external module.
 - **Helm schema allows `mountIn: dspmScanner`**, matching the scanner template, so the DSPM scanner can receive the graph-writer token through External Secrets.
 - **Compliance documentation corrected**: the evaluated frameworks are CIS AWS Foundations v3.0.0 (47 controls) and the Khalifa baseline (41 controls), 55 automated; the README no longer claims SOC 2 or ISO 27001 evaluations.
+- **UI dependency security bump**: `next` moves to `^16.4.2` (resolved 16.4.3) and the lockfile brings `body-parser` to 1.20.9, clearing the new high/critical advisories (the Next.js Image Optimization and `use cache` RCEs, the Next.js Server Actions DoS, and the body-parser trailing-bytes DoS); the now-resolved `GHSA-vfj7-8cjw-p6xm` suppression is removed from the npm-audit baseline.
+
+### Fixed
+
+- **Graph chunks are no longer written twice**: a chained chunk yields one traverser, not one per element, so the old "returned N of M elements" check rejected every full chunk and re-ran it element by element — about 26 Neptune round trips instead of one, with duplicate-write conflicts (`Edge with id already exists`, `ConcurrentModificationException`) and writes outlasting the 30-second query timeout. Each chunk now aggregates the ids it wrote and ends in `cap()`, so one round trip covers the whole chunk; an unreadable result still falls back to element-by-element writes, and an edge the chain did not write (missing endpoint) is counted as skipped rather than failed.
+- **Reconcile drops stale elements in batches**: a single drop of every stale element can outlast the query timeout (20 days of skipped cleanup would not finish). Reconcile now deletes at most `RECONCILE_BATCH_SIZE` (1000) elements per round, loops until a batch comes back short, and logs a warning when the batch cap is reached so the rest drops on the next run.
 
 ## [Unreleased] - Phase 0
 

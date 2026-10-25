@@ -4,12 +4,14 @@ import {
   buildEdgeUpsertChunk,
   buildNodeUpsert,
   buildNodeUpsertChunk,
+  writtenIds,
   buildReconcileTraversal,
   GraphRepository,
   graphEdgeId,
   isTransientWriteFailure,
   normalizeEdge,
   normalizeNode,
+  RECONCILE_BATCH_SIZE,
   retryTransient,
 } from '../shared/graph-repository';
 
@@ -57,6 +59,60 @@ describe('GraphRepository mutations', () => {
     expect(encoded).toContain('2026-09-10T01:02:03.000Z');
     expect(encoded).toContain('Cardinality');
     expect(encoded).toContain('{\\"owner\\":\\"security\\"}');
+  });
+
+  it('clears listed properties only when refreshing an existing vertex', () => {
+    const mutation = normalizeNode(
+      {
+        id: 'arn:aws:ec2:us-west-2:111122223333:instance/i-1',
+        label: 'Ec2Instance',
+        properties: { state: 'running' },
+        clearProperties: ['public_ip', 'env', 'env'],
+        observedAt: '2026-09-10T01:00:00Z',
+      },
+      '2026-09-10T00:00:00Z'
+    );
+    expect(mutation.clearProperties).toEqual(['env', 'public_ip']);
+
+    const { encoded } = encode(buildNodeUpsert(traversalSource(), mutation));
+    expect(encoded).toContain('["sideEffect"');
+    expect(encoded).toContain('["properties","env","public_ip"],["drop"]');
+    // One drop: the refresh branch; a newly created vertex has nothing to clear.
+    expect(encoded.split('"drop"').length - 1).toBe(1);
+    expect(encoded.indexOf('"sideEffect"')).toBeLessThan(encoded.indexOf('"addV"'));
+  });
+
+  it('leaves the upsert unchanged when nothing is cleared', () => {
+    const base = {
+      id: 'arn:aws:s3:::bucket',
+      label: 'S3Bucket',
+      properties: { name: 'bucket' },
+      observedAt: '2026-09-10T01:00:00Z',
+    };
+    const plain = normalizeNode(base, '2026-09-10T00:00:00Z');
+    const empty = normalizeNode({ ...base, clearProperties: [] }, '2026-09-10T00:00:00Z');
+    expect(empty).toEqual(plain);
+    expect(encode(buildNodeUpsert(traversalSource(), plain)).encoded).not.toContain('drop');
+  });
+
+  it.each([
+    [['arn'], 'cannot be cleared'],
+    [['collection_run_id'], 'cannot be cleared'],
+    [['name'], 'both set and cleared'],
+    [[''], 'non-empty strings'],
+    [[42], 'non-empty strings'],
+  ])('rejects clearProperties %j', (keys, message) => {
+    expect(() =>
+      normalizeNode(
+        {
+          id: 'arn:aws:s3:::bucket',
+          label: 'S3Bucket',
+          properties: { name: 'bucket' },
+          clearProperties: keys as string[],
+        },
+        '2026-09-10T00:00:00Z'
+      )
+    ).toThrow(message);
   });
 
   it('upserts edges by id, resolves endpoints by id, and never sets a cardinality on edge properties', () => {
@@ -216,10 +272,59 @@ describe('GraphRepository.write', () => {
     expect(steps.filter((step) => step === 'count')).toHaveLength(2);
   });
 
+  it('drops stale elements in batches until a batch comes back short', async () => {
+    const steps: string[] = [];
+    const counts = [RECONCILE_BATCH_SIZE, RECONCILE_BATCH_SIZE, 7];
+    function recording(): unknown {
+      let counting = false;
+      const proxy: unknown = new Proxy(
+        {},
+        {
+          get: (_target, property) => {
+            if (property === 'next') {
+              return async () =>
+                counting ? { done: false, value: counts.shift() ?? 0 } : { done: true };
+            }
+            if (property === 'count') counting = true;
+            if (typeof property === 'string') steps.push(property);
+            return () => proxy;
+          },
+        }
+      );
+      return proxy;
+    }
+    const graph = {
+      V: () => recording(),
+      E: () => recording(),
+    } as unknown as Gremlin.process.GraphTraversalSource;
+
+    const result = await new GraphRepository(graph, 1).write(
+      {
+        nodes: [],
+        edges: [],
+        reconcile: {
+          scope: 'resource-inventory:us-west-2',
+          runId: 'run-2',
+          observedAt: '2026-09-10T02:00:00Z',
+          accountId: '111122223333',
+        },
+      },
+      '2026-09-10T02:00:00Z'
+    );
+
+    // Vertices: two full batches and a short one; edges: one empty count.
+    expect(result.tombstoned).toBe(2 * RECONCILE_BATCH_SIZE + 7);
+    expect(steps.filter((step) => step === 'drop')).toHaveLength(3);
+    expect(steps.filter((step) => step === 'count')).toHaveLength(4);
+    expect(steps.filter((step) => step === 'limit')).toHaveLength(7);
+  });
+
   it('skips and counts edges whose endpoints are not in the graph', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const graph = {
-      V: () => chain({ done: false, value: {} }),
+      // A chunk's cap() yields the ids it wrote: the vertex chunk wrote the
+      // bucket; the edge chunk yields nothing readable, so it is isolated.
+      V: () => chain({ done: false, value: ['arn:aws:s3:::bucket'] }),
       E: () => chain({ done: true }),
     } as unknown as Gremlin.process.GraphTraversalSource;
     const repository = new GraphRepository(graph, 2);
@@ -368,5 +473,19 @@ describe('Neptune error classification', () => {
     );
     expect(operation).toHaveBeenCalledTimes(1);
     expect(isTransientWriteFailure(new Error('InternalFailureException'))).toBe(false);
+  });
+});
+
+describe('writtenIds', () => {
+  it('reads the id list cap() yields, as an array or a set', () => {
+    expect(writtenIds([['a', 'b']])).toEqual(new Set(['a', 'b']));
+    expect(writtenIds([new Set(['a'])])).toEqual(new Set(['a']));
+    expect(writtenIds([[]])).toEqual(new Set());
+  });
+
+  it('is undefined for anything but a single list', () => {
+    expect(writtenIds([])).toBeUndefined();
+    expect(writtenIds([['a'], ['b']])).toBeUndefined();
+    expect(writtenIds([{}])).toBeUndefined();
   });
 });
