@@ -18,8 +18,10 @@ const logger = new Logger('list-accounts');
 function accountNodes(
   accounts: InventoryAccount[],
   observedAt: string,
-  runId: string
+  runId: string,
+  prodAccountIds: string[]
 ): GraphNode[] {
+  const prod = new Set(prodAccountIds);
   return accounts.map((account) => ({
     id: `arn:aws:iam::${account.accountId}:root`,
     label: 'AwsAccount',
@@ -31,6 +33,8 @@ function accountNodes(
       name: account.name,
       state: account.state,
       parent_id: account.parentId,
+      // Unset when no prod accounts are configured, so no account reads as non-prod.
+      is_prod: prod.size > 0 ? prod.has(account.accountId) : undefined,
       inventory_observed_at: observedAt,
       collection_scope: 'organization-inventory',
       collection_run_id: runId,
@@ -52,11 +56,18 @@ export function createHandler(
     const config = parseCollectionConfig(environment);
     const accounts = await discoverAccounts(client, config, { nameListed: true });
     const workItems = buildWorkItems(accounts, config.regions);
+    const discovered = new Set(accounts.map((account) => account.accountId));
+    const unknownProd = config.prodAccountIds.filter((id) => !discovered.has(id));
+    if (unknownProd.length > 0) {
+      logger.warn('PROD_ACCOUNT_IDS lists accounts that are not collected', {
+        accountIds: unknownProd,
+      });
+    }
     const observedAt = new Date().toISOString();
     const runId = randomUUID();
 
     await writeGraph({
-      nodes: accountNodes(accounts, observedAt, runId),
+      nodes: accountNodes(accounts, observedAt, runId, config.prodAccountIds),
       edges: [],
       observedAt,
       reconcile: { scope: 'organization-inventory', runId, observedAt },

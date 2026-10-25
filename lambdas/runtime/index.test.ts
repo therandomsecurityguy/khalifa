@@ -1,10 +1,12 @@
 import type { AddressInfo } from 'net';
+import type { CollectorEvent } from '../collector';
 import {
   createGraphWriterServer,
   createHttpGraphWriter,
   parseGuardDutyFindingsConfig,
   runBounded,
   runCommand,
+  shuffle,
   validateRuntime,
 } from './index';
 
@@ -166,6 +168,53 @@ describe('Kubernetes runtime', () => {
     await expect(runBounded([1], 0, signal, async () => {})).rejects.toThrow(
       'Concurrency must be a positive integer'
     );
+  });
+
+  it('shuffles a copy, keeping every item once', () => {
+    const items = ['a', 'b', 'c', 'd'];
+    expect(shuffle(items, () => 0)).toEqual(['b', 'c', 'd', 'a']);
+    expect(items).toEqual(['a', 'b', 'c', 'd']);
+    expect(shuffle(items).sort()).toEqual(items);
+    expect(shuffle([])).toEqual([]);
+  });
+
+  it('collects organization accounts in shuffled order', async () => {
+    const accounts = ['111111111111', '222222222222', '333333333333'];
+    const collected: string[] = [];
+    const collect = jest.fn(async (event: CollectorEvent) => {
+      collected.push(event.accountId);
+      return {
+        accountId: event.accountId,
+        region: 'us-west-2',
+        status: 'SUCCEEDED' as const,
+        failedServices: [],
+        retryableServices: [],
+        nodes: 0,
+        edges: 0,
+        skippedEdges: 0,
+        tombstoned: 0,
+        batches: 0,
+      };
+    });
+
+    await runCommand(
+      'organization-collector',
+      { ...collectionEnvironment, COLLECTION_CONCURRENCY: '1' },
+      new AbortController().signal,
+      {
+        inventory: async () => ({
+          workItems: accounts.map((accountId) => ({
+            accountId,
+            region: 'us-west-2',
+            collectGlobal: true,
+          })),
+        }),
+        collect,
+        random: () => 0,
+      }
+    );
+
+    expect(collected).toEqual(['222222222222', '333333333333', '111111111111']);
   });
 
   it('serves bounded graph mutations and classifies persistence failures', async () => {

@@ -29,8 +29,58 @@ function isNoSuchEntity(error: unknown): boolean {
 function isCredentialReportAbsent(error: unknown): boolean {
   return (
     isNoSuchEntity(error) ||
-    (error instanceof Error && error.name === 'CredentialReportNotPresentException')
+    (error instanceof Error &&
+      (error.name === 'CredentialReportNotPresentException' ||
+        // A report expires 4 hours after it is generated; the collector runs
+        // every 4 hours, so the last run's report is often just expired.
+        error.name === 'CredentialReportExpiredException'))
   );
+}
+
+function isCredentialReportNotReady(error: unknown): boolean {
+  return error instanceof Error && error.name === 'CredentialReportNotReadyException';
+}
+
+// Generation usually takes seconds; a minute covers large accounts.
+export const CREDENTIAL_REPORT_WAIT_MS = 60_000;
+const CREDENTIAL_REPORT_POLL_MS = 3_000;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// The current report, generating one and waiting for it when there is none.
+// Throws if none is ready in time, so the stage records as FAILED rather than
+// as a complete collection with no rows: the 1.5, 1.10 and 1.12 evaluators
+// read this stage's coverage, and an empty "complete" one passed or failed
+// accounts on data that was never read.
+async function readCredentialReport(
+  client: IAMClient,
+  wait: (ms: number) => Promise<void>,
+  waitMs: number
+): Promise<{ content: string; generatedTime?: string }> {
+  let waited = 0;
+  for (;;) {
+    try {
+      const report = await client.send(new GetCredentialReportCommand({}));
+      if (report.Content) {
+        return {
+          content: decodeURIComponent(Buffer.from(report.Content).toString('utf-8')),
+          generatedTime: report.GeneratedTime?.toISOString(),
+        };
+      }
+    } catch (e) {
+      if (isCredentialReportAbsent(e)) {
+        const { State } = await client.send(new GenerateCredentialReportCommand({}));
+        if (State === 'COMPLETE') continue;
+      } else if (!isCredentialReportNotReady(e)) {
+        throw e;
+      }
+    }
+    if (waited >= waitMs) {
+      throw new Error(`IAM credential report was not ready within ${waitMs / 1000}s`);
+    }
+    await wait(CREDENTIAL_REPORT_POLL_MS);
+    waited += CREDENTIAL_REPORT_POLL_MS;
+  }
 }
 
 function daysBetween(from: Date | string, to: Date | string): number {
@@ -218,27 +268,18 @@ interface CredentialReportRow {
 
 export async function collectIamCredentialReport(
   client: IAMClient,
-  accountId: string
-): Promise<CollectResult & { report: CredentialReportSummary | null }> {
+  accountId: string,
+  wait: (ms: number) => Promise<void> = sleep,
+  waitMs: number = CREDENTIAL_REPORT_WAIT_MS
+): Promise<CollectResult & { report: CredentialReportSummary }> {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
-  let reportContent = '';
-  let generatedTime: string | undefined;
-  try {
-    const existing = await client.send(new GetCredentialReportCommand({}));
-    if (existing.Content) {
-      reportContent = decodeURIComponent(Buffer.from(existing.Content).toString('utf-8'));
-      generatedTime = existing.GeneratedTime?.toISOString();
-    }
-  } catch (e) {
-    if (!isCredentialReportAbsent(e)) throw e;
-  }
-
-  if (!reportContent) {
-    await client.send(new GenerateCredentialReportCommand({}));
-    return { nodes, edges, report: null };
-  }
+  const { content: reportContent, generatedTime } = await readCredentialReport(
+    client,
+    wait,
+    waitMs
+  );
 
   const rows = parseCredentialReport(reportContent);
   const rootArn = `arn:aws:iam::${accountId}:root`;

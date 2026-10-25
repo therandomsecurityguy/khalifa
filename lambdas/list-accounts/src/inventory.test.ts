@@ -11,12 +11,14 @@ import {
   toInventoryAccount,
   type OrganizationsReader,
 } from '../../shared/account-inventory';
+import { createHandler } from '../index';
 
 const reader = (send: jest.Mock) => ({ send }) as unknown as OrganizationsReader;
 const config = (accountIds: string[], parentIds: string[] = []) => ({
   accountIds,
   parentIds,
   regions: ['us-west-2'],
+  prodAccountIds: [],
 });
 
 describe('organization inventory', () => {
@@ -40,7 +42,38 @@ describe('organization inventory', () => {
       accountIds: ['111122223333'],
       parentIds: ['ou-abcd1234-12345678'],
       regions: ['us-west-2', 'us-east-1'],
+      prodAccountIds: [],
     });
+  });
+
+  it('validates prod account IDs', () => {
+    expect(() =>
+      parseCollectionConfig({
+        COLLECTION_ACCOUNT_IDS: '111122223333',
+        COLLECTION_REGIONS: 'us-west-2',
+        PROD_ACCOUNT_IDS: '111122223333,prod',
+      })
+    ).toThrow('PROD_ACCOUNT_IDS contains invalid values: prod');
+  });
+
+  it.each([
+    ['111122223333', { '111122223333': true, '444455556666': false }],
+    ['', { '111122223333': undefined, '444455556666': undefined }],
+  ])('marks prod accounts from PROD_ACCOUNT_IDS=%j', async (prodAccountIds, expected) => {
+    const writeGraph = jest.fn().mockResolvedValue(undefined);
+    const send = jest.fn().mockResolvedValue({ Accounts: [] });
+    await createHandler(reader(send), writeGraph, {
+      COLLECTION_ACCOUNT_IDS: '111122223333,444455556666',
+      COLLECTION_REGIONS: 'us-west-2',
+      PROD_ACCOUNT_IDS: prodAccountIds,
+    })();
+
+    const nodes = writeGraph.mock.calls[0][0].nodes;
+    expect(
+      Object.fromEntries(
+        nodes.map((node: any) => [node.properties.account_id, node.properties.is_prod])
+      )
+    ).toEqual(expected);
   });
 
   it('uses the current Organizations account state', () => {

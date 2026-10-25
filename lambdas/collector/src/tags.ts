@@ -23,6 +23,9 @@ export function isTaggableArn(arn: string): boolean {
   if (!match) return false;
   const [, service, resource] = match;
   if (service === 'khalifa') return false;
+  // Image digests (repository/name@sha256:...) carry no tags of their own, and
+  // with 400k of them the lookups throttled and failed the whole tags stage.
+  if (service === 'ecr' && resource.includes('@')) return false;
   return service === 's3' || /[/:]/.test(resource);
 }
 
@@ -129,6 +132,23 @@ export function extractCommonProperties(
   }
 
   return props;
+}
+
+// Tag-derived keys a resource no longer carries, to clear from its vertex. Only
+// after a complete tag lookup: a failed one would otherwise wipe every
+// resource's env and crown_jewel. Keys the resource's own collector sets (an S3
+// bucket's data_classification) stay.
+export function staleTagProperties(
+  arn: string,
+  tagProps: Record<string, unknown>,
+  nodeProps: Record<string, unknown>,
+  tagsCollected: boolean
+): string[] {
+  if (!tagsCollected || !isTaggableArn(arn)) return [];
+  return Object.keys(PROP_ALIASES).filter(
+    (key) =>
+      tagProps[key] === undefined && (nodeProps[key] === undefined || nodeProps[key] === null)
+  );
 }
 
 export function chunk<T>(items: T[], size: number): T[][] {

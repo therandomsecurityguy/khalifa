@@ -5,7 +5,13 @@ import type { GraphNode, GraphEdge } from '../shared/types';
 import { Logger } from '../shared/types';
 import type { GraphSubmitter } from '../shared/graph-scan';
 import { createHttpGraphWriter, invokeGraphWriter } from '../shared/graph-writer-client';
-import { scanBuckets, scanObject, type ScanBudget, type BucketRef } from './src/s3-sampler';
+import {
+  scanBuckets,
+  scanObject,
+  optedInFor,
+  type ScanBudget,
+  type BucketRef,
+} from './src/s3-sampler';
 import { listBucketsFromGraph } from './src/graph-inventory';
 import { scanLambdaFunctions } from './src/lambda-sampler';
 import { RegexClassifier } from './src/regex-classifier';
@@ -349,10 +355,24 @@ export async function handleSqsEvent(
   const region = environment.AWS_REGION || 'us-east-1';
   const s3Client = dependencyOverrides.s3Client || new S3Client({ region });
   const classifiers = dependencyOverrides.classifiers || [new RegexClassifier()];
+  const scanMode = environment.DSPM_SCAN_MODE || 'tagged-only';
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   let objectsScanned = 0;
+
+  if (scanMode === 'off') {
+    logger.warn('DSPM SQS scan skipped: DSPM_SCAN_MODE is off');
+    return { objectsScanned: 0, findingsWritten: 0 };
+  }
+
+  // Event-driven scans enforce the same opt-in gate as the scheduled path:
+  // objects are only read from buckets tagged dspm-scan=true. Without this,
+  // any producer with sqs:SendMessage could make the scanner read arbitrary
+  // objects and fabricate classification findings on buckets that never
+  // opted in. The check is memoized per bucket; a missing/unreadable tag set
+  // means not opted in.
+  const optedInCache = new Map<string, boolean>();
 
   for (const record of event.Records || []) {
     let s3Event: {
@@ -371,6 +391,18 @@ export async function handleSqsEvent(
       const key = s3Record.s3?.object?.key;
       const size = s3Record.s3?.object?.size ?? 0;
       if (!bucket || !key) continue;
+
+      let optedIn = optedInCache.get(bucket);
+      if (optedIn === undefined) {
+        optedIn = await optedInFor(s3Client, bucket);
+        optedInCache.set(bucket, optedIn);
+        if (!optedIn) {
+          logger.warn('DSPM SQS scan skipped: bucket has not opted in via the dspm-scan tag', {
+            bucket,
+          });
+        }
+      }
+      if (!optedIn) continue;
 
       const result = await scanObject(s3Client, bucket, key, size, classifiers);
       objectsScanned += 1;

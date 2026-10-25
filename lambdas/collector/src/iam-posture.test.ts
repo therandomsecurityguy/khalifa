@@ -217,21 +217,74 @@ describe('collectIamCredentialReport', () => {
     });
   });
 
-  it('requests generation and returns no report when none is available yet', async () => {
+  const named = (name: string) => Object.assign(new Error(name), { name });
+  const ready = () => ({
+    Content: Buffer.from(reportCsv, 'utf-8'),
+    GeneratedTime: new Date('2026-09-12T01:00:00.000Z'),
+  });
+
+  // A queue of GetCredentialReport outcomes: an Error is thrown, anything else returned.
+  function reportClient(outcomes: unknown[], generateState = 'STARTED') {
+    let i = 0;
+    const generate = jest.fn(() => ({ State: generateState }));
     const client = createIamClient({
       GetCredentialReportCommand: () => {
-        const error = new Error('no report');
-        error.name = 'CredentialReportNotPresentException';
-        throw error;
+        const next = outcomes[Math.min(i++, outcomes.length - 1)];
+        if (next instanceof Error) throw next;
+        return next;
       },
-      GenerateCredentialReportCommand: () => ({ state: 'STARTED' }),
+      GenerateCredentialReportCommand: generate,
     });
+    return { client, generate };
+  }
+  const noWait = jest.fn(async () => {});
 
-    const { nodes, edges, report } = await collectIamCredentialReport(client, ACCOUNT);
+  it.each(['CredentialReportNotPresentException', 'CredentialReportExpiredException'])(
+    'generates a report on %s and waits for it',
+    async (error) => {
+      const { client, generate } = reportClient([
+        named(error),
+        named('CredentialReportNotReadyException'),
+        ready(),
+      ]);
 
-    expect(report).toBeNull();
-    expect(nodes).toHaveLength(0);
-    expect(edges).toHaveLength(0);
+      const { report } = await collectIamCredentialReport(client, ACCOUNT, noWait);
+
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(report.userCount).toBe(2);
+    }
+  );
+
+  it('reads straight away when generation completes immediately', async () => {
+    const wait = jest.fn(async () => {});
+    const { client } = reportClient(
+      [named('CredentialReportNotPresentException'), ready()],
+      'COMPLETE'
+    );
+
+    const { report } = await collectIamCredentialReport(client, ACCOUNT, wait);
+
+    expect(report.userCount).toBe(2);
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  // An empty result would be recorded as a complete collection, and 1.5, 1.10
+  // and 1.12 would judge the account on rows that were never read.
+  it('throws, rather than returning nothing, when no report is ready in time', async () => {
+    const { client } = reportClient([named('CredentialReportNotReadyException')]);
+
+    await expect(collectIamCredentialReport(client, ACCOUNT, noWait, 9_000)).rejects.toThrow(
+      'not ready within 9s'
+    );
+  });
+
+  it('propagates other errors', async () => {
+    const { client, generate } = reportClient([named('AccessDenied')]);
+
+    await expect(collectIamCredentialReport(client, ACCOUNT, noWait)).rejects.toThrow(
+      'AccessDenied'
+    );
+    expect(generate).not.toHaveBeenCalled();
   });
 });
 

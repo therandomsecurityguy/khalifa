@@ -1,5 +1,11 @@
 import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-tagging-api';
-import { extractCommonProperties, fetchTagsForArns, isTaggableArn, type TagMap } from './tags';
+import {
+  extractCommonProperties,
+  fetchTagsForArns,
+  isTaggableArn,
+  staleTagProperties,
+  type TagMap,
+} from './tags';
 
 describe('isTaggableArn', () => {
   it('accepts resource ARNs the Tagging API can look up', () => {
@@ -9,6 +15,7 @@ describe('isTaggableArn', () => {
       'arn:aws:secretsmanager:us-west-2:111122223333:secret:name-AbCdEf',
       'arn:aws:apigateway:us-west-2::/restapis/abc123',
       'arn:aws:iam::111122223333:role/service-role/lambda-role',
+      'arn:aws:ecr:us-west-2:111122223333:repository/app',
     ]) {
       expect(isTaggableArn(arn)).toBe(true);
     }
@@ -22,6 +29,7 @@ describe('isTaggableArn', () => {
       'arn:aws:khalifa:global:internet',
       'arn:aws:khalifa:external-account:999988887777',
       'arn:aws:khalifa:us-west-2:111122223333:collection-coverage/iam',
+      'arn:aws:ecr:us-west-2:111122223333:repository/app@sha256:0123abcd',
       '',
     ]) {
       expect(isTaggableArn(arn)).toBe(false);
@@ -162,5 +170,31 @@ describe('extractCommonProperties', () => {
     expect(send).toHaveBeenCalledTimes(3);
     expect(tags.size).toBe(250);
     expect(tags.get('arn:aws:s3:::bucket-249')).toEqual({ env: 'prod' });
+  });
+});
+
+describe('staleTagProperties', () => {
+  const role = 'arn:aws:iam::111122223333:role/app';
+
+  it('clears tag-derived keys the resource no longer carries', () => {
+    expect(staleTagProperties(role, { env: 'prod' }, {}, true)).toEqual([
+      'data_classification',
+      'crown_jewel',
+      'owner',
+      'business_unit',
+      'canary',
+    ]);
+  });
+
+  it('keeps keys the resource collector sets itself', () => {
+    const bucket = 'arn:aws:s3:::data';
+    expect(staleTagProperties(bucket, {}, { data_classification: '' }, true)).not.toContain(
+      'data_classification'
+    );
+  });
+
+  it('clears nothing when the tag lookup failed or the ARN is not taggable', () => {
+    expect(staleTagProperties(role, {}, {}, false)).toEqual([]);
+    expect(staleTagProperties('arn:aws:iam::111122223333:root', {}, {}, true)).toEqual([]);
   });
 });

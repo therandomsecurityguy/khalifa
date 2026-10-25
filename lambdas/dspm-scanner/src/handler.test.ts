@@ -419,17 +419,28 @@ describe('handleSqsEvent', () => {
   const s3EventBody = (bucket: string, key: string, size: number) =>
     JSON.stringify({ Records: [{ s3: { bucket: { name: bucket }, object: { key, size } } }] });
 
-  it('scans objects from S3 event notifications and writes findings', async () => {
-    const s3Client = {
+  // Event-driven scans only read from buckets tagged dspm-scan=true.
+  const optedInTags = () => ({ TagSet: [{ Key: 'dspm-scan', Value: 'true' }] });
+
+  // GitHub-token-shaped so secret scanners do not mistake the fixture for a
+  // real AWS access key; the regex classifier still flags it as a secret.
+  const TEST_SECRET = 'ghp_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  const s3ClientWithOptIn = (getObjectBody: string | null, optedIn = true) =>
+    ({
       send: jest.fn(async (command: { constructor: { name: string } }) => {
+        if (command.constructor.name === 'GetBucketTaggingCommand') {
+          return optedIn ? optedInTags() : { TagSet: [] };
+        }
         if (command.constructor.name === 'GetObjectCommand') {
-          return {
-            Body: { transformToString: jest.fn().mockResolvedValue('AKIACI2FM6E2XRLIB2GU') },
-          };
+          return { Body: { transformToString: jest.fn().mockResolvedValue(getObjectBody) } };
         }
         throw new Error(`Unexpected command: ${command.constructor.name}`);
       }),
-    } as unknown as S3Client;
+    }) as unknown as S3Client;
+
+  it('scans objects from S3 event notifications and writes findings', async () => {
+    const s3Client = s3ClientWithOptIn(TEST_SECRET);
     const persist = jest.fn().mockResolvedValue({ success: true, written: 1 });
 
     const result = await handleSqsEvent(
@@ -451,15 +462,42 @@ describe('handleSqsEvent', () => {
     });
   });
 
+  it('skips buckets that have not opted in via the dspm-scan tag', async () => {
+    const s3Client = s3ClientWithOptIn(TEST_SECRET, false);
+    const persist = jest.fn().mockResolvedValue({ success: true, written: 1 });
+
+    const result = await handleSqsEvent(
+      { Records: [{ body: s3EventBody('unlisted-bucket', 'secret.txt', 10) }] },
+      { s3Client, persist },
+      environment
+    );
+
+    expect(result).toEqual({ objectsScanned: 0, findingsWritten: 0 });
+    expect(persist).not.toHaveBeenCalled();
+    const commands = (s3Client.send as jest.Mock).mock.calls.map(
+      (c: unknown[]) => (c[0] as { constructor: { name: string } }).constructor.name
+    );
+    expect(commands).toContain('GetBucketTaggingCommand');
+    expect(commands).not.toContain('GetObjectCommand');
+  });
+
+  it('skips all objects when DSPM_SCAN_MODE is off', async () => {
+    const s3Client = s3ClientWithOptIn(TEST_SECRET);
+    const persist = jest.fn().mockResolvedValue({ success: true, written: 1 });
+
+    const result = await handleSqsEvent(
+      { Records: [{ body: s3EventBody('leaky-bucket', 'secret.txt', 10) }] },
+      { s3Client, persist },
+      { ...environment, DSPM_SCAN_MODE: 'off' }
+    );
+
+    expect(result).toEqual({ objectsScanned: 0, findingsWritten: 0 });
+    expect(persist).not.toHaveBeenCalled();
+    expect(s3Client.send).not.toHaveBeenCalled();
+  });
+
   it('skips malformed bodies and objects without findings', async () => {
-    const s3Client = {
-      send: jest.fn(async (command: { constructor: { name: string } }) => {
-        if (command.constructor.name === 'GetObjectCommand') {
-          return { Body: { transformToString: jest.fn().mockResolvedValue('clean text') } };
-        }
-        throw new Error(`Unexpected command: ${command.constructor.name}`);
-      }),
-    } as unknown as S3Client;
+    const s3Client = s3ClientWithOptIn('clean text');
     const persist = jest.fn().mockResolvedValue({ success: true, written: 0 });
 
     const result = await handleSqsEvent(
