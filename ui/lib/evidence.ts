@@ -163,6 +163,14 @@ const SPECS: Record<string, Spec[]> = {
     { id: 'severity', label: 'Severity' },
     { id: 'cvss_base_score', label: 'CVSS' },
   ],
+  Vulnerability: [
+    { id: 'cve_id', label: 'CVE' },
+    { id: 'severity', label: 'Severity' },
+    { id: 'cvss_base_score', label: 'CVSS' },
+    { id: 'exploit_available', label: 'Exploit known', format: yesNo },
+    { id: 'fixed_versions', label: 'Fixed in' },
+    { id: 'inspector_score', label: 'Inspector score' },
+  ],
 };
 
 // Fact ids each rule's query matches on.

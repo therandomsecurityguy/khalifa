@@ -35,16 +35,23 @@ const IDENTITY_BLAST_RADIUS_WEIGHTS = {
   'service-linked': 0.4,
 };
 
-// Factor weights sum to 1.0. CVSS was removed because nothing populates it (no
-// vulnerability source exists; RULE-003 is disabled pending scanning), so it
-// contributed zero to every score while still consuming a share of the range.
-// Its weight is redistributed across the factors that have real data.
+// Factor weights sum to 1.0. CVSS was removed because nothing populated it (no
+// vulnerability source existed), so it contributed zero to every score while
+// still consuming a share of the range; its weight was redistributed across
+// the factors that have real data.
 const FACTOR_WEIGHTS = {
   exposure: 0.3,
   identity: 0.25,
   dataClassification: 0.25,
   environment: 0.2,
 } as const;
+
+// Exploitability (CVSS from Amazon Inspector findings on the path, up to the
+// full range when an exploit is known) is deliberately additive rather than a
+// reweighting: findings with no CVE data keep exactly the scores they had, and
+// a known vulnerability raises the score by at most this share of the range —
+// enough to order a vulnerable workload above an otherwise identical one.
+const EXPLOITABILITY_WEIGHT = 0.15;
 
 const SEVERITY_THRESHOLDS: Record<Severity, number> = {
   critical: 80,
@@ -79,13 +86,23 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
     crownJewelContribution += pathPenalty;
   }
 
+  let exploitabilityContribution = 0;
+  if (input.exploitability) {
+    const cvss = input.exploitability.cvssBaseScore;
+    let value = typeof cvss === 'number' && Number.isFinite(cvss) ? cvss / 10 : 0.5;
+    if (input.exploitability.exploitAvailable) value += 0.2;
+    value = Math.min(1, Math.max(0, value));
+    exploitabilityContribution = value * 100 * EXPLOITABILITY_WEIGHT;
+  }
+
   const totalScore = Math.min(
     100,
     exposureContribution +
       identityContribution +
       dataClassificationContribution +
       environmentContribution +
-      crownJewelContribution
+      crownJewelContribution +
+      exploitabilityContribution
   );
 
   const severity = mapScoreToSeverity(totalScore);
@@ -99,6 +116,7 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
       dataClassificationContribution: Math.round(dataClassificationContribution * 10) / 10,
       environmentContribution: Math.round(environmentContribution * 10) / 10,
       crownJewelContribution: Math.round(crownJewelContribution * 10) / 10,
+      exploitabilityContribution: Math.round(exploitabilityContribution * 10) / 10,
     },
   };
 }
@@ -233,9 +251,20 @@ export function riskInputFromPath(path: GraphVertex[]): RiskScoreInput {
   let environment: 'prod' | 'staging' | 'dev' = 'dev';
   let isCrownJewel = false;
   let identityBlastRadius: IdentityBlastRadius | undefined;
+  let cvssBaseScore: number | undefined;
+  let exploitAvailable = false;
   const attackPathLength = path.length;
 
   for (const v of path) {
+    // Amazon Inspector findings on the path (collector writes them as
+    // Vulnerability vertices): the highest CVSS and whether an exploit is known.
+    if (v.label === 'Vulnerability') {
+      const cvss = v.properties?.cvss_base_score;
+      if (typeof cvss === 'number' && Number.isFinite(cvss)) {
+        cvssBaseScore = cvssBaseScore === undefined ? cvss : Math.max(cvssBaseScore, cvss);
+      }
+      if (v.properties?.exploit_available === true) exploitAvailable = true;
+    }
     if (v.properties?.is_internet_exposed === true) {
       exposureLevel = 'internet';
     }
@@ -273,5 +302,8 @@ export function riskInputFromPath(path: GraphVertex[]): RiskScoreInput {
     isCrownJewel,
     attackPathLength,
     identityBlastRadius,
+    ...(cvssBaseScore !== undefined || exploitAvailable
+      ? { exploitability: { cvssBaseScore, exploitAvailable } }
+      : {}),
   };
 }

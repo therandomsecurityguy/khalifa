@@ -18,6 +18,7 @@
                │  - Tag ingestion via ResourceGroupsTaggingAPI        │
                │  - Internet exposure derivation (incl. Lambda URLs)  │
                │  - Instance-profile role edges, generic secret inventory│
+               │  - Amazon Inspector findings (CVEs on workloads/images)│
                │  - Cross-account trust analysis                      │
                │  - Bounded graph-writer batches + coverage checkpoint│
               └───────────────────────────┬──────────────────────────┘
@@ -269,6 +270,7 @@ the gate.
 | `BackupPlan`                | AWS Backup          | `arn`                                                                                                                                                              |
 | `HostedZone`                | Route53             | `arn`                                                                                                                                                              |
 | `DataClassificationFinding` | DSPM Scanner        | `arn`, `pii_types`, `secret_count`, `skipped_kms`, `data_classification`, `data_class_source`, `confidence`, `classifier`                                          |
+| `Vulnerability`             | Amazon Inspector    | `cve_id`, `severity`, `cvss_base_score`, `exploit_available`, `fixed_versions`, `inspector_score`, `first_observed_at`, `last_observed_at`                        |
 | `EffectivePermission`       | Policy Evaluator    | `principal_arn`, `allowed_actions`, `denied_actions`, `is_admin`, `blast_radius`                                                                                   |
 | `EscalationPath`            | Policy Evaluator    | `source_arn`, `target_arn`, `risk_level`, `escalation_type`                                                                                                        |
 
@@ -298,7 +300,7 @@ the gate.
 | `SHARES_WITH`                  | IamPolicyStatement → AwsAccount (cross-account share)           |
 | `BELONGS_TO`                   | ContainerImage → EcrRepository                                  |
 | `RUNS_ON`                      | ContainerImage → workload (not yet created)                     |
-| `HAS_CVE`                      | ContainerImage → Vulnerability (not yet created)                |
+| `HAS_CVE`                      | Instance/Lambda/ContainerImage → Vulnerability (Inspector)      |
 | `HAS_ALIAS` / `HAS_STAGE`      | Function → Alias/Stage                                          |
 | `CLASSIFIES`                   | DataClassificationFinding → S3Bucket/RdsInstance/LambdaFunction |
 
@@ -321,6 +323,7 @@ the gate.
 | `key_age_days` / `last_used_days_ago`            | number           | IAM access key collection           |
 | `endpoint_public_access` / `endpoint_world_open` | boolean          | EKS `resourcesVpcConfig`            |
 | `function_url_public` / `public_invoke_policy`   | boolean          | Lambda function URLs and invoke policies |
+| `cvss_base_score` / `exploit_available`          | number / boolean | Amazon Inspector finding (RULE-003, risk scoring) |
 | `lambda_exposure_restricted`                     | boolean          | Lambda reads the collector role cannot make  |
 | `principal_is_anyone` / `principal_account_count` | boolean / number | IAM policy statement principal analysis |
 | `principal_org_restricted`                       | boolean          | `aws:PrincipalOrgID` condition on a statement |

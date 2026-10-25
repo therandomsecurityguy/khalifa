@@ -26,6 +26,9 @@ export function isTaggableArn(arn: string): boolean {
   // Image digests (repository/name@sha256:...) carry no tags of their own, and
   // with 400k of them the lookups throttled and failed the whole tags stage.
   if (service === 'ecr' && resource.includes('@')) return false;
+  // Inspector findings are not taggable resources; thousands of finding ARNs
+  // per account would only add Tagging API round trips.
+  if (service === 'inspector2') return false;
   return service === 's3' || /[/:]/.test(resource);
 }
 

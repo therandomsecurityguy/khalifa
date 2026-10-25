@@ -56,6 +56,7 @@ const FACTOR_LABELS: Record<string, string> = {
   dataClassificationContribution: 'Data classification',
   environmentContribution: 'Environment',
   crownJewelContribution: 'Crown jewel / short path',
+  exploitabilityContribution: 'Exploitability (CVE)',
 };
 
 function metaString(

@@ -62,6 +62,9 @@ describe('organization collection infrastructure', () => {
     // Also granted to the hub in khalifa-data/iam.tf.
     expect(roleTemplate).toContain('lambda:ListFunctionUrlConfigs');
     expect(roleTemplate).toContain('lambda:GetPolicy');
+    // Reads the CVEs RULE-003 and the exploitability factor consume; also
+    // granted to the hub in khalifa-data/iam.tf.
+    expect(roleTemplate).toContain('inspector2:ListFindings');
     expect(roleTemplate).toContain('CreateCollectorRole');
     expect(roleTemplate).toMatch(/ExternalId:[\s\S]*?MinLength: 16/);
   });

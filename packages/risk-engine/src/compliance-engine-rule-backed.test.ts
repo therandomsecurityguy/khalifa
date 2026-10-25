@@ -97,13 +97,14 @@ describe('rule-backed controls', () => {
     expect(result.evidence[0].details.openIssuesByRule).toEqual({ 'RULE-021': 0, 'RULE-022': 1 });
   });
 
-  // RULE-003 is disabled in the catalogue, so KH-VULN-1 has no live signal.
-  it('is NOT_EVALUATED while a related rule is disabled', async () => {
+  // A related rule the catalogue does not know (or a disabled one) leaves the
+  // control with no live signal, so it is not judged on the empty result.
+  it('is NOT_EVALUATED while a related rule is unknown or disabled', async () => {
     const r = reader({});
-    const { result } = await assess(control('KH-VULN-1', ['RULE-003']), r);
+    const { result } = await assess(control('KH-VULN-1', ['RULE-999']), r);
 
     expect(result.status).toBe('NOT_EVALUATED');
-    expect(result.issues[0]).toContain('RULE-003');
+    expect(result.issues[0]).toContain('RULE-999');
     expect(r.getOpenIssuesByRule).not.toHaveBeenCalled();
   });
 

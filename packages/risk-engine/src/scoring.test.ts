@@ -3,6 +3,7 @@ import {
   getRemediationHint,
   extractResourcesFromPath,
   calculatePathSummary,
+  riskInputFromPath,
 } from './scoring';
 import type { RiskScoreInput } from './types';
 import { riskRules } from './rules';
@@ -180,5 +181,70 @@ describe('calculatePathSummary', () => {
     const path = [{ id: 'ec2-1', label: 'EC2Instance', properties: {} }];
     const result = calculatePathSummary(path);
     expect(result.segments).toHaveLength(0);
+  });
+});
+
+describe('exploitability factor', () => {
+  const vulnerable: RiskScoreInput = {
+    exposureLevel: 'internet',
+    dataClassification: 'restricted',
+    environment: 'prod',
+    isCrownJewel: false,
+  };
+
+  test('adds nothing for findings with no vulnerability data', () => {
+    const result = computeRiskScore(vulnerable);
+    expect(result.factors.exploitabilityContribution).toBe(0);
+  });
+
+  test('raises the score by the CVSS share, more when an exploit is known', () => {
+    const noCve = computeRiskScore(vulnerable);
+    const cve = computeRiskScore({
+      ...vulnerable,
+      exploitability: { cvssBaseScore: 9.8 },
+    });
+    const exploited = computeRiskScore({
+      ...vulnerable,
+      exploitability: { cvssBaseScore: 9.8, exploitAvailable: true },
+    });
+
+    expect(cve.factors.exploitabilityContribution).toBe(14.7);
+    expect(exploited.factors.exploitabilityContribution).toBe(15);
+    expect(cve.score).toBeGreaterThan(noCve.score);
+    expect(exploited.score).toBeGreaterThan(cve.score);
+  });
+
+  test('caps at the weight even with an exploit and an unreadable CVSS', () => {
+    const result = computeRiskScore({
+      ...vulnerable,
+      exploitability: { exploitAvailable: true },
+    });
+    expect(result.factors.exploitabilityContribution).toBe(10.5);
+  });
+});
+
+describe('riskInputFromPath exploitability', () => {
+  test('reads the highest CVSS and exploit flag from Vulnerability vertices', () => {
+    const input = riskInputFromPath([
+      { id: 'ec2', label: 'Ec2Instance', properties: { is_internet_exposed: true } },
+      {
+        id: 'cve-low',
+        label: 'Vulnerability',
+        properties: { cvss_base_score: 7.5, exploit_available: false },
+      },
+      {
+        id: 'cve-high',
+        label: 'Vulnerability',
+        properties: { cvss_base_score: 9.8, exploit_available: true },
+      },
+    ]);
+    expect(input.exploitability).toEqual({ cvssBaseScore: 9.8, exploitAvailable: true });
+  });
+
+  test('leaves exploitability unset when the path has no findings', () => {
+    const input = riskInputFromPath([
+      { id: 'ec2', label: 'Ec2Instance', properties: { is_internet_exposed: true } },
+    ]);
+    expect(input.exploitability).toBeUndefined();
   });
 });
