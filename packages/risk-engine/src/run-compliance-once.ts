@@ -1,5 +1,10 @@
 import type { ComplianceReport } from './compliance-types';
-import { ComplianceEngine, DynamoDBEvidenceStore, DynamoDBReportStore } from './compliance-engine';
+import {
+  ComplianceEngine,
+  DynamoDBEvidenceStore,
+  DynamoDBReportStore,
+  type AssessmentRun,
+} from './compliance-engine';
 import { createNeptuneRuntimeClient, type NeptuneQueryClient } from './neptune-client';
 import { DynamoDBIssueRepository } from './issue-repository';
 import {
@@ -12,7 +17,7 @@ import {
 
 interface ComplianceRuntime {
   connect(): Promise<void>;
-  runAllAssessments(): Promise<ComplianceReport[]>;
+  runAllAssessments(): Promise<AssessmentRun>;
   close(): Promise<void>;
 }
 
@@ -21,7 +26,7 @@ export interface ComplianceRunSummary {
   controlsAssessed: number;
   failedControls: number;
   notEvaluatedControls: number;
-  /** CIS reconciliation against Security Hub; DISABLED when unconfigured. */
+  /** CIS reconciliation against Security Hub ; DISABLED when unconfigured. */
   reconciliation: 'OK' | 'STALE' | 'DISABLED';
 }
 
@@ -38,7 +43,7 @@ export async function runComplianceOnce(
   const runtime = createRuntime(neptuneEndpoint);
   try {
     await runtime.connect();
-    const reports = await runtime.runAllAssessments();
+    const { reports, failures } = await runtime.runAllAssessments();
     const totals = reports.reduce(
       (summary, report) => ({
         frameworksRun: summary.frameworksRun + 1,
@@ -48,7 +53,13 @@ export async function runComplianceOnce(
       }),
       { frameworksRun: 0, controlsAssessed: 0, failedControls: 0, notEvaluatedControls: 0 }
     );
-    return { ...totals, reconciliation: await reconcile(reports) };
+    const reconciliation = await reconcile(reports);
+    // After reconciliation, so one failed control does not also cost the
+    // reconciliation record; the job still fails so the error is seen.
+    if (failures.length > 0) {
+      throw new Error(`Compliance assessment failed: ${failures.join('; ')}`);
+    }
+    return { ...totals, reconciliation };
   } finally {
     await runtime.close();
   }

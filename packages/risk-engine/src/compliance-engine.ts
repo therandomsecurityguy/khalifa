@@ -47,6 +47,13 @@ export interface OpenIssueReader {
 
 const SAMPLE_ISSUE_IDS = 10;
 
+export interface AssessmentRun {
+  /** One per framework whose report was saved. */
+  reports: ComplianceReport[];
+  /** Control evaluation errors and framework failures, prefixed by framework. */
+  failures: string[];
+}
+
 const CANONICAL_FRAMEWORKS: ComplianceFramework[] = ['CIS_AWS_FOUNDATIONS', 'KHALIFA_BASELINE'];
 
 function summarizeResults(
@@ -261,6 +268,18 @@ export class ComplianceEngine {
         `${framework} is a mapped framework; its report derives from the canonical assessments in runAllAssessments()`
       );
     }
+    const { report, failures } = await this.assess(framework);
+    if (failures.length > 0) {
+      throw new Error(`Compliance assessment failed for ${framework}: ${failures.join('; ')}`);
+    }
+    return report;
+  }
+
+  // Saves the report even when some controls fail to evaluate; those are
+  // NOT_EVALUATED in it, and listed in failures.
+  private async assess(
+    framework: ComplianceFramework
+  ): Promise<{ report: ComplianceReport; failures: string[] }> {
     const controls = getControlsByFramework(framework);
     const results: ComplianceControlResult[] = [];
     const failures: string[] = [];
@@ -333,29 +352,37 @@ export class ComplianceEngine {
 
     await this.reportStore.saveReport(report);
 
-    if (failures.length > 0) {
-      throw new Error(`Compliance assessment failed for ${framework}: ${failures.join('; ')}`);
-    }
-
-    return report;
+    return { report, failures };
   }
 
-  async runAllAssessments(): Promise<ComplianceReport[]> {
+  // Every framework runs even if one fails: a single control's evaluation error
+  // used to throw out of CIS and skip KHALIFA_BASELINE, reconciliation and the
+  // mapped reports entirely (2026-10-14, CIS 3.4 timing out). The caller
+  // decides how to fail.
+  async runAllAssessments(): Promise<AssessmentRun> {
     const reports: ComplianceReport[] = [];
+    const failures: string[] = [];
 
     for (const framework of CANONICAL_FRAMEWORKS) {
-      reports.push(await this.runAssessment(framework));
+      try {
+        const run = await this.assess(framework);
+        reports.push(run.report);
+        failures.push(...run.failures.map((failure) => `${framework} ${failure}`));
+      } catch (error) {
+        failures.push(`${framework}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
 
     // Mapped frameworks derive from the canonical reports above: one
-    // evaluation pass, one evidence store, every framework's view.
+    // evaluation pass, one evidence store, every framework's view. A canonical
+    // framework that failed leaves its mapped requirements NOT_EVALUATED.
     for (const framework of MAPPED_FRAMEWORKS) {
       const report = deriveMappedReport(framework, reports);
       await this.reportStore.saveReport(report);
       reports.push(report);
     }
 
-    return reports;
+    return { reports, failures };
   }
 
   async getFrameworkSummary(framework: ComplianceFramework): Promise<ComplianceFrameworkSummary> {

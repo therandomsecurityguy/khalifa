@@ -38,6 +38,7 @@ export {
   DynamoDBEvidenceStore,
   DynamoDBReportStore,
   InMemoryReportStore,
+  type AssessmentRun,
   type GraphClient,
   type ReportStore,
 } from './compliance-engine';

@@ -15,7 +15,7 @@ function runtime(runAllAssessments: jest.Mock) {
 
 describe('runComplianceOnce', () => {
   it('summarizes a run and always closes its client', async () => {
-    const instance = runtime(jest.fn().mockResolvedValue([report]));
+    const instance = runtime(jest.fn().mockResolvedValue({ reports: [report], failures: [] }));
 
     await expect(runComplianceOnce('neptune:8182', () => instance)).resolves.toEqual({
       frameworksRun: 1,
@@ -29,13 +29,31 @@ describe('runComplianceOnce', () => {
   });
 
   it('hands the reports from the run to CIS reconciliation and reports its status', async () => {
-    const instance = runtime(jest.fn().mockResolvedValue([report]));
+    const instance = runtime(jest.fn().mockResolvedValue({ reports: [report], failures: [] }));
     const reconcile = jest.fn().mockResolvedValue('STALE');
 
     const summary = await runComplianceOnce('neptune:8182', () => instance, reconcile);
 
     expect(reconcile).toHaveBeenCalledWith([report]);
     expect(summary.reconciliation).toBe('STALE');
+    expect(instance.close).toHaveBeenCalledTimes(1);
+  });
+
+  // 2026-10-14: CIS 3.4 timed out, the run threw before reconciliation, and no
+  // reconciliation record was written for that run or its retry.
+  it('reconciles the saved reports before failing on control errors', async () => {
+    const instance = runtime(
+      jest.fn().mockResolvedValue({
+        reports: [report],
+        failures: ['CIS_AWS_FOUNDATIONS 3.4: Neptune query timeout after 30000ms'],
+      })
+    );
+    const reconcile = jest.fn().mockResolvedValue('OK');
+
+    await expect(runComplianceOnce('neptune:8182', () => instance, reconcile)).rejects.toThrow(
+      'CIS_AWS_FOUNDATIONS 3.4: Neptune query timeout'
+    );
+    expect(reconcile).toHaveBeenCalledWith([report]);
     expect(instance.close).toHaveBeenCalledTimes(1);
   });
 

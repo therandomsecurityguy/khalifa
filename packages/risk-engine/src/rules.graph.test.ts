@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import Gremlin from 'gremlin';
 import { NeptuneRuntimeClient } from './neptune-client';
 import { getRuleById, riskRules } from './rules';
+import { COLLECTION_MAX_AGE_MS, getEvaluatorForControl } from './compliance-rules';
 
 // Runs each rule's real query through the runner's client against a throwaway
 // local Gremlin Server (CI only). Fixtures are made up; never point this at Neptune.
@@ -674,6 +675,129 @@ describe('detection and posture rules', () => {
     await vertex('ConfigRecorder', 'stopped', { recording: false });
     await vertex('ConfigRecorder', 'recording', { recording: true });
     expect(starts(await run('RULE-028'))).toEqual(['stopped']);
+  });
+});
+
+// Compliance evaluators whose query shape needs a real Gremlin engine.
+describe('CIS 3.4 on Gremlin Server', () => {
+  const evaluate = () =>
+    getEvaluatorForControl('3.4')!.evaluate({
+      executeQuery: (q: string) => neptune.executeQuery(q),
+    });
+
+  async function account(
+    id: string,
+    trailBucket: string,
+    organization = false,
+    completedAt = new Date().toISOString(),
+    status: 'SUCCEEDED' | 'SKIPPED' = 'SUCCEEDED'
+  ) {
+    await vertex('CollectionCoverage', `coverage/${id}/cloudtrail`, {
+      service: 'cloudtrail',
+      status,
+      // The collector marks SKIPPED stages complete too.
+      complete: true,
+      account_id: id,
+      completed_at: completedAt,
+    });
+    await vertex('CloudTrail', `trail/${id}`, {
+      account_id: id,
+      s3_bucket_name: trailBucket,
+      is_organization_trail: organization,
+    });
+  }
+
+  it('fails each account whose trail bucket has no access logging, or none recorded', async () => {
+    await account('111111111111', 'unlogged-bucket');
+    await account('222222222222', 'logged-bucket');
+    await account('333333333333', 'unknown-bucket');
+    await vertex('S3Bucket', 'arn:aws:s3:::unlogged-bucket', {
+      name: 'unlogged-bucket',
+      logging_enabled: false,
+    });
+    await vertex('S3Bucket', 'arn:aws:s3:::logged-bucket', {
+      name: 'logged-bucket',
+      logging_enabled: true,
+    });
+    await vertex('S3Bucket', 'arn:aws:s3:::unknown-bucket', { name: 'unknown-bucket' });
+    // Not a trail bucket: its missing logging is not 3.4's concern.
+    await vertex('S3Bucket', 'arn:aws:s3:::app-data', { name: 'app-data', logging_enabled: false });
+
+    const result = await evaluate();
+
+    expect(result.status).toBe('FAIL');
+    expect(result.evidence[0].details).toMatchObject({
+      failingAccounts: ['111111111111', '333333333333'],
+      violations: 2,
+      organizationTrailFailing: false,
+    });
+  });
+
+  it('fails every assessed account off an organization trail with an unlogged bucket', async () => {
+    await account('111111111111', 'org-trail-bucket', true);
+    await vertex('CollectionCoverage', 'coverage/222222222222/cloudtrail', {
+      service: 'cloudtrail',
+      status: 'SUCCEEDED',
+      complete: true,
+      account_id: '222222222222',
+      completed_at: new Date().toISOString(),
+    });
+    await vertex('S3Bucket', 'arn:aws:s3:::org-trail-bucket', {
+      name: 'org-trail-bucket',
+      logging_enabled: false,
+    });
+
+    const result = await evaluate();
+
+    expect(result.evidence[0].details).toMatchObject({
+      failingAccounts: ['111111111111', '222222222222'],
+      organizationTrailFailing: true,
+    });
+  });
+
+  it('leaves out an account whose coverage is older than two collector runs', async () => {
+    const stale = new Date(Date.now() - COLLECTION_MAX_AGE_MS - 60_000).toISOString();
+    await account('111111111111', 'unlogged-bucket');
+    await account('222222222222', 'unlogged-bucket', false, stale);
+    await vertex('S3Bucket', 'arn:aws:s3:::unlogged-bucket', {
+      name: 'unlogged-bucket',
+      logging_enabled: false,
+    });
+
+    const result = await evaluate();
+
+    expect(result.evidence[0].details).toMatchObject({
+      assessedAccounts: ['111111111111'],
+      failingAccounts: ['111111111111'],
+    });
+  });
+
+  it('leaves out an account whose fresh coverage is only a SKIPPED stage', async () => {
+    // Global stages are SKIPPED, complete and fresh in every region but an
+    // account's first; that must not make the account assessed.
+    await account('111111111111', 'unlogged-bucket');
+    await account('222222222222', 'unlogged-bucket', false, new Date().toISOString(), 'SKIPPED');
+    await vertex('S3Bucket', 'arn:aws:s3:::unlogged-bucket', {
+      name: 'unlogged-bucket',
+      logging_enabled: false,
+    });
+
+    const result = await evaluate();
+
+    expect(result.evidence[0].details).toMatchObject({
+      assessedAccounts: ['111111111111'],
+      failingAccounts: ['111111111111'],
+    });
+  });
+
+  it('passes when every trail bucket logs', async () => {
+    await account('111111111111', 'logged-bucket');
+    await vertex('S3Bucket', 'arn:aws:s3:::logged-bucket', {
+      name: 'logged-bucket',
+      logging_enabled: true,
+    });
+
+    expect((await evaluate()).status).toBe('PASS');
   });
 });
 
