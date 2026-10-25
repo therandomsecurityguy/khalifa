@@ -2,6 +2,17 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Behavioral baselines (P4)
+
+### Changed
+
+- **AccessDenied spikes are deviations from each principal's own baseline, not a fixed count**: the analyzer now pulls per-principal-per-IP-per-*day* counts for the evaluation window plus a 30-day baseline and decides in code (testable against historical windows): a day flags when it reaches mean + 3 standard deviations of that pair's daily counts, with 10% of the mean as a floor on the spread (a perfectly steady principal is not flagged by +1) and an absolute floor of 10 events. A steady 25-denieds-per-day principal is no longer flagged at 26 (the old fixed threshold's false-positive class), and a quiet principal jumping to 12 — which the old threshold of 20 missed — is flagged. When fewer than 7 baseline days exist the previous fixed threshold applies (cold start). Each spike records `baseline_mean`, `baseline_stddev`, `baseline_days`, `basis` and `deviation`, and the principal's blast radius ranks it in scoring as before.
+- **Secret-read "new source IP" is a true IP baseline**: the query joins the evaluation window's secret reads against the DISTINCT source IPs the principal used in the 30 days before it, left-joined, instead of the principal-first-seen proxy — an IP dormant for the whole baseline window and used again now counts as new, and the principal-age requirement is gone.
+
+### Notes
+
+- Deferred: source-ASN, time-of-day and first-seen-service baselines; an explicit deviation × blast-radius score term (the principal's blast radius already ranks deviating findings through the existing scoring factors); and provisioning a dedicated false-positive dashboard over live history.
+
 ## [Unreleased] - Trajectory forecasting (P3)
 
 ### Added

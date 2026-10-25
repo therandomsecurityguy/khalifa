@@ -1,5 +1,13 @@
 import { createHash, randomUUID } from 'crypto';
 import type { GraphNode } from '../../shared/types';
+import {
+  ACCESS_DENIED_BASELINE_DAYS,
+  ACCESS_DENIED_EVAL_DAYS,
+  ACCESS_DENIED_SPIKE_THRESHOLD,
+} from './baseline';
+
+// Re-exported from baseline.ts, where the detection threshold lives.
+export { ACCESS_DENIED_SPIKE_THRESHOLD };
 
 export type AnomalyType =
   'ROOT_USAGE' | 'SECRET_READ_NEW_SOURCE_IP' | 'ACCESS_DENIED_SPIKE' | 'CANARY_USED';
@@ -11,6 +19,13 @@ export interface AnomalyRecord {
   eventCount: number;
   firstSeen: string;
   lastSeen: string;
+  /** ACCESS_DENIED_SPIKE only: the principal's own daily-count baseline. */
+  baselineMean?: number;
+  baselineStddev?: number;
+  baselineDays?: number;
+  basis?: 'baseline' | 'cold-start';
+  /** How many baseline standard deviations above the mean the spike is. */
+  deviation?: number;
 }
 
 export interface AnomalyQuery {
@@ -22,7 +37,6 @@ const EXCLUDED_EVENT_SOURCES = `'elasticloadbalancing.amazonaws.com', 'monitorin
 
 export const SECRET_READ_NEW_IP_WINDOW_DAYS = 7;
 export const SECRET_READ_BASELINE_MARGIN_DAYS = 30;
-export const ACCESS_DENIED_SPIKE_THRESHOLD = 20;
 const MAX_QUERY_DAYS = 365;
 
 export function assertAthenaDatabase(value: string): string {
@@ -90,7 +104,24 @@ export function buildAnomalyQueries(
     },
     {
       type: 'SECRET_READ_NEW_SOURCE_IP',
+      // Baseline deviation, not a principal-age proxy: the baseline is the
+      // DISTINCT source IPs this principal used in the
+      // SECRET_READ_BASELINE_MARGIN_DAYS before the evaluation window, and a
+      // secret read from an IP absent from that set is a new source. An IP
+      // dormant for the whole baseline window and used again counts as new.
       sql: `
+    WITH baseline_ips AS (
+      SELECT DISTINCT
+        useridentity.arn AS principal_arn,
+        sourceipaddress AS source_ip
+      FROM ${database}.cloudtrail_logs
+      WHERE ${partitionWindow(SECRET_READ_NEW_IP_WINDOW_DAYS + SECRET_READ_BASELINE_MARGIN_DAYS)}
+        AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${SECRET_READ_NEW_IP_WINDOW_DAYS + SECRET_READ_BASELINE_MARGIN_DAYS}' day
+        AND from_iso8601_timestamp(eventtime) < current_timestamp - interval '${SECRET_READ_NEW_IP_WINDOW_DAYS}' day
+        AND useridentity.arn IS NOT NULL
+        AND useridentity.arn != ''
+        AND sourceipaddress IS NOT NULL
+    )
     SELECT
       reads.principal_arn,
       reads.source_ip,
@@ -105,47 +136,46 @@ export function buildAnomalyQueries(
         MIN(eventtime) AS first_seen,
         MAX(eventtime) AS last_seen
       FROM ${database}.cloudtrail_logs
-      WHERE ${partitionWindow(lookbackDays)}
-        AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${lookbackDays}' day
+      WHERE ${partitionWindow(SECRET_READ_NEW_IP_WINDOW_DAYS)}
+        AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${SECRET_READ_NEW_IP_WINDOW_DAYS}' day
         AND eventname IN ('GetSecretValue', 'BatchGetSecretValue')
         AND useridentity.arn IS NOT NULL
         AND useridentity.arn != ''
         AND sourceipaddress IS NOT NULL
       GROUP BY useridentity.arn, sourceipaddress
     ) reads
-    JOIN (
-      SELECT
-        useridentity.arn AS principal_arn,
-        MIN(from_iso8601_timestamp(eventtime)) AS principal_first_seen
-      FROM ${database}.cloudtrail_logs
-      WHERE useridentity.arn IS NOT NULL
-        AND useridentity.arn != ''
-      GROUP BY useridentity.arn
-    ) baseline
-      ON reads.principal_arn = baseline.principal_arn
-    WHERE from_iso8601_timestamp(reads.first_seen) >= current_timestamp - interval '${SECRET_READ_NEW_IP_WINDOW_DAYS}' day
-      AND baseline.principal_first_seen < from_iso8601_timestamp(reads.first_seen) - interval '${SECRET_READ_BASELINE_MARGIN_DAYS}' day
+    LEFT JOIN baseline_ips
+      ON reads.principal_arn = baseline_ips.principal_arn
+      AND reads.source_ip = baseline_ips.source_ip
+    WHERE baseline_ips.principal_arn IS NULL
   `,
     },
     {
       type: 'ACCESS_DENIED_SPIKE',
+      // Per-principal-per-IP-per-DAY counts over the evaluation window plus the
+      // baseline. The deviation decision lives in baseline.ts (mean + 3
+      // standard deviations, floor, cold-start fallback) so it is testable
+      // against historical windows, not encoded in SQL.
       sql: `
     SELECT
       useridentity.arn AS principal_arn,
       sourceipaddress AS source_ip,
+      date_format(from_iso8601_timestamp(eventtime), '%Y-%m-%d') AS day,
       COUNT(*) AS event_count,
       from_iso8601_timestamp(MIN(eventtime)) AS first_seen,
       from_iso8601_timestamp(MAX(eventtime)) AS last_seen
     FROM ${database}.cloudtrail_logs
-    WHERE ${partitionWindow(lookbackDays)}
-      AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${lookbackDays}' day
+    WHERE ${partitionWindow(ACCESS_DENIED_EVAL_DAYS + ACCESS_DENIED_BASELINE_DAYS)}
+      AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${ACCESS_DENIED_EVAL_DAYS + ACCESS_DENIED_BASELINE_DAYS}' day
       AND errorcode = 'AccessDenied'
       AND useridentity.arn IS NOT NULL
       AND useridentity.arn != ''
       AND sourceipaddress IS NOT NULL
       AND eventsource NOT IN (${EXCLUDED_EVENT_SOURCES})
-    GROUP BY useridentity.arn, sourceipaddress
-    HAVING COUNT(*) >= ${ACCESS_DENIED_SPIKE_THRESHOLD}
+    GROUP BY
+      useridentity.arn,
+      sourceipaddress,
+      date_format(from_iso8601_timestamp(eventtime), '%Y-%m-%d')
   `,
     },
   ];
@@ -240,6 +270,11 @@ export function buildAnomalyNodes(
         event_count: record.eventCount,
         first_seen: record.firstSeen,
         last_seen: record.lastSeen,
+        ...(record.baselineMean !== undefined ? { baseline_mean: record.baselineMean } : {}),
+        ...(record.baselineStddev !== undefined ? { baseline_stddev: record.baselineStddev } : {}),
+        ...(record.baselineDays !== undefined ? { baseline_days: record.baselineDays } : {}),
+        ...(record.basis !== undefined ? { basis: record.basis } : {}),
+        ...(record.deviation !== undefined ? { deviation: record.deviation } : {}),
         collection_scope: 'cloudtrail-anomalies',
         collection_run_id: runId,
         active: true,
