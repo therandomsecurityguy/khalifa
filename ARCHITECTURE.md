@@ -14,11 +14,12 @@
               ┌──────────────────────────────────────────────────────┐
               │  Collector Lambda (per account, per region)          │
               │  - STS AssumeRole → SecurityGraphCollectorRole       │
-              │  - 30+ AWS service APIs                              │
-              │  - Tag ingestion via ResourceGroupsTaggingAPI        │
-              │  - Internet exposure derivation                      │
-              │  - Cross-account trust analysis                      │
-              │  - Bounded graph-writer batches + coverage checkpoint│
+               │  - 30+ AWS service APIs                              │
+               │  - Tag ingestion via ResourceGroupsTaggingAPI        │
+               │  - Internet exposure derivation (incl. Lambda URLs)  │
+               │  - Instance-profile role edges, generic secret inventory│
+               │  - Cross-account trust analysis                      │
+               │  - Bounded graph-writer batches + coverage checkpoint│
               └───────────────────────────┬──────────────────────────┘
                                           ▼
               ┌──────────────────────────────────────────────────────┐
@@ -36,7 +37,7 @@
               ┌──────────────────────────────────────────────────────┐
               │  Risk Engine Lambda    │  │  Compliance Evaluators   │
               │  (every 1h)            │  │  (CIS + baseline)        │
-              │  - 30 Gremlin rules    │  │  - per-control evaluators│
+               │  - 34 Gremlin rules    │  │  - per-control evaluators│
               │  - Risk scoring        │  │  - DynamoDB persistence  │
               └────────────┬───────────┘  └─────────────┬────────────┘
                            ▼                            ▼
@@ -56,8 +57,8 @@
               └──────────────────────────┬───────────────────────────┘
                                          ▼
               ┌──────────────────────────────────────────────────────┐
-              │  ui (Next.js)                                        │
-              │  - /issues, /attack-paths, /compliance/[framework]   │
+               │  ui (Next.js)                                        │
+               │  - /issues, /attack-paths, /secrets, /compliance     │
               │  - Cognito OIDC bearer tokens                        │
               └──────────────────────────────────────────────────────┘
 ```
@@ -94,9 +95,9 @@ flowchart LR
 
     subgraph EVAL["Evaluation engines"]
         direction TB
-        PE["Policy Evaluator (6h):<br/>effective permissions,<br/>escalation paths"]
+        PE["Policy Evaluator (6h):<br/>effective permissions,<br/>escalation + pass-role paths"]
         LPS["Least-Privilege Sweep (daily):<br/>rightsizing vs CloudTrail usage"]
-        RE["Risk Engine (hourly):<br/>30 rules, attack paths, scoring"]
+        RE["Risk Engine (hourly):<br/>34 rules, attack paths, scoring"]
         COMP["Compliance:<br/>CIS v3.0.0 + Khalifa baseline<br/>(Security Hub reconciliation)"]
     end
 
@@ -138,7 +139,7 @@ flowchart LR
     NEPTUNE --> LPS
     LPS -->|"LeastPrivilegeFindings"| ISSUES
 
-    NEPTUNE -->|"Gremlin rules RULE-001..024"| RE
+    NEPTUNE -->|"Gremlin rules RULE-001..034"| RE
     NEPTUNE -->|"control evaluators"| COMP
     RE -->|"issues + attack paths"| ISSUES
     COMP -->|"evidence + reports"| ISSUES
@@ -252,7 +253,7 @@ the gate.
 | `ConfigRule`                | Config              | `arn`                                                                                                                                                              |
 | `GuardDutyDetector`         | GuardDuty           | `arn`, `status`                                                                                                                                                    |
 | `AccessAnalyzer`            | IAM Access Analyzer | `arn`                                                                                                                                                              |
-| `LambdaFunction`            | Lambda              | `arn`, `runtime`, `role`, `is_in_vpc`, `has_internet_access`                                                                                                       |
+| `LambdaFunction`            | Lambda              | `arn`, `runtime`, `role`, `is_in_vpc`, `has_internet_access`, `function_url_auth_type`, `function_url_public`, `public_invoke_policy`                             |
 | `LambdaAlias`               | Lambda              | `arn`                                                                                                                                                              |
 | `ApiGateway`                | API Gateway         | `arn`, `endpoint_type`                                                                                                                                             |
 | `ApiGatewayStage`           | API Gateway         | `arn`                                                                                                                                                              |
@@ -262,8 +263,8 @@ the gate.
 | `ElastiCacheCluster`        | ElastiCache         | `arn`, `transit_encryption`                                                                                                                                        |
 | `OpenSearchDomain`          | OpenSearch          | `arn`, `encryption_at_rest`                                                                                                                                        |
 | `RedshiftCluster`           | Redshift            | `arn`, `publicly_accessible`                                                                                                                                       |
-| `Secret`                    | Secrets Manager     | `arn`, `rotation_enabled`                                                                                                                                          |
-| `Parameter`                 | SSM Parameter Store | `arn`, `type`                                                                                                                                                      |
+| `Secret`                    | Secrets Manager     | `arn`, `rotation_enabled`, `collection_restricted`, `days_since_rotation`, `days_since_access`                                                                     |
+| `Parameter`                 | SSM Parameter Store | `arn`, `type`, `collection_restricted`                                                                                                                             |
 | `BackupVault`               | AWS Backup          | `arn`                                                                                                                                                              |
 | `BackupPlan`                | AWS Backup          | `arn`                                                                                                                                                              |
 | `HostedZone`                | Route53             | `arn`                                                                                                                                                              |
@@ -293,6 +294,8 @@ the gate.
 | `HAS_ENDPOINT`                 | VPC → VPC Endpoint                                              |
 | `HAS_NACL` / `HAS_ROUTE_TABLE` | VPC → NACL/RouteTable                                           |
 | `MEMBER_OF`                    | IamUser → IamGroup                                              |
+| `CAN_ESCALATE_TO`              | IAMPrincipal → IAMRole (assume hops, or a `pass_role` compute link) |
+| `SHARES_WITH`                  | IamPolicyStatement → AwsAccount (cross-account share)           |
 | `BELONGS_TO`                   | ContainerImage → EcrRepository                                  |
 | `RUNS_ON`                      | ContainerImage → workload (not yet created)                     |
 | `HAS_CVE`                      | ContainerImage → Vulnerability (not yet created)                |
@@ -317,6 +320,11 @@ the gate.
 | `mfa_enabled` / `password_enabled`               | boolean          | IAM MFA devices and login profiles  |
 | `key_age_days` / `last_used_days_ago`            | number           | IAM access key collection           |
 | `endpoint_public_access` / `endpoint_world_open` | boolean          | EKS `resourcesVpcConfig`            |
+| `function_url_public` / `public_invoke_policy`   | boolean          | Lambda function URLs and invoke policies |
+| `lambda_exposure_restricted`                     | boolean          | Lambda reads the collector role cannot make  |
+| `principal_is_anyone` / `principal_account_count` | boolean / number | IAM policy statement principal analysis |
+| `principal_org_restricted`                       | boolean          | `aws:PrincipalOrgID` condition on a statement |
+| `is_prod`                                        | boolean          | `PROD_ACCOUNT_IDS` account marking  |
 | `anomaly_type`                                   | string           | CloudTrail analyzer anomaly queries |
 | `port_from` / `port_to`                          | number           | Security group rule                 |
 | `flow_logs_enabled`                              | boolean          | EC2 DescribeFlowLogs                |
