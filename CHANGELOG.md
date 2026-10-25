@@ -33,6 +33,7 @@ All notable changes to Khalifa.
 - **`khalifa-registry` takes `github_repository`** (plus an optional `github_oidc_subject_prefix`) instead of hardcoding the publishing repository, and the S3 access-log destination is implemented with inline module resources rather than a private external module.
 - **Helm schema allows `mountIn: dspmScanner`**, matching the scanner template, so the DSPM scanner can receive the graph-writer token through External Secrets.
 - **Compliance documentation corrected**: the evaluated frameworks are CIS AWS Foundations v3.0.0 (47 controls) and the Khalifa baseline (41 controls), 55 automated; the README no longer claims SOC 2 or ISO 27001 evaluations.
+- **UI dependency security bump**: `next` moves to `^16.4.2` (resolved 16.4.3) and the lockfile brings `body-parser` to 1.20.9, clearing the new high/critical advisories (the Next.js Image Optimization and `use cache` RCEs, the Next.js Server Actions DoS, and the body-parser trailing-bytes DoS); the now-resolved `GHSA-vfj7-8cjw-p6xm` suppression is removed from the npm-audit baseline.
 
 ### Fixed
 
