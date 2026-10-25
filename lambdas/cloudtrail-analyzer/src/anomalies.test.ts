@@ -39,11 +39,14 @@ describe('buildAnomalyQueries input guards', () => {
   it('interpolates only the validated values into the SQL', () => {
     const queries = buildAnomalyQueries(DATABASE, 30);
     for (const query of queries) {
-      expect(query.sql).toContain("interval '30' day");
-      expect(query.sql).not.toContain('${days}');
-      expect(query.sql).not.toContain('${lookbackDays}');
+      expect(query.sql).not.toContain('${');
       expect(query.sql).not.toContain(';');
     }
+    // Root usage follows the caller's window; the two baseline queries scan
+    // their fixed windows (7 + 30 days) instead.
+    expect(queries[0].sql).toContain("interval '30' day");
+    expect(queries[1].sql).toContain("interval '37' day");
+    expect(queries[2].sql).toContain("interval '37' day");
   });
 });
 
@@ -59,19 +62,31 @@ describe('buildAnomalyQueries', () => {
 
     for (const query of queries) {
       expect(query.sql).toContain(`${DATABASE}.cloudtrail_logs`);
-      expect(query.sql).toContain("interval '90' day");
-      expect(query.sql).toContain(
-        "log_date >= date_format(current_date - interval '90' day, '%Y/%m/%d')"
-      );
       expect(query.sql).not.toContain('undefined');
     }
 
     expect(queries[0].sql).toContain("useridentity.arn LIKE '%:root'");
+    expect(queries[0].sql).toContain("interval '90' day");
+    expect(queries[0].sql).toContain(
+      "log_date >= date_format(current_date - interval '90' day, '%Y/%m/%d')"
+    );
+
+    // Secret reads: the DISTINCT source IPs in the baseline window, joined
+    // left — an IP absent from the set is a new source for the principal.
     expect(queries[1].sql).toContain("'GetSecretValue', 'BatchGetSecretValue'");
+    expect(queries[1].sql).toContain('WITH baseline_ips AS');
+    expect(queries[1].sql).toContain('LEFT JOIN baseline_ips');
+    expect(queries[1].sql).toContain('WHERE baseline_ips.principal_arn IS NULL');
     expect(queries[1].sql).toContain("interval '7' day");
-    expect(queries[1].sql).toContain("interval '30' day");
+    expect(queries[1].sql).not.toContain('principal_first_seen');
+
+    // Denied spikes: daily counts for the baseline evaluator, no fixed
+    // threshold in SQL.
     expect(queries[2].sql).toContain("errorcode = 'AccessDenied'");
-    expect(queries[2].sql).toContain(`>= ${ACCESS_DENIED_SPIKE_THRESHOLD}`);
+    expect(queries[2].sql).toContain('AS day');
+    expect(queries[2].sql).toContain("'%Y-%m-%d'");
+    expect(queries[2].sql).not.toContain('HAVING');
+    expect(queries[2].sql).not.toContain(`>= ${ACCESS_DENIED_SPIKE_THRESHOLD}`);
   });
 
   it('adds a CANARY_USED query only when canary principals are configured', () => {

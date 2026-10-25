@@ -19,6 +19,7 @@ import {
   partitionWindow,
   reconcileAnomalies,
 } from './src/anomalies';
+import { detectDeniedSpikes, parseDeniedCountRow } from './src/baseline';
 
 const logger = new Logger('cloudtrail-analyzer');
 const defaultAthenaClient = new AthenaClient({
@@ -346,9 +347,16 @@ async function detectAnomalies(
       dependencies.signal
     );
     const rows = await fetchRawRows(executionId, dependencies.athenaClient);
-    const records = rows.map((row, index) =>
-      parseAnomalyRow(anomalyQuery.type, row.Data || [], index + 2)
-    );
+    // The denied-spike query returns daily counts, not finished anomalies:
+    // the deviation decision (baseline mean and spread, floor, cold-start
+    // fallback) runs here so it is testable against historical windows.
+    const records =
+      anomalyQuery.type === 'ACCESS_DENIED_SPIKE'
+        ? detectDeniedSpikes(
+            rows.map((row, index) => parseDeniedCountRow(row.Data || [], index + 2)),
+            new Date(observedAt)
+          )
+        : rows.map((row, index) => parseAnomalyRow(anomalyQuery.type, row.Data || [], index + 2));
     logger.info(`Anomaly query ${anomalyQuery.type} returned ${records.length} records`);
     if (records.length === 0) continue;
 
