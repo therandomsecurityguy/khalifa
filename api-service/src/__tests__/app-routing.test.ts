@@ -92,6 +92,15 @@ describe('API route registration', () => {
     expect(layer.params.arn).toBe('arn:aws:ssm:us-west-2:111122223333:parameter/db/password');
   });
 
+  it('serves the attack-path simulation to viewers behind the expensive-query limit', () => {
+    const authenticationIndex = stack.findIndex((layer) => layer.name === 'authenticate');
+    const routeIndex = stack.findIndex((layer) => layer.route?.path === '/attack-paths/simulate');
+    expect(routeIndex).toBeGreaterThan(authenticationIndex);
+    const handlers = stack[routeIndex].route.stack.map((layer: any) => layer.handle);
+    expect(handlers[0]).toBe(requireViewer);
+    expect(handlers[1]).toBe(expensiveRateLimiter);
+  });
+
   it('serves reader counts behind the viewer role and the expensive-query limit', () => {
     const layer = stack.find((candidate) => candidate.route?.path === '/secrets/reader-counts');
     const handlers = layer.route.stack.map((entry: any) => entry.handle);

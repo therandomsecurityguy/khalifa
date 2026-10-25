@@ -14,6 +14,8 @@ import type {
   GraphVertex,
   Severity,
 } from './types';
+import { extractRulePath, type RulePath } from './rule-path';
+import { pathLikelihood } from './likelihood';
 
 // Neptune Serverless rejects every path query with MemoryLimitExceededException
 // for a minute or two after a burst of heavy ones (measured 2026-09-19: the same
@@ -59,7 +61,7 @@ export class RiskRuleRunner {
 
     try {
       const results = await this.queryWithRecovery(rule);
-      const paths = results.map((match) => this.extractPathFromMatch(match));
+      const paths = results.map((match) => extractRulePath(match));
       if (
         paths.some(
           (path) =>
@@ -208,16 +210,6 @@ export class RiskRuleRunner {
     }
   }
 
-  private extractPathFromMatch(match: unknown): RulePath {
-    const objects = Array.isArray(match) ? match : (match as { objects?: unknown } | null)?.objects;
-    const elements = Array.isArray(objects) ? objects.map(toVertex) : [];
-    const alternating = elements.length % 2 === 1;
-    return {
-      vertices: alternating ? elements.filter((_, index) => index % 2 === 0) : elements,
-      edges: alternating ? elements.filter((_, index) => index % 2 === 1) : [],
-    };
-  }
-
   // Paths that differ only in a rule's route labels describe one problem: they
   // share an identity, the issue lists every resource they touched, and the
   // highest-scoring path stands for the group.
@@ -291,6 +283,7 @@ export class RiskRuleRunner {
     const now = new Date().toISOString();
     const riskInput = this.buildRiskInput(path.vertices);
     const scoreResult = computeRiskScore(riskInput);
+    const likelihood = pathLikelihood(riskInput);
 
     return {
       id: this.issueStore.generateIssueId(rule.id, identity),
@@ -306,6 +299,8 @@ export class RiskRuleRunner {
       remediationHint: getRemediationHint(rule.id, {}),
       metadata: {
         scoringFactors: scoreResult.factors,
+        likelihood: likelihood.value,
+        likelihoodFactors: likelihood.factors,
         ruleName: rule.name,
         ruleDescription: rule.description,
         environment: riskInput.environment,
@@ -327,6 +322,7 @@ export class RiskRuleRunner {
   ): Promise<Issue> {
     const riskInput = this.buildRiskInput(path.vertices);
     const scoreResult = computeRiskScore(riskInput);
+    const likelihood = pathLikelihood(riskInput);
     const updatedAt = new Date().toISOString();
 
     const refreshed: Issue = {
@@ -340,6 +336,8 @@ export class RiskRuleRunner {
       metadata: {
         ...existing.metadata,
         scoringFactors: scoreResult.factors,
+        likelihood: likelihood.value,
+        likelihoodFactors: likelihood.factors,
         ruleName: rule.name,
         ruleDescription: rule.description,
         environment: riskInput.environment,
@@ -422,50 +420,4 @@ export class RiskRuleRunner {
       edgeType: path.edges[index]?.label ?? 'CONNECTED',
     }));
   }
-}
-
-interface RulePath {
-  vertices: GraphVertex[];
-  edges: GraphVertex[];
-}
-
-// The driver deserializes each `path().by(valueMap(true, …))` element as a Map
-// keyed by the T.id / T.label enum values plus property names, with every
-// valueMap() value wrapped in a list. Plain objects are accepted too.
-function toVertex(element: unknown): GraphVertex {
-  const vertex: GraphVertex = { id: '', label: '', properties: {} };
-  for (const [key, raw] of entries(element)) {
-    const name = keyName(key);
-    const value = unwrap(raw);
-    if (name === 'id') vertex.id = String(value);
-    else if (name === 'label') vertex.label = String(value);
-    else vertex.properties[name] = value;
-  }
-  return vertex;
-}
-
-function entries(value: unknown): Array<[unknown, unknown]> {
-  if (value instanceof Map) return [...value.entries()];
-  return value && typeof value === 'object' ? Object.entries(value) : [];
-}
-
-function keyName(key: unknown): string {
-  if (typeof key === 'string') return key;
-  if (key && typeof key === 'object' && 'elementName' in key) {
-    return String((key as { elementName: unknown }).elementName);
-  }
-  return String(key);
-}
-
-// A single-valued property comes back as a one-element list; multi-valued
-// properties stay lists. `{ value }` wrappers from older result shapes unwrap too.
-function unwrap(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    const items = value.map(unwrap);
-    return items.length === 1 ? items[0] : items;
-  }
-  if (value && typeof value === 'object' && !(value instanceof Map) && 'value' in value) {
-    return unwrap((value as { value: unknown }).value);
-  }
-  return value;
 }

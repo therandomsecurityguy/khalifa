@@ -212,4 +212,19 @@ describe('GET /attack-paths/search', () => {
     expect(res.statusCode).toBe(400);
     expect(searchAttackPaths).not.toHaveBeenCalled();
   });
+  it('scores each path with a likelihood and its factors', async () => {
+    const ec2 = v('i', 'Ec2Instance', { is_internet_exposed: true });
+    searchAttackPaths.mockResolvedValue([{ nodes: [ec2], edges: [] }]);
+
+    const res = await call({ from: 'internet', to: 'crown' });
+
+    // exposure 1 × unknown privilege 0.5 × unknown exploitability 0.5 × derived reachability 1.
+    expect(res.body.paths[0].likelihood).toBe(0.25);
+    expect(res.body.paths[0].likelihoodFactors).toEqual({
+      exposure: 1,
+      privilege: 0.5,
+      exploitability: 0.5,
+      reachability: 1,
+    });
+  });
 });

@@ -253,9 +253,18 @@ export function riskInputFromPath(path: GraphVertex[]): RiskScoreInput {
   let identityBlastRadius: IdentityBlastRadius | undefined;
   let cvssBaseScore: number | undefined;
   let exploitAvailable = false;
+  let reachabilityRestricted = false;
   const attackPathLength = path.length;
 
   for (const v of path) {
+    // A restricted read means this vertex's exposure or state is unknown, so
+    // the path's reachability is a guess rather than a derivation.
+    if (
+      v.properties?.lambda_exposure_restricted === true ||
+      v.properties?.collection_restricted === true
+    ) {
+      reachabilityRestricted = true;
+    }
     // Amazon Inspector findings on the path (collector writes them as
     // Vulnerability vertices): the highest CVSS and whether an exploit is known.
     if (v.label === 'Vulnerability') {
@@ -305,5 +314,6 @@ export function riskInputFromPath(path: GraphVertex[]): RiskScoreInput {
     ...(cvssBaseScore !== undefined || exploitAvailable
       ? { exploitability: { cvssBaseScore, exploitAvailable } }
       : {}),
+    ...(reachabilityRestricted ? { reachabilityRestricted: true } : {}),
   };
 }

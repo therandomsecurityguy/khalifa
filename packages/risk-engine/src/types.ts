@@ -142,6 +142,8 @@ export interface RiskScoreInput {
   isCrownJewel: boolean;
   /** Set when the path carries Amazon Inspector vulnerability vertices. */
   exploitability?: PathExploitability;
+  /** A path vertex marks exposure or state as unreadable (restricted reads). */
+  reachabilityRestricted?: boolean;
 }
 
 export interface RiskScoreOutput {

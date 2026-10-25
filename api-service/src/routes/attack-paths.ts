@@ -1,12 +1,24 @@
 import type { Request, Response } from 'express';
 import { parseBoundedInteger } from '../middleware/gremlin-validator';
 import { hasRole, Role } from '../middleware/rbac';
-import { computeRiskScore, riskInputFromPath } from '@khalifa/risk-engine';
+import {
+  computeRiskScore,
+  extractRulePath,
+  getRuleById,
+  pathLikelihood,
+  riskInputFromPath,
+} from '@khalifa/risk-engine';
 import { getApiNeptuneClient } from '../services/api-dependencies';
 import type { AttackPathStart, AttackPathTarget } from '../services/neptune-client';
-import type { AttackPathEntry, GraphVertex } from '../types';
+import type { AttackPathEntry, AttackPathSimulationResponse, GraphVertex } from '../types';
 
 const neptuneClient = getApiNeptuneClient();
+
+// The simulation re-runs one rule's query; bounded so a rule that matches
+// thousands of paths cannot hold the request, and so the edge ranking covers
+// the paths a caller can act on.
+const MAX_SIMULATION_PATHS = 200;
+const MAX_SIMULATION_EDGES = 10;
 
 const START_VALUES: AttackPathStart[] = ['any', 'internet', 'outside', 'resource'];
 const TARGET_VALUES: AttackPathTarget[] = ['restricted', 'crown', 'secrets', 'admin', 'resource'];
@@ -103,14 +115,23 @@ export async function searchAttackPaths(req: Request, res: Response): Promise<vo
       return true;
     });
     let truncated = failures.length > 0 || results.some((result) => result.length >= limit);
-    // Same scoring as the rule runner, so the explorer and Issues agree on severity.
+    // Same scoring as the rule runner, so the explorer and Issues agree on
+    // severity and on the path likelihood.
     const paths = found
       .filter((path) => drawnHops(path) <= maxLen)
       .map((path) => {
-        const { score, severity } = computeRiskScore(riskInputFromPath(path.nodes));
-        return { ...path, score, severity };
+        const riskInput = riskInputFromPath(path.nodes);
+        const { score, severity } = computeRiskScore(riskInput);
+        const likelihood = pathLikelihood(riskInput);
+        return {
+          ...path,
+          score,
+          severity,
+          likelihood: likelihood.value,
+          likelihoodFactors: likelihood.factors,
+        };
       })
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => b.score - a.score || b.likelihood - a.likelihood);
     if (paths.length > limit) {
       paths.length = limit;
       truncated = true;
@@ -158,6 +179,91 @@ export async function searchAttackPaths(req: Request, res: Response): Promise<vo
     }
     console.error('Error searching attack paths:', error);
     res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to search attack paths' });
+  }
+}
+
+// What a fix would remove: re-runs one rule against the live graph and counts,
+// per edge on the matched paths, how many paths traverse it — the remediation
+// priority, since the top edge clears the most (or the worst) paths. Removal is
+// simulated by filtering the returned paths, not by mutating the graph.
+export async function simulateAttackPaths(req: Request, res: Response): Promise<void> {
+  try {
+    const ruleId = typeof req.query.ruleId === 'string' ? req.query.ruleId : '';
+    const rule = getRuleById(ruleId);
+    if (!rule) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: 'Unknown rule' });
+      return;
+    }
+
+    const rows = await neptuneClient.executeStaticQuery(rule.gremlinQueryTemplate);
+    const deduped = new Set<string>();
+    const paths = rows
+      .map((match) => extractRulePath(match))
+      .filter((path) => {
+        if (path.vertices.length === 0) return false;
+        const key = path.vertices.map((vertex) => vertex.id).join('>');
+        if (deduped.has(key)) return false;
+        deduped.add(key);
+        return true;
+      });
+    const truncated = paths.length > MAX_SIMULATION_PATHS;
+    const bounded = paths.slice(0, MAX_SIMULATION_PATHS);
+
+    const byEdge = new Map<
+      string,
+      {
+        id: string;
+        label: string;
+        from: string;
+        to: string;
+        pathsUsing: number;
+        worstLikelihood: number;
+      }
+    >();
+    for (const path of bounded) {
+      const likelihood = pathLikelihood(riskInputFromPath(path.vertices)).value;
+      const edgeCount = Math.min(path.edges.length, path.vertices.length - 1);
+      for (let index = 0; index < edgeCount; index++) {
+        const edge = path.edges[index];
+        const from = path.vertices[index].id;
+        const to = path.vertices[index + 1].id;
+        const id = edge.id || `${from}>${edge.label}>${to}`;
+        const entry = byEdge.get(id) ?? {
+          id,
+          label: edge.label,
+          from,
+          to,
+          pathsUsing: 0,
+          worstLikelihood: 0,
+        };
+        entry.pathsUsing += 1;
+        entry.worstLikelihood = Math.max(entry.worstLikelihood, likelihood);
+        byEdge.set(id, entry);
+      }
+    }
+
+    const body: AttackPathSimulationResponse = {
+      ruleId: rule.id,
+      ruleName: rule.name,
+      totalPaths: bounded.length,
+      truncated,
+      edges: [...byEdge.values()]
+        .sort((a, b) => b.pathsUsing - a.pathsUsing || b.worstLikelihood - a.worstLikelihood)
+        .slice(0, MAX_SIMULATION_EDGES)
+        .map((entry) => ({
+          ...entry,
+          remainingPaths: bounded.length - entry.pathsUsing,
+          worstLikelihood: Math.round(entry.worstLikelihood * 10000) / 10000,
+        })),
+    };
+    res.json(body);
+  } catch (error) {
+    if (isSearchTimeout(error)) {
+      res.status(504).json({ code: 'SEARCH_TIMEOUT', message: 'Attack path simulation timed out' });
+      return;
+    }
+    console.error('Error simulating attack paths:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to simulate attack paths' });
   }
 }
 

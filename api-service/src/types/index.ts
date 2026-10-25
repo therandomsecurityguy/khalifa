@@ -90,6 +90,27 @@ export interface IssueDetailResponse extends Issue {
 // Where an attacker gets onto the path, when the path itself does not start there.
 export type AttackPathEntry = { kind: 'internet' } | { kind: 'trust'; principals: GraphVertex[] };
 
+export interface AttackPathSimulationEdge {
+  id: string;
+  label: string;
+  from: string;
+  to: string;
+  /** Matched paths that traverse this edge. */
+  pathsUsing: number;
+  /** Matched paths the rule would still return without the edge. */
+  remainingPaths: number;
+  /** Likelihood of the worst path the edge clears, 0..1. */
+  worstLikelihood: number;
+}
+
+export interface AttackPathSimulationResponse {
+  ruleId: string;
+  ruleName: string;
+  totalPaths: number;
+  truncated: boolean;
+  edges: AttackPathSimulationEdge[];
+}
+
 // Metadata only: the API never returns a secret's description, tags, key ARN
 // or policy text, and Khalifa never collects its value.
 export interface SecretSharing {

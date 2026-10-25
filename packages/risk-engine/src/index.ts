@@ -49,3 +49,5 @@ export {
   type RequirementReconciliation,
 } from './cis-reconciliation';
 export { globMatch } from './glob';
+export { extractRulePath, type RulePath } from './rule-path';
+export { pathLikelihood, type PathLikelihood, type PathLikelihoodFactors } from './likelihood';

@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
-import { getAccounts, getIssue, getRule, getSession } from '@/lib/api';
+import userEvent from '@testing-library/user-event';
+import { getAccounts, getIssue, getPathSimulation, getRule, getSession } from '@/lib/api';
 import type { IssueDetail } from '@/types';
 import IssuePage from './page';
 
@@ -8,6 +9,7 @@ jest.mock('@/lib/api', () => ({
   ...jest.requireActual('@/lib/api'),
   getAccounts: jest.fn(),
   getIssue: jest.fn(),
+  getPathSimulation: jest.fn(),
   getRule: jest.fn(),
   getSession: jest.fn(),
 }));
@@ -192,5 +194,84 @@ describe('IssuePage involved resources', () => {
     expect(within(card).getByText('CVE-2026-1')).toBeInTheDocument();
     expect(within(card).queryByText(findingIds[1])).not.toBeInTheDocument();
     expect(within(card).getAllByRole('listitem')[0]).toHaveTextContent('openssl');
+  });
+});
+
+describe('IssuePage fix simulation', () => {
+  beforeEach(() => {
+    (getAccounts as jest.Mock).mockResolvedValue({ accounts: [] });
+    (getRule as jest.Mock).mockResolvedValue({
+      id: 'RULE-013',
+      name: 'IAM User with Active Access Key Older Than 90 Days',
+      description: 'Old keys.',
+      severityHint: 'high',
+      ownerTeam: 'iam-security',
+    });
+    (getSession as jest.Mock).mockResolvedValue({
+      email: 'viewer@example.com',
+      role: 'viewer',
+    });
+    mockedIssue.mockReset().mockResolvedValue(detail());
+    (getPathSimulation as jest.Mock).mockReset();
+  });
+
+  it('ranks the fixes by how many matched paths each one clears', async () => {
+    (getPathSimulation as jest.Mock).mockResolvedValue({
+      ruleId: 'RULE-013',
+      ruleName: 'IAM User with Active Access Key Older Than 90 Days',
+      totalPaths: 3,
+      truncated: false,
+      edges: [
+        {
+          id: 'e1',
+          label: 'HAS_ACCESS_KEY',
+          from: user,
+          to: key,
+          pathsUsing: 3,
+          remainingPaths: 0,
+          worstLikelihood: 0.42,
+        },
+        {
+          id: 'e2',
+          label: 'ATTACHED_TO',
+          from: user,
+          to: 'arn:aws:iam::111122223333:policy/reader',
+          pathsUsing: 1,
+          remainingPaths: 2,
+          worstLikelihood: 0.2,
+        },
+      ],
+    });
+
+    render(<IssuePage />);
+    const card = (await screen.findByText('What removes these paths')).closest('section')!;
+    await userEvent.click(within(card).getByRole('button', { name: 'Simulate fixes' }));
+
+    expect(getPathSimulation).toHaveBeenCalledWith('RULE-013');
+    expect(
+      await within(card).findByText(/clears 3 of 3 matched paths · worst likelihood 42%/)
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByText(/clears 1 of 3 matched paths · worst likelihood 20%/)
+    ).toBeInTheDocument();
+    expect(within(card).getAllByRole('listitem')[0]).toHaveTextContent('HAS_ACCESS_KEY');
+  });
+
+  it('says when no single edge clears a matched path', async () => {
+    (getPathSimulation as jest.Mock).mockResolvedValue({
+      ruleId: 'RULE-013',
+      ruleName: 'IAM User with Active Access Key Older Than 90 Days',
+      totalPaths: 0,
+      truncated: false,
+      edges: [],
+    });
+
+    render(<IssuePage />);
+    const card = (await screen.findByText('What removes these paths')).closest('section')!;
+    await userEvent.click(within(card).getByRole('button', { name: 'Simulate fixes' }));
+
+    expect(
+      await within(card).findByText('No single edge clears a matched path.')
+    ).toBeInTheDocument();
   });
 });

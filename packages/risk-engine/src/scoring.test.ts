@@ -248,3 +248,24 @@ describe('riskInputFromPath exploitability', () => {
     expect(input.exploitability).toBeUndefined();
   });
 });
+
+describe('riskInputFromPath reachability', () => {
+  test('marks reachability restricted when a vertex read was restricted', () => {
+    const input = riskInputFromPath([
+      { id: 'ec2', label: 'Ec2Instance', properties: { is_internet_exposed: true } },
+      {
+        id: 'fn',
+        label: 'LambdaFunction',
+        properties: { lambda_exposure_restricted: true },
+      },
+    ]);
+    expect(input.reachabilityRestricted).toBe(true);
+  });
+
+  test('leaves reachability derived when every vertex was readable', () => {
+    const input = riskInputFromPath([
+      { id: 'ec2', label: 'Ec2Instance', properties: { is_internet_exposed: true } },
+    ]);
+    expect(input.reachabilityRestricted).toBeUndefined();
+  });
+});
