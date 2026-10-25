@@ -2,6 +2,9 @@ export interface GraphNode {
   id: string;
   label: string;
   properties: Record<string, any>;
+  // Keys to remove from an existing vertex because the source no longer
+  // reports them (a removed tag). Applied only when the write is newer.
+  clearProperties?: string[];
   observedAt?: string;
 }
 

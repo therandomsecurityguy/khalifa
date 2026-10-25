@@ -12,5 +12,6 @@ module.exports = {
   projects: [
     project('graph-queries', __dirname),
     project('graph-evaluator', `${__dirname}/../../lambdas/policy-evaluator`),
+    project('graph-writer', `${__dirname}/../../lambdas/graph-writer`),
   ],
 };
