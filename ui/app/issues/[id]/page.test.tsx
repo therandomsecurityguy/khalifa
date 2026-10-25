@@ -120,4 +120,77 @@ describe('IssuePage involved resources', () => {
     expect(within(card).getByText(/No longer in the graph/)).toBeInTheDocument();
     expect(within(card).queryByText('Age')).not.toBeInTheDocument();
   });
+
+  it('shows the facts for involved resources off the drawn path', async () => {
+    const other = 'arn:aws:iam::111122223333:user/ci-deployer/access-key/AKIAOTHER';
+    const base = detail();
+    mockedIssue.mockResolvedValue(
+      detail({
+        resourcesInvolved: [
+          ...base.resourcesInvolved,
+          { resourceId: other, resourceType: 'AccessKey', resourceName: 'AKIAOTHER' },
+        ],
+        involvedResources: [
+          {
+            id: other,
+            label: 'AccessKey',
+            properties: { status: 'Active', key_age_days: 412 },
+          },
+        ],
+      })
+    );
+    render(<IssuePage />);
+    const card = (await screen.findByText('Involved resources')).closest('section')!;
+
+    expect(within(card).getByText('412 days')).toBeInTheDocument();
+    expect(within(card).getByText('131 days')).toBeInTheDocument();
+  });
+
+  it('lists several findings on one resource under it, grouped by package', async () => {
+    const instance = 'arn:aws:ec2:us-west-2:111122223333:instance/i-1';
+    const inspector = 'arn:aws:securityhub:us-west-2::product/aws/inspector';
+    const findingIds = ['f1', 'f2', 'f3'].map(
+      (id) => `arn:aws:securityhub:us-west-2:111122223333:finding/${id}`
+    );
+    const titles = [
+      'CVE-2026-1 - linux-image-aws',
+      'CVE-2026-2 - linux-image-aws',
+      'CVE-2026-3 - openssl',
+    ];
+    mockedIssue.mockResolvedValue(
+      detail({
+        ruleId: 'RULE-018',
+        resourcesInvolved: [
+          { resourceId: instance, resourceType: 'Ec2Instance', accountId: '111122223333' },
+          ...findingIds.map((resourceId) => ({ resourceId, resourceType: 'SecurityHubFinding' })),
+        ],
+        pathSummary: [{ from: findingIds[0], to: instance, edgeType: 'DETECTS_ON' }],
+        attackPath: {
+          nodes: [
+            {
+              id: findingIds[0],
+              label: 'SecurityHubFinding',
+              properties: { title: titles[0], severity: 'CRITICAL', product_arn: inspector },
+            },
+            { id: instance, label: 'Ec2Instance', properties: { state: 'running' } },
+          ],
+          edges: [],
+        },
+        involvedResources: findingIds.slice(1).map((id, i) => ({
+          id,
+          label: 'SecurityHubFinding',
+          properties: { title: titles[i + 1], severity: 'HIGH', product_arn: inspector },
+        })),
+      })
+    );
+    render(<IssuePage />);
+    const card = (await screen.findByText('Involved resources')).closest('section')!;
+
+    expect(within(card).getByText('3 Security Hub findings on this resource')).toBeInTheDocument();
+    expect(within(card).getByText('linux-image-aws')).toBeInTheDocument();
+    expect(within(card).getByText('openssl')).toBeInTheDocument();
+    expect(within(card).getByText('CVE-2026-1')).toBeInTheDocument();
+    expect(within(card).queryByText(findingIds[1])).not.toBeInTheDocument();
+    expect(within(card).getAllByRole('listitem')[0]).toHaveTextContent('openssl');
+  });
 });

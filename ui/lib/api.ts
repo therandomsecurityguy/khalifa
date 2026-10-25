@@ -17,6 +17,9 @@ import type {
   ResourceLabelCount,
   ResourceGraph,
   ResourceSearchResponse,
+  SecretDetail,
+  SecretInventory,
+  SecretReaderCounts,
   RightsizingRecommendation,
   IssueStatus,
   Session,
@@ -313,6 +316,18 @@ export function getDataSources(
   options: RequestOptions = {}
 ): Promise<{ accounts: AccountCoverage[]; jobs: JobOutput[] }> {
   return request('/data-sources', options);
+}
+
+export function getSecrets(options: RequestOptions = {}): Promise<SecretInventory> {
+  return request('/secrets', options);
+}
+
+export function getSecretReaderCounts(options: RequestOptions = {}): Promise<SecretReaderCounts> {
+  return request('/secrets/reader-counts', options);
+}
+
+export function getSecret(arn: string, options: RequestOptions = {}): Promise<SecretDetail> {
+  return request(`/secrets/${encodeURIComponent(arn)}`, options);
 }
 
 export function getAccounts(options: RequestOptions = {}): Promise<{ accounts: AccountSummary[] }> {

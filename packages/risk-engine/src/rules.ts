@@ -19,6 +19,29 @@ const baseRiskFactors: RiskFactor[] = [
 const PATH_PROJECTION =
   "path().by(valueMap(true, 'arn', 'name', 'Name', 'is_internet_exposed', 'data_classification', 'crown_jewel', 'env', 'is_admin', 'is_admin_role', 'has_cross_account_trust', 'is_cross_account'))";
 
+// Secret -> resource policy -> statement that allows another account or '*'.
+// Statements collected before the principal fields existed match none of the
+// secret-share rules until the next collection.
+const SECRET_SHARE_PATH = `
+        .outE('HAS_RESOURCE_POLICY').inV().hasLabel('IamPolicyDocument')
+        .as('policy')
+        .outE('CONTAINS').inV().hasLabel('IamPolicyStatement')
+        .has('effect', 'Allow')
+        .has('has_cross_account_principal', true)
+        .has('principal_account_count')`;
+// Anyone without an organization limit, or an account with no AwsAccount
+// vertex (SHARES_WITH edges exist only to collected accounts).
+const SHARES_OUTSIDE = `
+          has('principal_is_anyone', true).has('principal_org_restricted', false),
+          project('named', 'collected')
+            .by('principal_account_count')
+            .by(out('SHARES_WITH').hasLabel('AwsAccount').count())
+            .where('collected', lt('named'))`;
+// The whole organization, or a collected account not listed as prod.
+const SHARES_NON_PROD = `
+          has('principal_is_anyone', true).has('principal_org_restricted', true),
+          out('SHARES_WITH').hasLabel('AwsAccount').has('is_prod', false)`;
+
 export const riskRules: RiskRule[] = [
   {
     id: 'RULE-001',
@@ -83,20 +106,19 @@ export const riskRules: RiskRule[] = [
     id: 'RULE-003',
     name: 'Container Images with Critical CVEs on Internet-Exposed Workloads',
     description:
-      'Detects container images with critical severity CVEs running on pods or instances exposed to the internet. Disabled until vulnerability scanning is implemented.',
+      'Detects internet-exposed instances or pods running a container image with a critical CVE. Disabled until image vulnerability data (for example Amazon Inspector) is collected; nothing creates HAS_CVE today.',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
-      g.V().hasLabel('ContainerImage')
+      g.V().hasLabel(within('Ec2Instance', 'KubernetesPod'))
+        .has('is_internet_exposed', true)
+        .as('workload')
+        .inE('RUNS_ON').outV().hasLabel('ContainerImage')
         .as('image')
         .outE('HAS_CVE').inV()
         .has('severity', 'CRITICAL')
         .has('cvss_base_score', gte(9.0))
         .as('cve')
-        .inE('RUNS_ON').outV()
-        .hasLabel(within('Ec2Instance', 'KubernetesPod'))
-        .has('is_internet_exposed', true)
-        .as('workload')
         .${PATH_PROJECTION}
     `,
     ownerTeam: 'container-security',
@@ -111,7 +133,7 @@ export const riskRules: RiskRule[] = [
     id: 'RULE-004',
     name: 'Admin IAM Role on an Internet-Reachable Workload',
     description:
-      'Detects internet-reachable EC2 instances or Lambda functions whose role is admin (the policy evaluator found * or iam:* allowed), so compromising the workload compromises the account. Replaces the old count of more than five attached policies, which said nothing about what the policies grant',
+      'Detects internet-reachable EC2 instances or Lambda functions whose role is admin (the policy evaluator found * or iam:* allowed), so compromising the workload compromises the account. Replaces the old count of more than five attached policies, which said nothing about what the policies grant. Lambda counts as reachable through a function URL without auth or a policy letting anyone invoke it',
     severityHint: 'high',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
@@ -161,13 +183,13 @@ export const riskRules: RiskRule[] = [
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     // Trusts between collected accounts (e.g. the collector role trusted by
-    // the hub account) are not outside access.
+    // the hub) are not outside access.
     gremlinQueryTemplate: `
       g.V().hasLabel('IamRole')
         .as('role')
         .where(
           out('TRUSTS').hasLabel('ExternalAccount')
-            .values('account_id').as('trusted')
+            .values('external_account_id').as('trusted')
             .not(V().hasLabel('AwsAccount').values('account_id').where(eq('trusted')))
         )
         .outE('ATTACHED_TO').inV()
@@ -182,8 +204,12 @@ export const riskRules: RiskRule[] = [
     routeLabels: ['IamPolicy', 'IamPolicyDocument', 'IamPolicyStatement'],
     ownerTeam: 'iam-security',
     enabled: true,
+    // Tickets off until outside accounts are reviewed: read through
+    // external_account_id the rule matches every role trusted by an account
+    // Khalifa doesn't collect, which on 2026-10-21 was 177 roles in 22 accounts
+    // (the management account, approved vendors, other accounts).
     autoTicketConfig: {
-      enabled: true,
+      enabled: false,
       projectKey: 'SEC',
       priority: 'P1',
     },
@@ -234,15 +260,14 @@ export const riskRules: RiskRule[] = [
   },
   {
     id: 'RULE-009',
-    name: 'Lambda with VPC and Internet Access to Sensitive Resources',
+    name: 'Internet-Exposed Lambda Whose Role Reaches Sensitive Data',
     description:
-      'Detects Lambda functions in VPCs with internet access whose IAM role grants access to sensitive S3 or DynamoDB',
+      'Detects Lambda functions reachable from the internet whose IAM role grants access to classified S3 buckets or DynamoDB tables. Reachable means a function URL without auth or a policy letting anyone invoke it',
     severityHint: 'medium',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
       g.V().hasLabel('LambdaFunction')
-        .has('is_in_vpc', true)
-        .has('has_internet_access', true)
+        .has('is_internet_exposed', true)
         .as('lambda')
         .outE('HAS_IAM_ROLE').inV().as('role')
         .outE('ATTACHED_TO').inV()
@@ -263,36 +288,25 @@ export const riskRules: RiskRule[] = [
   },
   {
     id: 'RULE-010',
-    name: 'Secrets Manager Secrets with Overly Permissive IAM',
+    name: 'Secret Shared Outside Collected Accounts by Its Resource Policy',
     description:
-      'Detects Secrets Manager secrets granted by policy statements with wildcard resources or cross-account principals, via identity policies attached to roles or via secret resource policies',
+      'Detects Secrets Manager secrets whose resource policy allows anyone (*) without an aws:PrincipalOrgID limit, or an account Khalifa does not collect. Shares between collected accounts are RULE-032 and RULE-033. Wildcard secret reads by roles and users are RULE-016',
     severityHint: 'high',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
       g.V().hasLabel('Secret')
-        .has('secret_type', 'database')
         .as('secret')
-        .inE('GRANTS').outV().hasLabel('IamPolicyStatement')
-        .has('effect', 'Allow')
-        .or(
-          has('has_wildcard_resource', true),
-          has('has_cross_account_principal', true)
-        )
+        ${SECRET_SHARE_PATH}
+        .or(${SHARES_OUTSIDE})
         .as('statement')
-        .inE('CONTAINS').outV().hasLabel('IamPolicyDocument').as('policy')
-        .or(
-          in('ATTACHED_TO').hasLabel('IamRole'),
-          inE('CONTAINS').outV().hasLabel('IamPolicy').inE('ATTACHED_TO').outV().hasLabel('IamRole'),
-          in('HAS_RESOURCE_POLICY')
-        )
         .${PATH_PROJECTION}
     `,
+    routeLabels: ['IamPolicyDocument', 'IamPolicyStatement'],
     ownerTeam: 'iam-security',
     enabled: true,
+    // No tickets until the rewritten rule's firing rate has been observed.
     autoTicketConfig: {
-      enabled: true,
-      projectKey: 'SEC',
-      priority: 'P2',
+      enabled: false,
     },
   },
   {
@@ -720,13 +734,107 @@ export const riskRules: RiskRule[] = [
     id: 'RULE-030',
     name: 'Principal Can Escalate to an Admin or Privilege-Escalation Role',
     description:
-      'Detects a principal that can assume its way, in up to three hops, to an admin role or to a role holding privilege-escalation actions. The policy evaluator writes CAN_ESCALATE_TO for these paths daily and removes it when the path is gone. A source ending in :root is an account: any user or role there whose own policy allows sts:AssumeRole. Follows trust policies only; escalation through iam:PassRole or policy edits is not traced',
+      'Detects a principal that can assume its way, in up to three hops, to an admin role or to a role holding privilege-escalation actions. The policy evaluator writes CAN_ESCALATE_TO for these paths daily and removes it when the path is gone. A source ending in :root is an account: any user or role there whose own policy allows sts:AssumeRole. Follows trust policies only; passing an admin role to new compute is RULE-034, and policy edits are not traced',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
       g.V().hasLabel(within('AwsAccount', 'IamRole', 'IamUser'))
         .as('source')
-        .outE('CAN_ESCALATE_TO').has('risk_level', within('critical', 'high')).inV()
+        .outE('CAN_ESCALATE_TO').has('risk_level', within('critical', 'high'))
+        .not(has('escalation_type', 'pass_role')).inV()
+        .hasLabel('IamRole')
+        .as('target')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'iam-security',
+    enabled: true,
+    // No tickets until its firing rate has been observed on real data.
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
+  {
+    id: 'RULE-031',
+    name: 'Admin IAM User with an Active Access Key',
+    description:
+      'Detects IAM users the policy evaluator found to be admin (* or iam:* allowed) that hold an active access key. A long-lived key on an admin user is full account access for anyone who finds it. Policies a user gets through a group are not yet evaluated',
+    severityHint: 'critical',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('IamUser')
+        .has('is_admin', true)
+        .as('user')
+        .outE('HAS_ACCESS_KEY').inV().hasLabel('AccessKey')
+        .has('status', 'Active')
+        .as('key')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'iam-security',
+    enabled: true,
+    // No tickets until its firing rate has been observed on real data.
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
+  {
+    id: 'RULE-032',
+    name: 'Prod Secret Shared with a Non-Prod Account',
+    description:
+      'Detects env=prod Secrets Manager secrets whose resource policy allows a collected account outside PROD_ACCOUNT_IDS, or the whole organization. Secrets that also match RULE-010 are left to it',
+    severityHint: 'medium',
+    maxSeverity: 'medium',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('Secret').has('env', 'prod')
+        .as('secret')
+        .not(identity()${SECRET_SHARE_PATH}.or(${SHARES_OUTSIDE}))
+        ${SECRET_SHARE_PATH}
+        .or(${SHARES_NON_PROD})
+        .as('statement')
+        .${PATH_PROJECTION}
+    `,
+    routeLabels: ['IamPolicyDocument', 'IamPolicyStatement'],
+    ownerTeam: 'iam-security',
+    enabled: true,
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
+  {
+    id: 'RULE-033',
+    name: 'Secret Shared with Another Collected Account',
+    description:
+      'Detects Secrets Manager secrets whose resource policy allows only other collected accounts, or the organization. Usually intended; kept visible at low severity. Outside shares are RULE-010, prod-to-non-prod RULE-032',
+    severityHint: 'low',
+    maxSeverity: 'low',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('Secret')
+        .as('secret')
+        .not(identity()${SECRET_SHARE_PATH}.or(${SHARES_OUTSIDE}))
+        .not(has('env', 'prod')${SECRET_SHARE_PATH}.or(${SHARES_NON_PROD}))
+        ${SECRET_SHARE_PATH}
+        .as('statement')
+        .${PATH_PROJECTION}
+    `,
+    routeLabels: ['IamPolicyDocument', 'IamPolicyStatement'],
+    ownerTeam: 'iam-security',
+    enabled: true,
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
+  {
+    id: 'RULE-034',
+    name: 'Principal Can Pass an Admin Role to Compute It Creates',
+    description:
+      'Detects a user or role whose own policies allow iam:PassRole on an admin role in its account and creating compute the role trusts (Lambda, EC2, CloudFormation, Glue, SageMaker, CodeBuild, ECS tasks). Launching that compute runs code as the admin role. The policy evaluator writes these links daily. SCPs and permission boundaries are not applied, so a path they block still shows',
+    severityHint: 'critical',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel(within('IamRole', 'IamUser'))
+        .as('source')
+        .outE('CAN_ESCALATE_TO').has('escalation_type', 'pass_role').inV()
         .hasLabel('IamRole')
         .as('target')
         .${PATH_PROJECTION}

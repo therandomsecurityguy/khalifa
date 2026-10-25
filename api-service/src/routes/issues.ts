@@ -22,6 +22,8 @@ const issueStore = new DynamoDBIssueRepository();
 const trendStore = new PostureTrendStore();
 // Bounds the DynamoDB filter expression; the catalogue has far fewer rules.
 const MAX_RULE_FILTERS = 50;
+// The runner caps an issue's resources at 200; never read more than that.
+const MAX_INVOLVED_LOOKUPS = 200;
 const neptuneClient = getApiNeptuneClient();
 
 export async function listIssues(req: Request, res: Response): Promise<void> {
@@ -95,6 +97,7 @@ export async function getIssue(req: Request<{ id: string }>, res: Response): Pro
     let attackPathNodes: GraphVertex[] = [];
     let attackPathEdges: GraphEdge[] = [];
     let entry: AttackPathEntry | undefined;
+    let involvedResources: GraphVertex[] = [];
 
     // Consecutive segments share a vertex; look each one up once, in path order.
     // A single-resource match has no segments, so its resources stand alone.
@@ -105,16 +108,26 @@ export async function getIssue(req: Request<{ id: string }>, res: Response): Pro
     if (orderedIds.length > 0) {
       try {
         const pathNodes = await Promise.all(orderedIds.map((id) => neptuneClient.getResource(id)));
-        // A vertex gone from the graph stays as a placeholder, so the drawing
-        // never bridges the gap with an edge that does not exist.
-        attackPathNodes = pathNodes.map(
-          (node, index) =>
-            node ?? {
-              id: orderedIds[index],
-              label: 'Missing',
-              properties: { name: orderedIds[index].split(/[:/]/).pop(), missing: true },
-            }
+        const involved = new Map(
+          (issue.resourcesInvolved || []).map((resource) => [resource.resourceId, resource])
         );
+        // A vertex gone from the graph stays as a placeholder, so the drawing
+        // never bridges the gap with an edge that does not exist. The issue
+        // still knows its type and name from when it matched.
+        attackPathNodes = pathNodes.map((node, index) => {
+          if (node) return node;
+          const id = orderedIds[index];
+          const resource = involved.get(id);
+          return {
+            id,
+            label: 'Missing',
+            properties: {
+              name: resource?.resourceName || id.split(/[:/]/).pop(),
+              missing: true,
+              ...(resource?.resourceType ? { deleted_label: resource.resourceType } : {}),
+            },
+          };
+        });
         attackPathEdges = (issue.pathSummary || []).map((segment) => ({
           id: `${segment.from}-${segment.to}`,
           label: segment.edgeType,
@@ -127,6 +140,22 @@ export async function getIssue(req: Request<{ id: string }>, res: Response): Pro
       }
     }
 
+    // Resources the issue lists but its drawn path does not cross, such as
+    // other findings on the same instance, so each can show its own evidence.
+    const onPath = new Set(orderedIds);
+    const offPathIds = [
+      ...new Set((issue.resourcesInvolved || []).map((resource) => resource.resourceId)),
+    ]
+      .filter((id) => !onPath.has(id))
+      .slice(0, MAX_INVOLVED_LOOKUPS);
+    if (offPathIds.length > 0) {
+      try {
+        involvedResources = await neptuneClient.getResources(offPathIds);
+      } catch (neptuneError) {
+        console.warn('Failed to fetch involved resources from Neptune:', neptuneError);
+      }
+    }
+
     const response: IssueDetailResponse = {
       ...issue,
       attackPath: {
@@ -134,6 +163,7 @@ export async function getIssue(req: Request<{ id: string }>, res: Response): Pro
         edges: attackPathEdges,
         entry,
       },
+      involvedResources,
     };
 
     res.json(response);

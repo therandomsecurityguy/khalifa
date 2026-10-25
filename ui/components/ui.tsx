@@ -236,13 +236,13 @@ export function PageHeader({
   return (
     <header className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-        <div>
+        <div className="min-w-0">
           {backHref && (
             <Link href={backHref} className={`mb-2 inline-block text-sm ${LINK}`}>
               {backLabel ?? 'Back'}
             </Link>
           )}
-          <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
+          <h1 className="text-3xl font-bold text-gray-900 [overflow-wrap:anywhere]">{title}</h1>
           {description && <p className="mt-2 text-gray-600">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
@@ -255,10 +255,18 @@ export function PageBody({ children }: { children: ReactNode }) {
   return <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</div>;
 }
 
-export function Table({ children, caption }: { children: ReactNode; caption?: string }) {
+export function Table({
+  children,
+  caption,
+  className = '',
+}: {
+  children: ReactNode;
+  caption?: string;
+  className?: string;
+}) {
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
+      <table className={`min-w-full divide-y divide-gray-200 ${className}`}>
         {caption && <caption className="sr-only">{caption}</caption>}
         {children}
       </table>

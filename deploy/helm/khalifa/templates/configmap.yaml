@@ -62,6 +62,7 @@ data:
   HOME_ACCOUNT_ID: {{ .Values.collection.homeAccountId | quote }}
   COLLECTION_ACCOUNT_IDS: {{ join "," .Values.collection.accountIds | quote }}
   COLLECTION_PARENT_IDS: {{ join "," .Values.collection.parentIds | quote }}
+  PROD_ACCOUNT_IDS: {{ join "," (.Values.collection.prodAccountIds | default list) | quote }}
   COLLECTION_REGIONS: {{ join "," .Values.collection.regions | quote }}
   COLLECTION_CONCURRENCY: {{ .Values.collection.concurrency | quote }}
   COLLECTION_MAX_ATTEMPTS: {{ .Values.collection.maxAttempts | quote }}

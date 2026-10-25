@@ -310,4 +310,53 @@ describe('AttackGraph', () => {
       '1'
     );
   });
+
+  it('greys out a deleted resource with its stored type and a deleted link', async () => {
+    const gone: GraphVertex = {
+      id: 'arn:aws:iam::111122223333:policy/FlanDiscoveryReadOnly',
+      label: 'Missing',
+      properties: { name: 'FlanDiscoveryReadOnly', missing: true, deleted_label: 'S3Bucket' },
+    };
+    render(
+      <AttackGraph
+        paths={[
+          {
+            nodes: [role, gone],
+            edges: [{ id: 'a', label: 'ATTACHED_TO', from: role.id, to: gone.id }],
+          },
+        ]}
+        empty="none"
+      />
+    );
+
+    const graph = screen.getByRole('group', { name: 'Attack path graph' });
+    const card = within(graph).getByRole('button', { name: /Deleted · S3 bucket/ });
+    expect(card).toHaveAttribute('opacity', '0.55');
+    expect(screen.getByText('Deleted resource')).toBeInTheDocument();
+
+    await userEvent.click(card);
+    expect(screen.getByText(/Deleted: no longer in AWS/)).toBeInTheDocument();
+    expect(screen.queryByText('Missing')).not.toBeInTheDocument();
+  });
+
+  it('falls back to "Deleted" when the type is unknown', () => {
+    const gone: GraphVertex = {
+      id: 'arn:aws:iam::111122223333:policy/Gone',
+      label: 'Missing',
+      properties: { name: 'Gone', missing: true },
+    };
+    render(
+      <AttackGraph
+        paths={[
+          {
+            nodes: [role, gone],
+            edges: [{ id: 'a', label: 'ATTACHED_TO', from: role.id, to: gone.id }],
+          },
+        ]}
+        empty="none"
+      />
+    );
+    const graph = screen.getByRole('group', { name: 'Attack path graph' });
+    expect(within(graph).getByRole('button', { name: /^Deleted Gone/ })).toBeInTheDocument();
+  });
 });

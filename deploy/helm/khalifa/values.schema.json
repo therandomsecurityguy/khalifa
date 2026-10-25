@@ -533,6 +533,11 @@
             "pattern": "^(?:r-[a-z0-9]{4,32}|ou-[a-z0-9]{4,32}-[a-z0-9]{8,32})$"
           }
         },
+        "prodAccountIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[0-9]{12}$" }
+        },
         "regions": {
           "type": "array",
           "uniqueItems": true,

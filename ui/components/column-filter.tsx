@@ -5,6 +5,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 export interface FilterOption {
   value: string;
   label: string;
+  // How many rows the option would show, given the other filters.
+  count?: number;
 }
 
 // A column-header funnel that opens a checklist; an empty selection means no filter.
@@ -117,7 +119,10 @@ export function ColumnFilter({
                   checked={selected.includes(option.value)}
                   onChange={() => toggle(option.value)}
                 />
-                <span className="truncate">{option.label}</span>
+                <span className="flex-1 truncate">{option.label}</span>
+                {option.count !== undefined && (
+                  <span className="text-xs tabular-nums text-gray-500">{option.count}</span>
+                )}
               </label>
             ))}
           </div>

@@ -1,4 +1,6 @@
 import app from '../app';
+import { requireViewer } from '../middleware/rbac';
+import { expensiveRateLimiter } from '../middleware/rate-limit';
 
 describe('API route registration', () => {
   const stack = (app as unknown as { _router: { stack: any[] } })._router.stack;
@@ -13,6 +15,7 @@ describe('API route registration', () => {
       ['/resources/properties', '/resources/:arn(*)'],
       ['/resources/values', '/resources/:arn(*)'],
       ['/resources/graph', '/resources/:arn(*)'],
+      ['/secrets/reader-counts', '/secrets/:arn(*)'],
       [
         '/identity/least-privilege/summary',
         '/identity/least-privilege/:accountId/:principalArn(*)',
@@ -50,5 +53,49 @@ describe('API route registration', () => {
 
   it('registers the data sources route', () => {
     expect(paths).toContain('/data-sources');
+  });
+
+  it('serves secrets only after authentication, to viewers, behind the expensive-query limit', () => {
+    const authenticationIndex = stack.findIndex((layer) => layer.name === 'authenticate');
+    const routeIndex = stack.findIndex((layer) => layer.route?.path === '/secrets');
+    expect(authenticationIndex).toBeGreaterThanOrEqual(0);
+    expect(routeIndex).toBeGreaterThan(authenticationIndex);
+    const handlers = stack[routeIndex].route.stack.map((layer: any) => layer.handle);
+    expect(handlers[0]).toBe(requireViewer);
+    expect(handlers[1]).toBe(expensiveRateLimiter);
+  });
+
+  it('serves one secret behind ARN validation and the same checks, after the list route', () => {
+    const listIndex = stack.findIndex((layer) => layer.route?.path === '/secrets');
+    const detailIndex = stack.findIndex((layer) => layer.route?.path === '/secrets/:arn(*)');
+    expect(detailIndex).toBeGreaterThan(listIndex);
+    const handlers = stack[detailIndex].route.stack.map((layer: any) => layer.handle);
+    expect(handlers).toHaveLength(4);
+    expect(handlers[1]).toBe(requireViewer);
+    expect(handlers[2]).toBe(expensiveRateLimiter);
+    const validate = handlers[0];
+    const res: any = { status: jest.fn(() => res), json: jest.fn() };
+    const next = jest.fn();
+    validate({ params: { arn: 'g.V().drop()' } }, res, next);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(next).not.toHaveBeenCalled();
+    validate(
+      { params: { arn: 'arn:aws:secretsmanager:us-west-2:111122223333:secret:prod/key' } },
+      res,
+      next
+    );
+    expect(next).toHaveBeenCalledTimes(1);
+    const layer = stack[detailIndex];
+    expect(layer.match('/secrets/arn:aws:ssm:us-west-2:111122223333:parameter/db/password')).toBe(
+      true
+    );
+    expect(layer.params.arn).toBe('arn:aws:ssm:us-west-2:111122223333:parameter/db/password');
+  });
+
+  it('serves reader counts behind the viewer role and the expensive-query limit', () => {
+    const layer = stack.find((candidate) => candidate.route?.path === '/secrets/reader-counts');
+    const handlers = layer.route.stack.map((entry: any) => entry.handle);
+    expect(handlers[0]).toBe(requireViewer);
+    expect(handlers[1]).toBe(expensiveRateLimiter);
   });
 });

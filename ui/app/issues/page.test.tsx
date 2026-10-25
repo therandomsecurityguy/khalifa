@@ -136,6 +136,24 @@ describe('IssuesPage', () => {
     expect(screen.getByRole('button', { name: 'Filter Team' })).toHaveTextContent('2');
   });
 
+  it('puts the resource name, then its type, then its account on separate lines', async () => {
+    const key = issue('k', 'high');
+    key.resourcesInvolved = [
+      {
+        resourceId: 'arn:aws:iam::111122223333:user/ci/AKIAEXAMPLE',
+        resourceType: 'AccessKey',
+        resourceName: 'AKIAEXAMPLE',
+      },
+    ];
+    mockedIssues.mockResolvedValue(list([key]));
+    render(<IssuesPage />);
+
+    const name = await screen.findByText('AKIAEXAMPLE', { selector: 'div' });
+    const type = name.nextElementSibling as HTMLElement;
+    expect(type).toHaveTextContent(/^Access key$/);
+    expect(type.nextElementSibling).toHaveTextContent(/^111122223333$/);
+  });
+
   it('keeps the column funnels reachable when a filter matches nothing', async () => {
     mockedIssues.mockResolvedValue(list([]));
     render(<IssuesPage />);
@@ -151,7 +169,8 @@ describe('IssuesPage', () => {
 
     const rule = await screen.findByRole('cell', { name: 'RULE-a Title a' });
     const row = rule.closest('tr') as HTMLElement;
-    expect(within(row).getByRole('cell', { name: 'a (S3 bucket)' })).toBeInTheDocument();
+    const resource = within(row).getByText('a', { selector: 'div' });
+    expect(resource.nextElementSibling).toHaveTextContent(/^S3 bucket$/);
     expect(screen.getByRole('columnheader', { name: 'Resources' })).toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Issue' })).not.toBeInTheDocument();
 

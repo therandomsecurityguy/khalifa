@@ -49,6 +49,7 @@ import { getIntegrationsStatus, suppressIssue, reopenIssue } from './routes/inte
 import { getSession } from './routes/session';
 import { getRule, listRules } from './routes/rules';
 import { getPublishableRequirements } from './routes/trust-center';
+import { getSecret, listSecretReaderCounts, listSecrets } from './routes/secrets';
 
 const app = express();
 app.disable('x-powered-by');
@@ -123,6 +124,15 @@ app.get('/issues/:id', requireViewer, getIssue);
 app.get('/attack-paths/search', requireViewer, expensiveRateLimiter, searchAttackPaths);
 app.get('/accounts', requireViewer, listAccounts);
 app.get('/data-sources', requireViewer, expensiveRateLimiter, getDataSources);
+app.get('/secrets', requireViewer, expensiveRateLimiter, listSecrets);
+app.get('/secrets/reader-counts', requireViewer, expensiveRateLimiter, listSecretReaderCounts);
+app.get(
+  '/secrets/:arn(*)',
+  validateArnPathParam('arn'),
+  requireViewer,
+  expensiveRateLimiter,
+  getSecret
+);
 
 app.get('/resources/search', requireViewer, searchResources);
 app.get('/resources/labels', requireViewer, expensiveRateLimiter, listResourceLabels);

@@ -4,8 +4,8 @@ import { ADMIN_PORT_RANGE_PREDICATE } from './admin-ports';
 const MANAGED_HOP = "optional(outE('CONTAINS').inV().hasLabel('IamPolicyDocument'))";
 
 describe('riskRules', () => {
-  test('should have exactly 30 rules', () => {
-    expect(riskRules.length).toBe(30);
+  test('should have exactly 33 rules', () => {
+    expect(riskRules.length).toBe(34);
   });
 
   test('each rule should have required fields', () => {
@@ -71,9 +71,9 @@ describe('getEnabledRules', () => {
     expect(rule?.enabled).toBe(false);
   });
 
-  test('should return 29 enabled rules (RULE-003 disabled)', () => {
+  test('should return 32 enabled rules (RULE-003 disabled)', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(29);
+    expect(enabledRules.length).toBe(33);
   });
 });
 
@@ -108,11 +108,11 @@ describe('getRuleById', () => {
     ],
     ['RULE-007', 'S3', ['is_publicly_accessible']],
     ['RULE-008', 'RDS', ['RdsInstance']],
-    ['RULE-009', 'Lambda', ['LambdaFunction', MANAGED_HOP]],
+    ['RULE-009', 'Lambda', ['LambdaFunction', "has('is_internet_exposed', true)", MANAGED_HOP]],
     [
       'RULE-010',
-      'Secrets',
-      ['Secret', "inE('CONTAINS').outV().hasLabel('IamPolicy').inE('ATTACHED_TO')"],
+      'Secret Shared Outside',
+      ['HAS_RESOURCE_POLICY', 'SHARES_WITH', 'principal_org_restricted'],
     ],
     [
       'RULE-011',
@@ -146,6 +146,10 @@ describe('getRuleById', () => {
       ['GuardDutyFinding', 'finding_class', 'gte(4)', 'DETECTS_ON', 'is_internet_exposed'],
     ],
     ['RULE-030', 'Escalate', ['CAN_ESCALATE_TO', "within('critical', 'high')"]],
+    ['RULE-031', 'Admin IAM User', ["has('is_admin', true)", 'HAS_ACCESS_KEY', 'Active']],
+    ['RULE-032', 'Prod Secret', ["has('env', 'prod')", "has('is_prod', false)"]],
+    ['RULE-033', 'Another Collected Account', ['HAS_RESOURCE_POLICY', 'SHARES_WITH']],
+    ['RULE-034', 'Pass an Admin Role', ['CAN_ESCALATE_TO', "has('escalation_type', 'pass_role')"]],
   ])('returns %s with its expected graph contract', (id, name, queryTokens) => {
     const rule = getRuleById(id);
     expect(rule?.id).toBe(id);
@@ -231,7 +235,15 @@ describe('RULE-002 admin-port predicate', () => {
 
   it('groups route-only differences into one issue for the rules that fan out per path', () => {
     const routed = riskRules.filter((rule) => rule.routeLabels).map((rule) => rule.id);
-    expect(routed).toEqual(['RULE-002', 'RULE-006', 'RULE-016', 'RULE-018']);
+    expect(routed).toEqual([
+      'RULE-002',
+      'RULE-006',
+      'RULE-010',
+      'RULE-016',
+      'RULE-018',
+      'RULE-032',
+      'RULE-033',
+    ]);
     expect(getRuleById('RULE-018')?.routeLabels).toEqual(['SecurityHubFinding']);
   });
 

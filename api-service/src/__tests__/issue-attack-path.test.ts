@@ -3,6 +3,7 @@ import type { GraphVertex } from '../types';
 
 const getIssueById = jest.fn();
 const getResource = jest.fn();
+const getResources = jest.fn();
 const getTrustedPrincipals = jest.fn();
 
 jest.mock('@khalifa/risk-engine', () => ({
@@ -10,7 +11,7 @@ jest.mock('@khalifa/risk-engine', () => ({
   PostureTrendStore: jest.fn(),
 }));
 jest.mock('../services/api-dependencies', () => ({
-  getApiNeptuneClient: () => ({ getResource, getTrustedPrincipals }),
+  getApiNeptuneClient: () => ({ getResource, getResources, getTrustedPrincipals }),
 }));
 
 let getIssue: typeof import('../routes/issues').getIssue;
@@ -57,6 +58,7 @@ describe('issue attack path entry point', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getTrustedPrincipals.mockResolvedValue([]);
+    getResources.mockResolvedValue([]);
   });
 
   it('starts at the internet only when the first resource is exposed', async () => {
@@ -122,11 +124,101 @@ describe('issue attack path entry point', () => {
     ]);
   });
 
+  it('keeps the type and name the issue stored for a deleted resource', async () => {
+    const role = vertex('arn:aws:iam::111122223333:role/app', 'IamRole');
+    const gone = 'arn:aws:s3:::old-data';
+    getResource.mockImplementation(async (id: string) => (id === role.id ? role : null));
+    getIssueById.mockResolvedValue({
+      id: 'issue-id',
+      ruleId: 'RULE-001',
+      pathSummary: [{ from: role.id, to: gone, edgeType: 'GRANTS' }],
+      resourcesInvolved: [{ resourceId: gone, resourceType: 'S3Bucket', resourceName: 'old-data' }],
+    });
+    const res = response();
+    await getIssue({ params: { id: 'issue-id' } } as unknown as Request<{ id: string }>, res);
+    expect(res.body.attackPath.nodes[1]).toEqual({
+      id: gone,
+      label: 'Missing',
+      properties: { name: 'old-data', missing: true, deleted_label: 'S3Bucket' },
+    });
+  });
+
   it('draws a single-resource match from its involved resources', async () => {
     const bucket = vertex('arn:aws:s3:::payments', 'S3Bucket', { is_publicly_accessible: true });
     const path = await detailFor([bucket], [bucket.id]);
     expect(path.nodes).toEqual([bucket]);
     expect(path.edges).toEqual([]);
     expect(path.entry).toEqual({ kind: 'internet' });
+  });
+});
+
+describe('issue involved resources', () => {
+  const instance = vertex('arn:aws:ec2:us-west-2:111122223333:instance/i-1', 'Ec2Instance');
+  const shown = vertex(
+    'arn:aws:securityhub:us-west-2:111122223333:finding/a',
+    'SecurityHubFinding'
+  );
+  const other = vertex(
+    'arn:aws:securityhub:us-west-2:111122223333:finding/b',
+    'SecurityHubFinding'
+  );
+
+  beforeAll(async () => {
+    ({ getIssue } = await import('../routes/issues'));
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getTrustedPrincipals.mockResolvedValue([]);
+    getResource.mockImplementation(async (id: string) =>
+      id === shown.id ? shown : id === instance.id ? instance : null
+    );
+    getIssueById.mockResolvedValue({
+      id: 'issue-id',
+      ruleId: 'RULE-018',
+      pathSummary: [{ from: shown.id, to: instance.id, edgeType: 'DETECTS_ON' }],
+      resourcesInvolved: [shown, instance, other].map((v) => ({
+        resourceId: v.id,
+        resourceType: v.label,
+      })),
+    });
+  });
+
+  async function detail() {
+    const res = response();
+    await getIssue({ params: { id: 'issue-id' } } as unknown as Request<{ id: string }>, res);
+    return res.body;
+  }
+
+  it('loads only the involved resources off the drawn path, in one read', async () => {
+    getResources.mockResolvedValue([other]);
+    const body = await detail();
+    expect(getResources).toHaveBeenCalledTimes(1);
+    expect(getResources).toHaveBeenCalledWith([other.id]);
+    expect(body.involvedResources).toEqual([other]);
+    expect(body.attackPath.nodes.map((n: GraphVertex) => n.id)).toEqual([shown.id, instance.id]);
+  });
+
+  it('still returns the issue and its path when that read fails', async () => {
+    getResources.mockRejectedValue(new Error('neptune down'));
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const body = await detail();
+    expect(body.involvedResources).toEqual([]);
+    expect(body.attackPath.nodes).toHaveLength(2);
+  });
+
+  it('skips the read when every involved resource is on the path', async () => {
+    getIssueById.mockResolvedValue({
+      id: 'issue-id',
+      ruleId: 'RULE-018',
+      pathSummary: [{ from: shown.id, to: instance.id, edgeType: 'DETECTS_ON' }],
+      resourcesInvolved: [shown, instance].map((v) => ({
+        resourceId: v.id,
+        resourceType: v.label,
+      })),
+    });
+    const body = await detail();
+    expect(getResources).not.toHaveBeenCalled();
+    expect(body.involvedResources).toEqual([]);
   });
 });

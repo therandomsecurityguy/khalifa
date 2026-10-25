@@ -15,6 +15,7 @@ import {
 import { useAsyncAction, useRequest } from '@/lib/use-request';
 import { formatNodeLabel } from '@/lib/graph-labels';
 import { evidenceFor } from '@/lib/evidence';
+import { FINDING_LABEL, groupFindings, type FindingGroup } from '@/lib/finding-groups';
 import { resourceHref } from '@/lib/routes';
 import { ErrorState, LoadingState, NotFoundState } from '@/components/states';
 import {
@@ -70,6 +71,55 @@ function factorLabel(key: string): string {
 }
 
 const BACK = { backHref: '/issues', backLabel: '← Back to Issues' };
+
+function FindingGroups({ groups, total }: { groups: FindingGroup[]; total: number }) {
+  return (
+    <div className="mt-4 border-l-2 border-gray-200 pl-4">
+      <h3 className="text-sm font-medium text-gray-900">
+        {total} Security Hub findings on this resource
+      </h3>
+      <p className="text-xs text-gray-500">
+        Grouped by what fixes them: the affected package for Inspector findings, otherwise the
+        finding title.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {groups.map((group) => (
+          <li key={group.fix}>
+            <details className="rounded-md border border-gray-200">
+              <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
+                <span className="break-all font-medium text-gray-900">{group.fix}</span>
+                <span className="text-gray-500">
+                  {group.items.length} {group.items.length === 1 ? 'finding' : 'findings'}
+                </span>
+                {group.severities.map(([severity, count]) => (
+                  <span key={severity} className="inline-flex items-center gap-1">
+                    <SeverityBadge severity={severity.toLowerCase()} tone="soft" />
+                    <span className="text-xs tabular-nums text-gray-500">{count}</span>
+                  </span>
+                ))}
+              </summary>
+              <ul className="divide-y divide-gray-100 border-t border-gray-200">
+                {group.items.map((item) => (
+                  <li
+                    key={item.resource.resourceId}
+                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                  >
+                    <Link href={resourceHref(item.resource.resourceId)} className={LINK}>
+                      {item.name}
+                    </Link>
+                    {item.severity && (
+                      <SeverityBadge severity={item.severity.toLowerCase()} tone="soft" />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -294,6 +344,24 @@ export default function IssueDetailPage() {
   const ruleName = metaString(detail.metadata, 'ruleName') || catalog?.name || detail.ruleId;
   const ruleDescription = metaString(detail.metadata, 'ruleDescription') || catalog?.description;
   const canManage = session.status === 'success' && session.data.canManageIssues;
+  // Path vertices win: they carry the placeholder for a resource gone from the graph.
+  const vertices = new Map(
+    [...(detail.involvedResources ?? []), ...(detail.attackPath?.nodes ?? [])].map((node) => [
+      node.id,
+      node,
+    ])
+  );
+  // Several findings on one resource read as a list of CVEs under it, not as
+  // resources of their own.
+  const findings = detail.resourcesInvolved.filter((r) => r.resourceType === FINDING_LABEL);
+  const findingGroups = findings.length > 1 ? groupFindings(findings, vertices) : [];
+  const listed = findingGroups.length
+    ? detail.resourcesInvolved.filter((r) => r.resourceType !== FINDING_LABEL)
+    : detail.resourcesInvolved;
+  const nestUnder = listed.length === 1 ? listed[0].resourceId : undefined;
+  const findingList = findingGroups.length > 0 && (
+    <FindingGroups groups={findingGroups} total={findings.length} />
+  );
 
   return (
     <>
@@ -382,10 +450,8 @@ export default function IssueDetailPage() {
               }.`}
             >
               <ul className="divide-y divide-gray-200">
-                {detail.resourcesInvolved.map((resource) => {
-                  const vertex = detail.attackPath?.nodes?.find(
-                    (node) => node.id === resource.resourceId
-                  );
+                {listed.map((resource) => {
+                  const vertex = vertices.get(resource.resourceId);
                   const facts =
                     vertex && !vertex.properties?.missing ? evidenceFor(vertex, detail.ruleId) : [];
                   return (
@@ -436,10 +502,12 @@ export default function IssueDetailPage() {
                           ))}
                         </dl>
                       )}
+                      {resource.resourceId === nestUnder && findingList}
                     </li>
                   );
                 })}
               </ul>
+              {!nestUnder && findingList}
             </Card>
           </div>
 

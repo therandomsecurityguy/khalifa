@@ -39,6 +39,7 @@ import {
   TextField,
   Th,
 } from '@/components/ui';
+import { SearchSelect } from '@/components/search-select';
 
 // Every label at once; the API accepts it only with a property filter.
 const ALL_LABELS = '*';
@@ -285,19 +286,21 @@ function ResourceSearchView() {
           className="mb-6 grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow md:grid-cols-4"
         >
           <div>
-            <SelectField
+            <SearchSelect
               label="Label"
               value={form.label}
+              placeholder="Search labels"
               hint={labels.status === 'loading' ? 'Counting labels…' : undefined}
-              onChange={(event) => setForm({ label: event.target.value, property: '', value: '' })}
-            >
-              <option value={ALL_LABELS}>All labels</option>
-              {labelOptions.map((entry) => (
-                <option key={entry.label} value={entry.label}>
-                  {withCount(labelName(entry.label), entry.count)}
-                </option>
-              ))}
-            </SelectField>
+              options={[
+                { value: ALL_LABELS, name: labelName(ALL_LABELS) },
+                ...labelOptions.map((entry) => ({
+                  value: entry.label,
+                  name: labelName(entry.label),
+                  count: entry.count,
+                })),
+              ]}
+              onChange={(label) => setForm({ label, property: '', value: '' })}
+            />
             {labels.status === 'error' && (
               <p className="mt-1 text-xs text-red-700">
                 Couldn&apos;t load the label list.{' '}
