@@ -15,9 +15,14 @@ import {
  * Security Hub runs CIS v3.0.0 in the accounts Khalifa collects, independently of
  * Khalifa's graph, so the two should agree wherever both have a result. Each
  * compliance run compares them per requirement x account (x region), records the
- * disagreements, and tracks how long each requirement has agreed. A requirement
- * is publishable (e.g. to a trust page) only after minAgreementDays of unbroken
- * agreement and only if it is allowlisted. Anything unreadable fails closed.
+ * disagreements, and tracks how long each requirement has agreed.
+ *
+ * What is published (e.g. to a trust page) is Security Hub's result, the
+ * reference implementation of CIS v3.0.0: FAILED if any account/region fails,
+ * otherwise PASSED. A requirement is publishable only if it is allowlisted,
+ * Security Hub has no NOT_AVAILABLE/WARNING result for it, and that status has
+ * held for minAgreementDays. Disagreements with Khalifa are recorded for triage
+ * and do not block. Anything unreadable fails closed.
  */
 
 export const RECONCILIATION_FRAMEWORK = 'CIS_RECONCILIATION';
@@ -43,7 +48,10 @@ const OUTCOMES: Outcome[] = [
   'SH_NO_RESULT',
 ];
 
-type ShStatus = 'PASSED' | 'FAILED' | 'NO_DATA';
+// NOT_EVALUATED: PASSED only because AWS Config evaluated nothing
+// (CONFIG_EVALUATIONS_EMPTY): no resources of the type, or a rule that never
+// ran. Not a result either way.
+type ShStatus = 'PASSED' | 'FAILED' | 'NO_DATA' | 'NOT_EVALUATED';
 
 export interface ShControlFinding {
   controlId: string;
@@ -51,7 +59,11 @@ export interface ShControlFinding {
   region: string;
   /** Compliance.Status: PASSED, FAILED, WARNING or NOT_AVAILABLE. */
   status: string;
+  /** False when Security Hub's reason is CONFIG_EVALUATIONS_EMPTY. */
+  evaluated?: boolean;
 }
+
+export const CONFIG_EVALUATIONS_EMPTY = 'CONFIG_EVALUATIONS_EMPTY';
 
 export interface Disagreement {
   accountId: string;
@@ -68,11 +80,26 @@ export interface RequirementReconciliation {
   khalifaScope: 'account' | 'account-region' | 'aggregate' | 'none';
   counts: Record<Outcome, number>;
   disagreements: Disagreement[];
-  /** Start of the current unbroken agreement, or null. */
+  /** Start of the current unbroken agreement with Khalifa, or null. For triage. */
   agreeingSince: string | null;
   agreementDays: number;
+  /** Security Hub's result across every account/region: what gets published. */
+  securityHubStatus: 'PASSED' | 'FAILED' | null;
+  /** Account/regions where Security Hub has NOT_AVAILABLE or WARNING. */
+  securityHubNoData: number;
+  /** Account/regions whose only Security Hub result evaluated nothing. */
+  securityHubNotEvaluated: number;
+  /** Of those, account/regions Khalifa fails, counted as FAILED. */
+  khalifaFailuresFilled: number;
+  /** Since when securityHubStatus has held with no NOT_AVAILABLE/WARNING, or null. */
+  stableSince: string | null;
+  stableDays: number;
   allowlisted: boolean;
   publishable: boolean;
+  /** Why the requirement is not publishable this run; empty when it is. */
+  blockedBy: Array<
+    'NOT_ALLOWLISTED' | 'NO_SECURITY_HUB_RESULT' | 'SECURITY_HUB_NO_DATA' | 'NOT_STABLE_LONG_ENOUGH'
+  >;
 }
 
 export interface ReconciliationRecord {
@@ -91,16 +118,16 @@ export interface ReconciliationConfig {
   allowlist: ReadonlySet<string>;
 }
 
-// FAILED wins over everything; any non-PASSED result without a failure is no data.
+// FAILED wins, then missing data, then a real PASSED; NOT_EVALUATED stands only
+// when nothing else was reported for the key.
+const RANK: Record<ShStatus, number> = { FAILED: 3, NO_DATA: 2, PASSED: 1, NOT_EVALUATED: 0 };
 function combine(a: ShStatus | undefined, b: ShStatus): ShStatus {
-  if (a === 'FAILED' || b === 'FAILED') return 'FAILED';
-  if (a === 'NO_DATA' || b === 'NO_DATA') return 'NO_DATA';
-  return 'PASSED';
+  return a && RANK[a] >= RANK[b] ? a : b;
 }
 
-function shStatus(raw: string): ShStatus {
-  if (raw === 'FAILED') return 'FAILED';
-  if (raw === 'PASSED') return 'PASSED';
+function shStatus(finding: ShControlFinding): ShStatus {
+  if (finding.status === 'FAILED') return 'FAILED';
+  if (finding.status === 'PASSED') return finding.evaluated === false ? 'NOT_EVALUATED' : 'PASSED';
   return 'NO_DATA';
 }
 
@@ -114,7 +141,7 @@ export function aggregateSecurityHub(findings: ShControlFinding[]): {
   for (const f of findings) {
     const requirement = SECURITY_HUB_CIS_V3_REQUIREMENT[f.controlId];
     if (!requirement) continue;
-    const status = shStatus(f.status);
+    const status = shStatus(f);
     const account = byAccount.get(requirement) ?? new Map<string, ShStatus>();
     account.set(f.accountId, combine(account.get(f.accountId), status));
     byAccount.set(requirement, account);
@@ -204,7 +231,7 @@ function compareOne(
     const s = shByKey.get(key);
     if (!k) {
       counts.KHALIFA_NO_RESULT++;
-    } else if (!s || s === 'NO_DATA') {
+    } else if (!s || s === 'NO_DATA' || s === 'NOT_EVALUATED') {
       counts.SH_NO_RESULT++;
     } else if ((k === 'PASS') === (s === 'PASSED')) {
       counts[k === 'PASS' ? 'AGREE_PASS' : 'AGREE_FAIL']++;
@@ -223,10 +250,54 @@ function compareOne(
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const days = (since: string | null, now: Date) =>
+  since ? Math.floor((now.getTime() - Date.parse(since)) / DAY_MS) : 0;
+// The compliance job runs every 4 hours. A longer gap since the previous record
+// means runs failed or never happened, so nothing was compared in between and
+// agreement can't carry across it.
+export const MAX_RECORD_GAP_MS = 6 * 60 * 60 * 1000;
+// Compliance runs failed from 2026-10-14 to 2026-10-19 and left no records. The
+// gap check above only compares with the previous record, so agreement already
+// carried across that gap (1.8, 1.9, 3.1, 3.8, 3.9 showed "since 2026-10-09").
+// No agreement starts before the first record after the gap.
+export const AGREEMENT_EPOCH = '2026-10-19T23:30:07.935Z';
+
+// Security Hub's result for one requirement over every account/region it
+// reports. Where Security Hub evaluated nothing, a Khalifa FAIL for the same
+// account/region counts as FAILED; a Khalifa PASS counts for nothing, so Khalifa
+// alone never makes a requirement pass.
+function securityHubView(
+  byAccountRegion: Map<string, ShStatus>,
+  khalifaFails: (accountRegion: string) => boolean
+): { status: 'PASSED' | 'FAILED' | null; noData: number; notEvaluated: number; filled: number } {
+  const statuses: ShStatus[] = [];
+  let notEvaluated = 0;
+  let filled = 0;
+  for (const [key, value] of byAccountRegion) {
+    if (value !== 'NOT_EVALUATED') {
+      statuses.push(value);
+      continue;
+    }
+    notEvaluated++;
+    if (khalifaFails(key)) {
+      filled++;
+      statuses.push('FAILED');
+    }
+  }
+  const counts = {
+    noData: statuses.filter((v) => v === 'NO_DATA').length,
+    notEvaluated,
+    filled,
+  };
+  if (statuses.includes('FAILED')) return { status: 'FAILED', ...counts };
+  if (statuses.includes('PASSED')) return { status: 'PASSED', ...counts };
+  return { status: null, ...counts };
+}
 
 /**
  * Pure reconciliation. `previous` carries each requirement's agreement start
- * forward; a disagreement, or no comparable pair at all, resets it.
+ * forward; a disagreement, no comparable pair at all, or a gap of more than
+ * MAX_RECORD_GAP_MS since `previous` resets it.
  */
 export function reconcile(
   report: ComplianceReport,
@@ -237,12 +308,10 @@ export function reconcile(
 ): ReconciliationRecord {
   const sh = aggregateSecurityHub(findings);
   const byId = new Map(report.controls.map((c) => [c.control.id, c]));
-  const previousSince = new Map(
-    (previous?.status === 'OK' ? previous.requirements : []).map((r) => [
-      r.requirement,
-      r.agreeingSince,
-    ])
-  );
+  const continuous =
+    previous?.status === 'OK' &&
+    now.getTime() - Date.parse(previous.generatedAt) <= MAX_RECORD_GAP_MS;
+  const carried = new Map((continuous ? previous.requirements : []).map((r) => [r.requirement, r]));
   const requirements: RequirementReconciliation[] = [];
   for (const [requirement, controls] of [...controlsByRequirement()].sort(([a], [b]) =>
     a.localeCompare(b, undefined, { numeric: true })
@@ -254,11 +323,33 @@ export function reconcile(
     });
     const compared = counts.AGREE_PASS + counts.AGREE_FAIL + counts.DISAGREE;
     const agrees = compared > 0 && counts.DISAGREE === 0;
-    const agreeingSince = agrees ? (previousSince.get(requirement) ?? now.toISOString()) : null;
-    const agreementDays = agreeingSince
-      ? Math.floor((now.getTime() - Date.parse(agreeingSince)) / DAY_MS)
-      : 0;
+    const before = carried.get(requirement);
+    // ISO-8601 UTC strings compare in time order.
+    const since =
+      before?.agreeingSince && before.agreeingSince < AGREEMENT_EPOCH
+        ? AGREEMENT_EPOCH
+        : before?.agreeingSince;
+    const agreeingSince = agrees ? (since ?? now.toISOString()) : null;
+    const agreementDays = days(agreeingSince, now);
+
+    const shView = securityHubView(
+      sh.byAccountRegion.get(requirement) ?? new Map(),
+      (key) =>
+        (khalifa.scope === 'account'
+          ? khalifa.results.get(key.split(' ')[0])
+          : khalifa.results.get(key)) === 'FAIL'
+    );
+    const stable = shView.status !== null && shView.noData === 0;
+    // A change of status, or any missing Security Hub data, restarts the count.
+    const kept = before?.securityHubStatus === shView.status ? before.stableSince : null;
+    const stableSince = stable ? (kept ?? now.toISOString()) : null;
+    const stableDays = days(stableSince, now);
     const allowlisted = config.allowlist.has(requirement);
+    const blockedBy: RequirementReconciliation['blockedBy'] = [];
+    if (!allowlisted) blockedBy.push('NOT_ALLOWLISTED');
+    if (shView.status === null) blockedBy.push('NO_SECURITY_HUB_RESULT');
+    if (shView.noData > 0) blockedBy.push('SECURITY_HUB_NO_DATA');
+    if (stable && stableDays < config.minAgreementDays) blockedBy.push('NOT_STABLE_LONG_ENOUGH');
     requirements.push({
       requirement,
       securityHubControls: controls.sort(),
@@ -268,8 +359,15 @@ export function reconcile(
       disagreements,
       agreeingSince,
       agreementDays,
+      securityHubStatus: shView.status,
+      securityHubNoData: shView.noData,
+      securityHubNotEvaluated: shView.notEvaluated,
+      khalifaFailuresFilled: shView.filled,
+      stableSince,
+      stableDays,
       allowlisted,
-      publishable: allowlisted && agreementDays >= config.minAgreementDays,
+      publishable: blockedBy.length === 0,
+      blockedBy,
     });
   }
   return {
@@ -330,6 +428,9 @@ export async function readSecurityHubCisFindings(
         accountId: f.AwsAccountId,
         region: f.Region,
         status: f.Compliance.Status,
+        evaluated: !(f.Compliance.StatusReasons ?? []).some(
+          (r) => r.ReasonCode === CONFIG_EVALUATIONS_EMPTY
+        ),
       });
     }
     nextToken = response.NextToken;

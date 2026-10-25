@@ -171,12 +171,16 @@ it assumes the audit account's read-only reader role (granted through
 `khalifa-data.securityhub_reader_role_arn`) and compares each requirement per
 account (and Region for regional controls) with Security Hub's CIS v3.0.0
 findings. The result is stored as a `CIS_RECONCILIATION` record in the reports
-table: per-requirement agreement streaks and the disagreeing accounts. None of
-that detail ever reaches the public page.
+table: per-requirement Security Hub and Khalifa statuses, stability streaks and
+the disagreeing accounts. None of that detail ever reaches the public page.
 
-A requirement becomes publishable only after `reconciliation.minAgreementDays`
-consecutive days of agreement and only when listed in
-`reconciliation.publishAllowlist` (empty by default, so nothing is).
+Publication follows Security Hub, the CIS v3.0.0 reference: a requirement is
+publishable only when listed in `reconciliation.publishAllowlist` (empty by
+default, so nothing is), Security Hub has a result with no missing data, and
+its status (FAILED when any account/Region fails, otherwise PASSED) has held
+for `reconciliation.minAgreementDays` with no gap in records. The Khalifa
+comparison, disagreements and agreement streaks stay in the record for triage
+but no longer block publication.
 `GET /compliance/reconciliation/publishable` exposes exactly those
 requirements as `{requirement, title, section, status}`, gated to the
 Cloudflare Access service token identified by

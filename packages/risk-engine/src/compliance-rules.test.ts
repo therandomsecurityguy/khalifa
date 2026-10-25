@@ -14,7 +14,7 @@ import {
 const ACCOUNT = '111111111111';
 
 /**
- * A graph stub for the per-account helpers . Coverage reads return one
+ * A graph stub for the per-account helpers. Coverage reads return one
  * assessed account (or account/region); "which accounts violate" reads return it
  * only when `failing`; every count returns `count`. `routes` answers any query
  * containing its key first, so guards are matched by text, not by call order.
@@ -71,10 +71,15 @@ describe('compliance Gremlin queries', () => {
   });
 
   it('all evaluators use graph labels instead of a non-existent label property', async () => {
-    // Counts get [0]; account and account/region reads get none, since [0] is neither.
+    // Counts get [0]; account, account/region and bucket-name reads get none,
+    // since [0] is none of them.
     const graphClient = {
       executeQuery: jest.fn(async (q: string) =>
-        q.includes("values('account_id')") || q.includes("project('a', 'r')") ? [] : [0]
+        q.includes("values('account_id')") ||
+        q.includes("project('a', 'r')") ||
+        q.includes("hasLabel('CloudTrail').values('s3_bucket_name')")
+          ? []
+          : [0]
       ),
     };
 
@@ -726,19 +731,54 @@ describe('bucket-name join controls', () => {
     return { query: flat(graphClient.executeQuery.mock.calls.at(-1)![0] as string), result };
   }
 
-  it.each([
-    ['3.4', 'CloudTrail', 'logging_enabled'],
-    ['KH-3.11', 'ConfigDeliveryChannel', 'default_encryption'],
-  ])('%s joins %s.s3_bucket_name to S3Bucket.name', async (controlId, label, prop) => {
-    const { query } = await queryFor(controlId);
+  // 3.4 resolves bucket names first; the single-traversal join timed out on Neptune.
+  it('3.4 fails the trails whose bucket has no access logging', async () => {
+    const g = graphStub({
+      routes: {
+        "hasLabel('CollectionCoverage')": [ACCOUNT, '222222222222'],
+        "values('s3_bucket_name').dedup()": ['trail-logs', 'other-logs'],
+        "hasLabel('S3Bucket')": ['trail-logs'],
+        "within('trail-logs')).values('account_id')": [ACCOUNT],
+        "has('is_organization_trail', true)": [0],
+      },
+    });
+    const result = await getEvaluatorForControl('3.4')!.evaluate(g);
 
-    expect(query).toContain(`hasLabel('${label}')`);
-    expect(query).toContain("values('s3_bucket_name')");
-    // The join is what stops this counting every bucket in the account.
-    expect(query).toContain("by('name')");
-    expect(query).toContain(`has('${prop}', false)`);
-    expect(query).toContain(`hasNot('${prop}')`);
+    const bucketQuery = queryWith(g, "hasLabel('S3Bucket')")!;
+    expect(bucketQuery).toContain("has('name', within('trail-logs', 'other-logs'))");
+    expect(bucketQuery).toContain("hasNot('logging_enabled')");
+    expect(queryWith(g, "has('s3_bucket_name', within('trail-logs'))")).toBeDefined();
+    expect(result.status).toBe('FAIL');
+    expect(result.evidence[0].details.failingAccounts).toEqual([ACCOUNT]);
   });
+
+  it('3.4 passes without querying buckets when no trail names one', async () => {
+    const g = graphStub({ routes: { "values('s3_bucket_name').dedup()": [] } });
+    const result = await getEvaluatorForControl('3.4')!.evaluate(g);
+
+    expect(queryWith(g, "hasLabel('S3Bucket')")).toBeUndefined();
+    expect(result.status).toBe('PASS');
+  });
+
+  it('3.4 rejects a bucket name that could break out of the query', async () => {
+    const g = graphStub({ routes: { "values('s3_bucket_name').dedup()": ["x'), drop()//"] } });
+
+    await expect(getEvaluatorForControl('3.4')!.evaluate(g)).rejects.toThrow('invalid S3 bucket');
+  });
+
+  it.each([['KH-3.11', 'ConfigDeliveryChannel', 'default_encryption']])(
+    '%s joins %s.s3_bucket_name to S3Bucket.name',
+    async (controlId, label, prop) => {
+      const { query } = await queryFor(controlId);
+
+      expect(query).toContain(`hasLabel('${label}')`);
+      expect(query).toContain("values('s3_bucket_name')");
+      // The join is what stops this counting every bucket in the account.
+      expect(query).toContain("by('name')");
+      expect(query).toContain(`has('${prop}', false)`);
+      expect(query).toContain(`hasNot('${prop}')`);
+    }
+  );
 });
 
 // Controls whose rule already fires on the same condition, so the page said
@@ -1117,6 +1157,30 @@ describe('3.6 and 3.7 scope', () => {
     const q = queryWith(g, "has('key_spec', 'SYMMETRIC_DEFAULT')");
     expect(q).toContain("has('origin', 'AWS_KMS')");
     expect(q).toContain("hasNot('custom_key_store_id')");
+  });
+
+  // A key whose policy denies DescribeKey to the collector is a stub with
+  // collection_restricted: its rotation is unknown, so it must not pass the region.
+  const deniedKey = { "has('collection_restricted', true)": [{ a: ACCOUNT, r: 'us-west-2' }] };
+
+  it('3.6 leaves an account/region with an unreadable key unassessed', async () => {
+    const result = await getEvaluatorForControl('3.6')!.evaluate(
+      graphStub({ failing: false, routes: deniedKey })
+    );
+
+    expect(result.status).toBe('NOT_EVALUATED');
+  });
+
+  it('3.6 still fails an account/region with an unreadable key and a violating one', async () => {
+    const result = await getEvaluatorForControl('3.6')!.evaluate(
+      graphStub({ count: 1, routes: deniedKey })
+    );
+
+    expect(result.status).toBe('FAIL');
+    expect(result.evidence[0].details).toMatchObject({
+      accountRegionsAssessed: 1,
+      accountRegionsUnreadable: 1,
+    });
   });
 
   it('3.7 needs a flow log capturing rejected traffic', async () => {

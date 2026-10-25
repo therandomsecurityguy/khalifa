@@ -223,8 +223,9 @@ it to Cloudflare Pages. It stays disabled until `TRUST_CENTER_PROJECT` is
 configured; variables and secrets are listed in
 [`scripts/trust-center-sync/README.md`](scripts/trust-center-sync/README.md).
 
-What it sends: only the requirements that agreed with Security Hub for
-`reconciliation.minAgreementDays` and appear in
+What it sends: only the requirements whose Security Hub status (FAILED when any
+account/Region fails, otherwise PASSED) has held for
+`reconciliation.minAgreementDays` with no missing data and that appear in
 `reconciliation.publishAllowlist`, as `{requirement, title, section, status}`.
 No accounts, Regions, counts, evidence, or disagreements.
 

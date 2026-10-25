@@ -68,6 +68,34 @@ describe('ComplianceEngine failure visibility', () => {
     });
   });
 
+  it('runs every framework when one control fails, and reports the failure', async () => {
+    complianceRuleEvaluators.push({
+      controlId: 'CIS_AWS_FOUNDATIONS-1',
+      evaluate: jest.fn().mockRejectedValue(new Error('Neptune query timeout')),
+    });
+    const reports = new InMemoryReportStore();
+    const engine = new ComplianceEngine(
+      { executeQuery: jest.fn() },
+      { saveEvidence: jest.fn(), getEvidence: jest.fn(), getAllEvidence: jest.fn() },
+      reports
+    );
+
+    const run = await engine.runAllAssessments();
+
+    expect(run.reports.map((r) => r.framework)).toEqual([
+      'CIS_AWS_FOUNDATIONS',
+      'KHALIFA_BASELINE',
+      'SOC2',
+      'ISO27001',
+      'PCI_DSS',
+      'NIST_800_53',
+    ]);
+    expect(run.failures).toEqual([
+      'CIS_AWS_FOUNDATIONS CIS_AWS_FOUNDATIONS-1: Neptune query timeout',
+    ]);
+    await expect(reports.getLatestReport('KHALIFA_BASELINE')).resolves.not.toBeNull();
+  });
+
   it('rejects after persisting a report when evidence persistence fails', async () => {
     complianceRuleEvaluators.push({
       controlId: 'CIS_AWS_FOUNDATIONS-1',

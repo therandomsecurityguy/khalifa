@@ -131,17 +131,22 @@ describe('ComplianceEngine mapped frameworks', () => {
       canonicalResult('CIS_AWS_FOUNDATIONS', '1.5', 'PASS'),
       canonicalResult('KHALIFA_BASELINE', 'KH-2.8', 'PASS'),
     ]);
-    jest.spyOn(engine, 'runAssessment').mockImplementation(async (framework) => {
-      const report = canonical.find((r) => r.framework === framework);
-      if (!report) throw new Error(`unexpected framework: ${framework}`);
-      return report;
-    });
+    jest
+      .spyOn(
+        engine as unknown as { assess: (f: ComplianceFramework) => Promise<unknown> },
+        'assess'
+      )
+      .mockImplementation(async (framework: ComplianceFramework) => {
+        const report = canonical.find((r) => r.framework === framework);
+        if (!report) throw new Error(`unexpected framework: ${framework}`);
+        return { report, failures: [] };
+      });
     return { engine, store, saved };
   }
 
   it('stores derived reports alongside the canonical ones', async () => {
     const { engine, store } = buildEngine();
-    const reports = await engine.runAllAssessments();
+    const { reports } = await engine.runAllAssessments();
     expect(reports.map((r) => r.framework)).toEqual([
       'CIS_AWS_FOUNDATIONS',
       'KHALIFA_BASELINE',
@@ -157,7 +162,7 @@ describe('ComplianceEngine mapped frameworks', () => {
 
   it('writes no evidence while deriving mapped reports', async () => {
     const { engine, saved } = buildEngine();
-    const reports = await engine.runAllAssessments();
+    const { reports } = await engine.runAllAssessments();
     const mappedIds = new Set(
       reports
         .filter((r) => r.framework === 'SOC2' || r.framework === 'ISO27001')
@@ -174,7 +179,7 @@ describe('ComplianceEngine mapped frameworks', () => {
 
   it('serves mapped framework summaries from the citations', async () => {
     const { engine } = buildEngine();
-    const reports = await engine.runAllAssessments();
+    const { reports } = await engine.runAllAssessments();
     const soc2 = await engine.getFrameworkSummary('SOC2');
     expect(soc2.totalControls).toBe(9);
     expect(soc2.version).toBe('2017');

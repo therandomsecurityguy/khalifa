@@ -27,8 +27,15 @@ function requirement(overrides: Partial<RequirementReconciliation>): Requirement
     disagreements: [],
     agreeingSince: '2026-10-08T19:30:00.000Z',
     agreementDays: 6,
+    securityHubStatus: 'PASSED',
+    securityHubNoData: 0,
+    securityHubNotEvaluated: 0,
+    khalifaFailuresFilled: 0,
+    stableSince: '2026-10-08T19:30:00.000Z',
+    stableDays: 6,
     allowlisted: true,
     publishable: true,
+    blockedBy: [],
     ...overrides,
   };
 }
@@ -75,7 +82,7 @@ describe('publishableFrom', () => {
     expect(out.requirements).toEqual([]);
   });
 
-  it('emits FAIL as FAIL; how to show it is the sync and SEC-3256 to decide', () => {
+  it('emits FAIL as FAIL; how to show it is the sync to decide', () => {
     const out = publishableFrom(
       record({ requirements: [requirement({ khalifaStatus: 'FAIL' })] }),
       NOW

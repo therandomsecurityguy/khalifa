@@ -1,6 +1,6 @@
 # Plan: remaining upstream parity port (khalifa-main → this repo)
 
-Status: planned (2026-10-24); G1 merged (PR #23); G2 merged (PR #24); G5 merged (PR #25) — mirror-workflow decision (§7.3) still open; G3 implemented on `dac/parity-g3-secrets` (2026-10-24) with §7.2 decided (auto-ticketing stays off for RULE-006/031–034) and no mapped-framework citations added for KH-IAM-3. Next: G4 (compliance correctness), then G6.
+Status: planned (2026-10-24); G1 merged (PR #23); G2 merged (PR #24); G5 merged (PR #25); G3 merged (PR #26) — mirror-workflow decision (§7.3) still open; §7.2 decided (auto-ticketing stays off for RULE-006/031–034) and no mapped-framework citations for KH-IAM-3; G4 implemented on `dac/parity-g4-compliance` with §7.1 decided (coexistence: mapped requirements gate on canonical controls' publishable flag, which now follows Security Hub). Next: G6 (build/CI hygiene), then revisit §7.3/§7.4.
 Source of truth for the gap list: a working-tree snapshot of the upstream repo at
 `~/Desktop/khalifa-main` (2026-10-23, no `.git`), compared against this repo's `main`.
 Read-only reference — nothing is copied wholesale; every port is scrubbed and merged.

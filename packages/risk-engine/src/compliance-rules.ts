@@ -74,17 +74,32 @@ function readAccountIds(result: unknown[]): string[] {
   return [...new Set(result as string[])];
 }
 
-// Accounts whose `service` collection stage completed: the denominator for a
-// per-account control. Security Hub scopes most CIS controls to the account
-// (resource type AWS::::Account), so one account's compliance says nothing
-// about another's; an account whose stage failed is neither passed nor failed.
+// Coverage older than two organization collector runs (every 4 hours) is not
+// evidence of the account's current state. The run stops at its deadline, so
+// an account can go days uncollected while its last complete coverage vertex
+// stays in the graph; judging it on that data is how a fixed misconfiguration
+// keeps failing, or a new one keeps passing.
+export const COLLECTION_MAX_AGE_MS = 8 * 60 * 60 * 1000;
+
+// Coverage of `service` that SUCCEEDED within COLLECTION_MAX_AGE_MS.
+// `complete` alone is not enough: the collector marks a SKIPPED stage complete,
+// and the global stages (iam, s3, iam-access-keys, iam-credential-report,
+// cross-account-trust) are SKIPPED in every region but an account's first, so
+// each run writes fresh SKIPPED coverage for them whether or not the real one
+// ran. completed_at is an ISO-8601 UTC string, so string order is time order.
+function freshCoverage(service: string): string {
+  const cutoff = new Date(Date.now() - COLLECTION_MAX_AGE_MS).toISOString();
+  return `g.V().hasLabel('CollectionCoverage').has('service', '${service}').has('status', 'SUCCEEDED').has('completed_at', gte('${cutoff}'))`;
+}
+
+// Accounts whose `service` collection stage completed recently: the denominator
+// for a per-account control. Security Hub scopes most CIS controls to the
+// account (resource type AWS::::Account), so one account's compliance says
+// nothing about another's; an account whose stage failed, or was last collected
+// too long ago, is neither passed nor failed.
 async function accountsWithCompleteStage(graphClient: any, service: string): Promise<string[]> {
   return readAccountIds(
-    await graphClient.executeQuery(`
-      g.V().hasLabel('CollectionCoverage')
-        .has('service', '${service}').has('complete', true)
-        .values('account_id').dedup()
-    `)
+    await graphClient.executeQuery(`${freshCoverage(service)}.values('account_id').dedup()`)
   );
 }
 
@@ -161,9 +176,6 @@ function perAccountRegionResult(
     issues: failing.length > 0 ? [issue(failing.length)] : [],
   };
 }
-
-const stageCoverage = (service: string) =>
-  `g.V().hasLabel('CollectionCoverage').has('service', '${service}').has('complete', true)`;
 
 // Accounts covered by a trail matching `qualifying` (a Gremlin step chain on
 // CloudTrail vertices). An organization trail is one vertex shared by every
@@ -285,10 +297,19 @@ async function perAccountRegionViolations(
   resource: { id: string; type: string },
   stage: string,
   violating: string,
-  issue: (failing: number, violations: number) => string
+  issue: (failing: number, violations: number) => string,
+  // Elements whose state couldn't be read: their account/region is left
+  // unassessed, since it would otherwise pass on missing data, unless something
+  // there violates anyway.
+  unreadable?: string
 ) {
-  const assessed = await accountRegionPairs(graphClient, stageCoverage(stage), 'region');
   const failing = new Set(await accountRegionPairs(graphClient, violating, 'collection_region'));
+  const unknown = new Set(
+    unreadable ? await accountRegionPairs(graphClient, unreadable, 'collection_region') : []
+  );
+  const assessed = (await accountRegionPairs(graphClient, freshCoverage(stage), 'region')).filter(
+    (pair) => failing.has(pair) || !unknown.has(pair)
+  );
   const violations = readCount(await graphClient.executeQuery(`${violating}.count()`));
   return perAccountRegionResult(
     controlId,
@@ -296,7 +317,7 @@ async function perAccountRegionViolations(
     assessed,
     new Set(assessed.filter((pair) => !failing.has(pair))),
     (n) => issue(n, violations),
-    { violations }
+    unreadable ? { violations, accountRegionsUnreadable: unknown.size } : { violations }
   );
 }
 
@@ -305,6 +326,21 @@ async function perAccountRegionViolations(
 // failing organization trail fails every assessed account rather than whichever
 // account last wrote it; any other failing trail fails its own account.
 // `failingTrail` is a step chain applied to CloudTrail vertices.
+// S3 bucket names (3-63 of a-z, 0-9, '.', '-'), validated before they are
+// interpolated into a query.
+const BUCKET_NAME = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+
+function readBucketNames(rows: unknown[]): string[] {
+  return rows.map((name) => {
+    if (typeof name !== 'string' || !BUCKET_NAME.test(name)) {
+      throw new Error('Compliance query returned an invalid S3 bucket name');
+    }
+    return name;
+  });
+}
+
+const gremlinStrings = (values: string[]) => values.map((v) => `'${v}'`).join(', ');
+
 async function perAccountTrailViolations(
   graphClient: any,
   controlId: string,
@@ -912,7 +948,7 @@ export const complianceRuleEvaluators: ComplianceRuleEvaluator[] = [
       // supported resource types, and uses the service-linked role
       // AWSServiceRoleForConfig (includeConfigServiceLinkedRoleCheck defaults to
       // true). The previous check passed the org if any recorder existed anywhere.
-      const assessed = await accountRegionPairs(graphClient, stageCoverage('config'), 'region');
+      const assessed = await accountRegionPairs(graphClient, freshCoverage('config'), 'region');
       const compliant = new Set(
         await accountRegionPairs(
           graphClient,
@@ -936,7 +972,7 @@ export const complianceRuleEvaluators: ComplianceRuleEvaluator[] = [
       // Per account per Region, matching RULE-017. A region with no detector has a
       // synthetic MISSING vertex, which is not ENABLED. The previous check passed
       // the org if any detector anywhere was enabled.
-      const assessed = await accountRegionPairs(graphClient, stageCoverage('guardduty'), 'region');
+      const assessed = await accountRegionPairs(graphClient, freshCoverage('guardduty'), 'region');
       const compliant = new Set(
         await accountRegionPairs(
           graphClient,
@@ -961,7 +997,7 @@ export const complianceRuleEvaluators: ComplianceRuleEvaluator[] = [
       // collector reads DescribeHub. The previous check passed the org off any hub.
       const assessed = await accountRegionPairs(
         graphClient,
-        stageCoverage('securityhub'),
+        freshCoverage('securityhub'),
         'region'
       );
       const compliant = new Set(
@@ -1082,7 +1118,7 @@ export const complianceRuleEvaluators: ComplianceRuleEvaluator[] = [
     evaluate: async (graphClient) => {
       const assessed = await accountRegionPairs(
         graphClient,
-        stageCoverage('access-analyzer'),
+        freshCoverage('access-analyzer'),
         'region'
       );
       const compliant = new Set(
@@ -1123,7 +1159,9 @@ export const complianceRuleEvaluators: ComplianceRuleEvaluator[] = [
         'kms',
         `g.V().hasLabel('KmsKey').has('key_manager', 'CUSTOMER').has('key_state', 'Enabled').has('key_spec', 'SYMMETRIC_DEFAULT').has('origin', 'AWS_KMS').hasNot('custom_key_store_id').or(has('rotation_enabled', false), hasNot('rotation_enabled'))`,
         (n, keys) =>
-          `${n} account/regions have rotatable customer-managed KMS keys without rotation (${keys} keys)`
+          `${n} account/regions have rotatable customer-managed KMS keys without rotation (${keys} keys)`,
+        // Keys whose policy denies DescribeKey to the collector: rotation unknown.
+        `g.V().hasLabel('KmsKey').has('collection_restricted', true)`
       );
     },
   },
@@ -1374,24 +1412,38 @@ export const complianceRuleEvaluators: ComplianceRuleEvaluator[] = [
   {
     controlId: '3.4',
     // CloudTrail.7, per account of the trail. The trail records its bucket by
-    // name, not by an edge, so this joins CloudTrail.s3_bucket_name to
-    // S3Bucket.name. A bucket whose logging_enabled is absent counts too: the
-    // collector derives it from GetBucketLogging, and a failed call leaves the
-    // property off entirely.
-    evaluate: (graphClient) =>
-      perAccountTrailViolations(
+    // name, not by an edge. A bucket whose logging_enabled is absent counts too:
+    // the collector derives it from GetBucketLogging, and a failed call leaves
+    // the property off entirely. Bucket names are resolved first, in two short
+    // queries: joining every trail against every S3Bucket inside one traversal
+    // timed out on Neptune (30 s, 2026-10-14).
+    evaluate: async (graphClient) => {
+      const trailBuckets = readBucketNames(
+        await graphClient.executeQuery(
+          `g.V().hasLabel('CloudTrail').values('s3_bucket_name').dedup()`
+        )
+      );
+      const unlogged =
+        trailBuckets.length === 0
+          ? []
+          : readBucketNames(
+              await graphClient.executeQuery(
+                `g.V().hasLabel('S3Bucket').has('name', within(${gremlinStrings(trailBuckets)}))
+                  .or(has('logging_enabled', false), hasNot('logging_enabled'))
+                  .values('name').dedup()`
+              )
+            );
+      return perAccountTrailViolations(
         graphClient,
         '3.4',
         { id: 'cloudtrail-buckets', type: 'S3Bucket' },
-        `.has('s3_bucket_name').where(
-          values('s3_bucket_name').as('trailBucket')
-            .V().hasLabel('S3Bucket').as('bucket')
-            .where('bucket', eq('trailBucket')).by('name').by()
-            .or(has('logging_enabled', false), hasNot('logging_enabled'))
-        )`,
+        unlogged.length === 0
+          ? '.limit(0)'
+          : `.has('s3_bucket_name', within(${gremlinStrings(unlogged)}))`,
         (n, trails) =>
           `${n} accounts have trails whose S3 bucket has access logging disabled (${trails} trails)`
-      ),
+      );
+    },
   },
   {
     controlId: 'KH-3.11',
