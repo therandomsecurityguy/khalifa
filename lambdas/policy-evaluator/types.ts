@@ -32,7 +32,7 @@ export interface ConditionalGrant {
   conditions: IamConditionBlock;
 }
 
-export type EscalationType = 'admin' | 'privilege_escalation' | 'lateral_movement';
+export type EscalationType = 'admin' | 'privilege_escalation' | 'lateral_movement' | 'pass_role';
 
 export interface EscalationPath {
   id: string;
@@ -43,6 +43,8 @@ export interface EscalationPath {
   riskLevel: 'critical' | 'high' | 'medium' | 'low';
   escalationType: EscalationType;
   conditions: IamConditionBlock;
+  // pass_role: the service principals the role can be passed to.
+  via?: string[];
   detectedAt: string;
 }
 

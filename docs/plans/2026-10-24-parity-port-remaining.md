@@ -1,6 +1,6 @@
 # Plan: remaining upstream parity port (khalifa-main → this repo)
 
-Status: planned (2026-10-24); G1 merged (PR #23, 2026-10-24) — mirror-workflow decision (§7.3) still open; G2 implemented on `dac/parity-g2-collector` (2026-10-24); G5 pass-role not started (RULE-034 depends on it)
+Status: planned (2026-10-24); G1 merged (PR #23); G2 merged (PR #24) — mirror-workflow decision (§7.3) still open; G5 implemented on `dac/parity-g5-pass-role` (2026-10-24). Next: G3 (secrets inventory, consumes the collection + pass-role edges) then G4.
 Source of truth for the gap list: a working-tree snapshot of the upstream repo at
 `~/Desktop/khalifa-main` (2026-10-23, no `.git`), compared against this repo's `main`.
 Read-only reference — nothing is copied wholesale; every port is scrubbed and merged.

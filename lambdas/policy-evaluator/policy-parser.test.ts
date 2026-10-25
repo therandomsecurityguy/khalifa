@@ -192,6 +192,18 @@ describe('parseTrustPolicyDocument', () => {
   });
 });
 
+describe('isResourceMatched', () => {
+  it('matches IAM wildcards and stays fast on a pattern that backtracks a regex', () => {
+    expect(
+      isResourceMatched('arn:aws:iam::1:role/service-role/*', 'arn:aws:iam::1:role/service-role/x')
+    ).toBe(true);
+    expect(isResourceMatched('arn:aws:iam::1:role/ci-?', 'arn:aws:iam::1:role/ci-ab')).toBe(false);
+    const started = Date.now();
+    expect(isResourceMatched(`${'*a'.repeat(40)}b`, 'a'.repeat(5000))).toBe(false);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+});
+
 describe('isActionMatched', () => {
   it('matches exact action', () => {
     expect(isActionMatched('s3:GetObject', 's3:GetObject')).toBe(true);

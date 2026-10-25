@@ -1,3 +1,4 @@
+import { globMatch } from '../shared/glob';
 import type { ParsedStatement, IamConditionBlock } from './types';
 
 export interface PolicyDocument {
@@ -79,21 +80,12 @@ export function isActionMatched(actionPattern: string, action: string): boolean 
   if (actionPattern === '*' || actionPattern === '*:*') return true;
   const patternLower = actionPattern.toLowerCase();
   const actionLower = action.toLowerCase();
-  return wildcardMatch(patternLower, actionLower);
+  return globMatch(patternLower, actionLower);
 }
 
 export function isResourceMatched(resourcePattern: string, resource: string): boolean {
   if (resourcePattern === '*') return true;
-  return wildcardMatch(resourcePattern, resource);
-}
-
-function wildcardMatch(pattern: string, text: string): boolean {
-  const regexStr = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*/g, '.*')
-    .replace(/\?/g, '.');
-  const regex = new RegExp(`^${regexStr}$`, 'i');
-  return regex.test(text);
+  return globMatch(resourcePattern, resource);
 }
 
 export function expandActionPattern(pattern: string, knownServices?: Set<string>): string[] {

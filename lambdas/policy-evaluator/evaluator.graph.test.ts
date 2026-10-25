@@ -2,6 +2,8 @@ import Gremlin from 'gremlin';
 import { NeptuneRuntimeClient, effectivePermissionId } from '@khalifa/risk-engine';
 import {
   dropStaleEscalations,
+  fetchPassableAdminRoles,
+  fetchPoliciesForPrincipal,
   writeEffectivePermission,
   writeEscalationEdge,
   writeEscalationPath,
@@ -93,6 +95,39 @@ describe('policy evaluator writes against a Gremlin Server', () => {
     expect(await values(`g.V().hasLabel('IamRole').count()`)).toEqual([2]);
   });
 
+  it("reads a user's own and group policies, each once", async () => {
+    const user = 'arn:aws:iam::111122223333:user/dev';
+    const group = 'arn:aws:iam::111122223333:group/Admins';
+    const shared = 'arn:aws:iam::aws:policy/AdministratorAccess';
+    await neptune.submit(
+      `g.addV('IamUser').property(T.id, '${user}')` +
+        `.addV('IamGroup').property(T.id, '${group}')` +
+        `.addV('IamPolicyDocument').property(T.id, '${user}/inline').property('policy_arn', 'own')` +
+        `.addV('IamPolicyDocument').property(T.id, '${group}/inline').property('policy_arn', 'group')` +
+        `.addV('IamPolicy').property(T.id, '${shared}')` +
+        `.addV('IamPolicyDocument').property(T.id, '${shared}/v1').property('policy_arn', 'managed')` +
+        // Another group the user is not in.
+        `.addV('IamGroup').property(T.id, 'other-group')` +
+        `.addV('IamPolicyDocument').property(T.id, 'other/inline').property('policy_arn', 'other')` +
+        `.iterate()`
+    );
+    for (const [from, label, to] of [
+      [user, 'MEMBER_OF', group],
+      [user, 'ATTACHED_TO', `${user}/inline`],
+      [group, 'ATTACHED_TO', `${group}/inline`],
+      [user, 'ATTACHED_TO', shared],
+      [group, 'ATTACHED_TO', shared],
+      [shared, 'CONTAINS', `${shared}/v1`],
+      ['other-group', 'ATTACHED_TO', 'other/inline'],
+    ]) {
+      await neptune.submit(`g.V('${from}').addE('${label}').to(__.V('${to}')).iterate()`);
+    }
+
+    const policies = await fetchPoliciesForPrincipal(neptune, user);
+
+    expect(policies.map((policy) => policy.policyArn).sort()).toEqual(['group', 'managed', 'own']);
+  });
+
   it('links source to target once, refreshing on re-run', async () => {
     await writeEscalationEdge(neptune, path(account, admin, '2026-10-13T00:00:00.000Z'));
     await writeEscalationEdge(neptune, path(account, admin, '2026-10-14T00:00:00.000Z'));
@@ -131,5 +166,40 @@ describe('policy evaluator writes against a Gremlin Server', () => {
     expect(await values(`g.E().hasLabel('CAN_ESCALATE_TO').outV().id()`)).toEqual([account]);
     expect(await values(`g.E().hasLabel('TRUSTS').count()`)).toEqual([1]);
     expect(await values(`g.V().hasLabel('IamRole').count()`)).toEqual([2]);
+  });
+
+  it('reads admin roles a compute service can assume, with their path', async () => {
+    const trust = JSON.stringify({
+      Statement: [{ Effect: 'Allow', Principal: { Service: 'lambda.amazonaws.com' } }],
+    }).replace(/'/g, "\\'");
+    await neptune.submit(
+      `g.V('${admin}').property(single, 'is_admin', true).property(single, 'path', '/service-role/')` +
+        `.property(single, 'assume_role_policy_document', '${trust}')` +
+        `.V('${reader}').property(single, 'is_admin', false)` +
+        `.property(single, 'assume_role_policy_document', '${trust}').iterate()`
+    );
+
+    expect(await fetchPassableAdminRoles(neptune)).toEqual([
+      {
+        arn: admin,
+        accountId: '111122223333',
+        passArn: 'arn:aws:iam::111122223333:role/service-role/Admin',
+        trustedServices: ['lambda.amazonaws.com'],
+      },
+    ]);
+  });
+
+  it('keeps a pass_role link apart from a trust link between the same pair', async () => {
+    const at = '2026-10-13T00:00:00.000Z';
+    await writeEscalationEdge(neptune, path(reader, admin, at));
+    await writeEscalationEdge(neptune, {
+      ...path(reader, admin, at),
+      escalationType: 'pass_role',
+      via: ['lambda.amazonaws.com'],
+    });
+
+    expect(
+      await values(`g.E().hasLabel('CAN_ESCALATE_TO').values('escalation_type').order()`)
+    ).toEqual(['admin', 'pass_role']);
   });
 });
