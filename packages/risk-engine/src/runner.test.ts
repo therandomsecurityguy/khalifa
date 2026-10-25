@@ -385,8 +385,10 @@ describe('RiskRuleRunner stale-issue fix', () => {
           { id: 'trust-2', severity: 'low' },
         ];
       if (ruleId === 'RULE-015') return [];
-      return [{ id: 'other', severity: 'critical' }];
+      return [{ id: 'other', severity: 'critical', riskScore: 90 }];
     });
+    store.listIssues = jest.fn().mockResolvedValue({ items: [], totalCount: 0 });
+    (runner as any).neptuneClient = { executeQuery: jest.fn().mockResolvedValue([]) };
 
     await (runner as any).snapshotTrends([
       { ruleId: 'RULE-001', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
@@ -405,12 +407,12 @@ describe('RiskRuleRunner stale-issue fix', () => {
       { metric: 'publicBuckets', value: 1, accountIds: [] },
       { metric: 'crossAccountTrusts', value: 2, accountIds: [] },
       { metric: 'usersWithoutMfa', value: 0, accountIds: [] },
+      { metric: 'openRiskScore', value: 90, accountIds: [] },
     ]);
   });
 
   test('snapshotTrends adds the run’s created and resolved totals to the day', async () => {
-    const runner = new RiskRuleRunner('localhost:8182');
-    (runner as any).issueStore.getOpenIssuesByRule = jest.fn().mockResolvedValue([]);
+    const runner = trendRunner();
 
     await (runner as any).snapshotTrends([
       { ruleId: 'RULE-001', executionTime: 1, matches: [], issuesCreated: 3, issuesResolved: 1 },
@@ -423,8 +425,7 @@ describe('RiskRuleRunner stale-issue fix', () => {
   });
 
   test('snapshotTrends increments by zero on a quiet run so the day still has a row', async () => {
-    const runner = new RiskRuleRunner('localhost:8182');
-    (runner as any).issueStore.getOpenIssuesByRule = jest.fn().mockResolvedValue([]);
+    const runner = trendRunner();
 
     await (runner as any).snapshotTrends([
       { ruleId: 'RULE-001', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
@@ -434,10 +435,48 @@ describe('RiskRuleRunner stale-issue fix', () => {
     expect(mockIncrement).toHaveBeenCalledWith('issuesResolved', 0);
   });
 
-  test('snapshotTrends propagates persistence failures', async () => {
+  // A runner whose two optional trend sources resolve empty, so the snapshot
+  // tests never reach DynamoDB or Neptune.
+  function trendRunner(): RiskRuleRunner {
     const runner = new RiskRuleRunner('localhost:8182');
-    const store = (runner as any).issueStore;
-    store.getOpenIssuesByRule = jest.fn().mockResolvedValue([]);
+    (runner as any).issueStore.getOpenIssuesByRule = jest.fn().mockResolvedValue([]);
+    (runner as any).issueStore.listIssues = jest
+      .fn()
+      .mockResolvedValue({ items: [], totalCount: 0 });
+    (runner as any).neptuneClient = { executeQuery: jest.fn().mockResolvedValue([]) };
+    return runner;
+  }
+
+  test('snapshotTrends records MTTR and the admin-principal count when readable', async () => {
+    const runner = trendRunner();
+    const now = Date.now();
+    (runner as any).issueStore.listIssues = jest.fn().mockResolvedValue({
+      items: [
+        {
+          createdAt: new Date(now - 10 * 3_600_000).toISOString(),
+          resolvedAt: new Date(now).toISOString(),
+        },
+        {
+          createdAt: new Date(now - 30 * 3_600_000).toISOString(),
+          resolvedAt: new Date(now).toISOString(),
+        },
+        { createdAt: '2026-01-01T00:00:00.000Z', resolvedAt: '2026-01-01T01:00:00.000Z' },
+      ],
+      totalCount: 3,
+    });
+    (runner as any).neptuneClient = { executeQuery: jest.fn().mockResolvedValue([3]) };
+
+    await (runner as any).snapshotTrends([
+      { ruleId: 'RULE-001', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
+    ]);
+
+    const points = mockRecordMany.mock.calls[0][0];
+    expect(points).toContainEqual({ metric: 'mttrHours', value: 20, accountIds: [] });
+    expect(points).toContainEqual({ metric: 'adminPrincipals', value: 3, accountIds: [] });
+  });
+
+  test('snapshotTrends propagates persistence failures', async () => {
+    const runner = trendRunner();
     mockRecordMany.mockRejectedValue(new Error('trend write failed'));
 
     await expect(

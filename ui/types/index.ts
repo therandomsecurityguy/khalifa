@@ -332,9 +332,27 @@ export interface TrendPoint {
   bySeverity?: Record<'critical' | 'high' | 'medium' | 'low', number>;
 }
 
+export interface TrendForecastProjection {
+  days: number;
+  date: string;
+  value: number;
+  lower: number;
+  upper: number;
+}
+
+export interface TrendForecast {
+  basisDays: number;
+  slopePerDay: number;
+  confidence: 'high' | 'medium' | 'low';
+  projected: TrendForecastProjection[];
+  /** Present when the series itself lowered the confidence. */
+  note?: string;
+}
+
 export interface TrendSeries {
   metric: string;
   points: TrendPoint[];
+  forecast?: TrendForecast;
 }
 
 export interface IntegrationsStatus {

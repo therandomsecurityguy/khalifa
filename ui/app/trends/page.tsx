@@ -16,7 +16,7 @@ import {
   type DeltaTone,
   type TrendSeverity,
 } from '@/lib/trends';
-import type { TrendPoint } from '@/types';
+import type { TrendForecast, TrendPoint } from '@/types';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import {
   Badge,
@@ -49,14 +49,22 @@ const DELTA_CLASSES: Record<DeltaTone, string> = {
   neutral: 'text-gray-500',
 };
 
+const CONFIDENCE_TONES: Record<TrendForecast['confidence'], string> = {
+  high: 'success',
+  medium: 'warning',
+  low: 'danger',
+};
+
 function TrendSummary({
   metric,
   points,
   days,
+  forecast,
 }: {
   metric: string;
   points: TrendPoint[];
   days: number;
+  forecast?: TrendForecast;
 }) {
   const copy = metricCopy(metric);
   const insight = summarizeTrend(metric, points);
@@ -126,6 +134,34 @@ function TrendSummary({
           <p className="mt-3 text-xs text-gray-500">
             Accounts in this series: {accounts.join(', ')}
           </p>
+        )}
+        {forecast && (
+          <div className="mt-5 rounded-md border border-gray-200 p-3" data-testid="trend-forecast">
+            <p className="text-sm font-medium text-gray-900">
+              Projection{' '}
+              <Badge tone={CONFIDENCE_TONES[forecast.confidence]}>
+                {forecast.confidence} confidence
+              </Badge>
+            </p>
+            <ul className="mt-2 space-y-1 text-sm text-gray-700">
+              {forecast.projected.map((projection) => (
+                <li key={projection.days}>
+                  In {projection.days} days:{' '}
+                  <span className="font-medium text-gray-900">{projection.value}</span>{' '}
+                  <span className="text-gray-500">
+                    (range {projection.lower}–{projection.upper})
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-gray-500">
+              A straight line over the last {forecast.basisDays} daily points
+              {forecast.slopePerDay === 0
+                ? '; the recent trend is flat.'
+                : `, moving ${formatSigned(forecast.slopePerDay)} per day.`}
+              {forecast.note ? ` ${forecast.note}.` : ''}
+            </p>
+          </div>
         )}
       </Card>
 
@@ -275,6 +311,7 @@ function TrendsView() {
               metric={selectedMetric}
               points={trend.data.points ?? []}
               days={selectedDays}
+              forecast={trend.data.forecast}
             />
           )}
         </div>

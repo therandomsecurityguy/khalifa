@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 const getSeries = jest.fn();
 
 jest.mock('@khalifa/risk-engine', () => ({
+  ...jest.requireActual('@khalifa/risk-engine'),
   PostureTrendStore: jest.fn().mockImplementation(() => ({ getSeries })),
 }));
 
@@ -83,5 +84,72 @@ describe('trends route', () => {
 
     expect(res.statusCode).toBe(400);
     expect(getSeries).not.toHaveBeenCalled();
+  });
+
+  it('serves the new trajectory metrics', async () => {
+    for (const metric of ['openRiskScore', 'mttrHours', 'adminPrincipals']) {
+      getSeries.mockResolvedValue([]);
+      const res = response();
+      await getTrend(request(metric), res);
+      expect(res.statusCode).toBe(200);
+    }
+  });
+
+  function series(values: number[], recordedAt = new Date().toISOString()) {
+    const start = Date.parse('2026-10-01T00:00:00.000Z');
+    return values.map((value, index) => ({
+      metric: 'openRiskScore',
+      date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+      value,
+      accountIds: [],
+      recordedAt,
+    }));
+  }
+
+  it('projects a clean rising series with high confidence and no note', async () => {
+    getSeries.mockResolvedValue(series(Array.from({ length: 14 }, (_, i) => 10 + i)));
+    const res = response();
+
+    await getTrend(request('openRiskScore'), res);
+
+    expect(res.body.forecast).toMatchObject({
+      basisDays: 14,
+      slopePerDay: 1,
+      confidence: 'high',
+    });
+    expect(res.body.forecast.projected).toHaveLength(2);
+    expect(res.body.forecast.projected[0]).toMatchObject({ days: 7, value: 30 });
+    expect(res.body.forecast).not.toHaveProperty('note');
+  });
+
+  it('lowers the confidence and says why when the series is stale', async () => {
+    const stale = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    getSeries.mockResolvedValue(
+      series(
+        Array.from({ length: 14 }, (_, i) => 10 + i),
+        stale
+      )
+    );
+    const res = response();
+
+    await getTrend(request('openRiskScore'), res);
+
+    expect(res.body.forecast.confidence).toBe('medium');
+    expect(res.body.forecast.note).toContain('No runner pass in the last two days');
+  });
+
+  it('lowers the confidence on a gappy series and omits the forecast under five points', async () => {
+    const gappy = series([1, 2, 3, 4, 5]);
+    gappy[3].date = '2026-10-20';
+    gappy[4].date = '2026-10-25';
+    getSeries.mockResolvedValue(gappy);
+    const gappyRes = response();
+    await getTrend(request('openRiskScore'), gappyRes);
+    expect(gappyRes.body.forecast.note).toContain('gaps in the series');
+
+    getSeries.mockResolvedValue(series([1, 2, 3, 4]));
+    const shortRes = response();
+    await getTrend(request('openRiskScore'), shortRes);
+    expect(shortRes.body).not.toHaveProperty('forecast');
   });
 });

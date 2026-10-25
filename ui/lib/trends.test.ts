@@ -12,6 +12,9 @@ describe('trend copy and insight', () => {
   it('maps catalog ids to human names', () => {
     expect(metricCopy('openIssuesBySeverity').label).toBe('Open issues');
     expect(metricCopy('issuesResolved').href).toBe('/issues');
+    expect(metricCopy('mttrHours').unit).toBe('hours');
+    expect(metricCopy('adminPrincipals').href).toBe('/identity');
+    expect(metricCopy('openRiskScore').lowerIsBetter).toBe(true);
   });
 
   it('formats ISO dates without timezone drift', () => {
@@ -83,9 +86,12 @@ describe('trend copy and insight', () => {
 
   it('only lists metrics something writes', () => {
     expect(Object.keys(TREND_METRICS).sort()).toEqual([
+      'adminPrincipals',
       'issuesCreated',
       'issuesResolved',
+      'mttrHours',
       'openIssuesBySeverity',
+      'openRiskScore',
     ]);
   });
 });

@@ -51,3 +51,4 @@ export {
 export { globMatch } from './glob';
 export { extractRulePath, type RulePath } from './rule-path';
 export { pathLikelihood, type PathLikelihood, type PathLikelihoodFactors } from './likelihood';
+export { forecastSeries, type Forecast, type ForecastProjection } from './forecast';

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import { PostureTrendStore } from '@khalifa/risk-engine';
+import { forecastSeries, PostureTrendStore } from '@khalifa/risk-engine';
 import { parseBoundedInteger } from '../middleware/gremlin-validator';
-import type { SeverityCounts, TrendPoint, TrendResponse } from '../types';
+import type { SeverityCounts, TrendForecast, TrendPoint, TrendResponse } from '../types';
 
 const trendStore = new PostureTrendStore();
 
@@ -12,7 +12,51 @@ const VALID_METRICS = [
   'publicBuckets',
   'usersWithoutMfa',
   'crossAccountTrusts',
+  'openRiskScore',
+  'mttrHours',
+  'adminPrincipals',
 ];
+
+const DAY_MS = 86_400_000;
+const STALE_RUN_MS = 2 * DAY_MS;
+const MAX_SERIES_GAP_DAYS = 3;
+
+// The engine's projection plus the series' own honesty check: no runner pass
+// in two days, or three or more missing days inside the window, lowers the
+// confidence a level and says why. This is the trend-store equivalent of the
+// compliance engine's freshCoverage gate.
+function buildForecast(metric: string, points: TrendPoint[]): TrendForecast | undefined {
+  const forecast = forecastSeries(
+    points.map((point) => ({ date: point.date, value: point.value }))
+  );
+  if (!forecast) return undefined;
+
+  let confidence = forecast.confidence;
+  const notes: string[] = [];
+  const last = points[points.length - 1];
+  const recordedMs = last.recordedAt ? Date.parse(last.recordedAt) : NaN;
+  if (Number.isFinite(recordedMs) && Date.now() - recordedMs > STALE_RUN_MS) {
+    confidence = downgrade(confidence);
+    notes.push('No runner pass in the last two days');
+  }
+  const spanDays = (Date.parse(last.date) - Date.parse(points[0].date)) / DAY_MS + 1;
+  if (spanDays - points.length >= MAX_SERIES_GAP_DAYS) {
+    confidence = downgrade(confidence);
+    notes.push('gaps in the series');
+  }
+
+  return {
+    ...forecast,
+    confidence,
+    ...(notes.length > 0 ? { note: notes.join('; ') } : {}),
+  };
+}
+
+function downgrade(confidence: TrendForecast['confidence']): TrendForecast['confidence'] {
+  if (confidence === 'high') return 'medium';
+  if (confidence === 'medium') return 'low';
+  return 'low';
+}
 
 export async function getTrend(req: Request<{ metric: string }>, res: Response): Promise<void> {
   try {
@@ -48,9 +92,11 @@ export async function getTrend(req: Request<{ metric: string }>, res: Response):
       };
     });
 
+    const forecast = points.length > 0 ? buildForecast(metric, trendPoints) : undefined;
     const response: TrendResponse = {
       metric,
       points: trendPoints,
+      ...(forecast ? { forecast } : {}),
     };
 
     res.json(response);

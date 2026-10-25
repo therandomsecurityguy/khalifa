@@ -40,6 +40,36 @@ export const TREND_METRICS: Record<string, TrendMetricCopy> = {
     hrefLabel: 'Open issues',
     lowerIsBetter: false,
   },
+  openRiskScore: {
+    id: 'openRiskScore',
+    label: 'Open risk score',
+    unit: 'risk points',
+    meaning:
+      'The sum of every open finding’s risk score, so a few criticals weigh more than many lows. Falling is progress.',
+    href: '/issues',
+    hrefLabel: 'Open issues',
+    lowerIsBetter: true,
+  },
+  mttrHours: {
+    id: 'mttrHours',
+    label: 'Mean time to resolution',
+    unit: 'hours',
+    meaning:
+      'Mean hours from an issue opening to the runner closing it, over issues resolved in the last 30 days.',
+    href: '/issues',
+    hrefLabel: 'Open issues',
+    lowerIsBetter: true,
+  },
+  adminPrincipals: {
+    id: 'adminPrincipals',
+    label: 'Admin principals',
+    unit: 'admin users and roles',
+    meaning:
+      'IAM users and roles the policy evaluator found to be admin. A leading indicator of blast-radius growth.',
+    href: '/identity',
+    hrefLabel: 'Identity',
+    lowerIsBetter: true,
+  },
 };
 
 export function metricCopy(id: string): TrendMetricCopy {
