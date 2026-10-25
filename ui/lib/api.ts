@@ -17,6 +17,7 @@ import type {
   ResourceLabelCount,
   ResourceGraph,
   ResourceSearchResponse,
+  AttackPathSimulationResponse,
   SecretDetail,
   SecretInventory,
   SecretReaderCounts,
@@ -328,6 +329,13 @@ export function getSecretReaderCounts(options: RequestOptions = {}): Promise<Sec
 
 export function getSecret(arn: string, options: RequestOptions = {}): Promise<SecretDetail> {
   return request(`/secrets/${encodeURIComponent(arn)}`, options);
+}
+
+export function getPathSimulation(
+  ruleId: string,
+  options: RequestOptions = {}
+): Promise<AttackPathSimulationResponse> {
+  return request(`/attack-paths/simulate${queryString({ ruleId })}`, options);
 }
 
 export function getAccounts(options: RequestOptions = {}): Promise<{ accounts: AccountSummary[] }> {

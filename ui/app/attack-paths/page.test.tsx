@@ -112,7 +112,24 @@ describe('AttackPathsPage', () => {
 
     await act(async () =>
       slow.resolve(
-        result({ truncated: true, paths: [{ nodes: [], edges: [], score: 1, severity: 'low' }] })
+        result({
+          truncated: true,
+          paths: [
+            {
+              nodes: [],
+              edges: [],
+              score: 1,
+              severity: 'low',
+              likelihood: 0.1,
+              likelihoodFactors: {
+                exposure: 1,
+                privilege: 0.5,
+                exploitability: 0.5,
+                reachability: 1,
+              },
+            },
+          ],
+        })
       )
     );
     expect(screen.queryByText(/more exist/)).not.toBeInTheDocument();

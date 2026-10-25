@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import {
   getAccounts,
   getIssue,
+  getPathSimulation,
   getRule,
   getSession,
   isNotFound,
@@ -30,7 +31,7 @@ import {
   StatusMessage,
 } from '@/components/ui';
 import { AttackGraph } from '@/components/attack-graph';
-import type { IssueDetail, IssueStatus } from '@/types';
+import type { AttackPathSimulationResponse, IssueDetail, IssueStatus } from '@/types';
 
 const SUPPRESSION_DAYS = [7, 30, 90];
 const MAX_REASON_LENGTH = 500;
@@ -128,6 +129,74 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-sm font-medium text-gray-500">{label}</dt>
       <dd className="mt-1 text-sm text-gray-900">{children}</dd>
     </div>
+  );
+}
+
+// The last third of an ID keeps a list row readable while remaining enough to
+// find the resource.
+function shortArn(id: string): string {
+  const tail = id.split('/').pop() ?? id;
+  return tail.length > 40 ? `${tail.slice(0, 37)}…` : tail;
+}
+
+// What a fix would remove: the API re-runs the issue's rule and counts, per
+// edge, how many matched paths it clears. The top row is the cheapest fix for
+// the most paths; nothing here mutates the graph.
+function FixSimulation({ ruleId }: { ruleId: string }) {
+  const [result, setResult] = useState<AttackPathSimulationResponse | null>(null);
+  const simulation = useAsyncAction(async () => {
+    setResult(null);
+    setResult(await getPathSimulation(ruleId));
+  });
+  const total = result?.totalPaths ?? 0;
+
+  return (
+    <Card
+      title="What removes these paths"
+      description={`Re-runs ${ruleId} against the live graph and counts, per fix, how many matched paths it clears.`}
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          className={SECONDARY_BUTTON}
+          disabled={simulation.pending}
+          onClick={() => void simulation.run()}
+        >
+          {simulation.pending && <Spinner />}
+          {simulation.pending ? 'Simulating…' : 'Simulate fixes'}
+        </button>
+        {result && (
+          <span className="text-sm text-gray-500">
+            {total} matched path{total === 1 ? '' : 's'}
+            {result.truncated ? ' (capped)' : ''}
+          </span>
+        )}
+      </div>
+      {simulation.error !== undefined && (
+        <div className="mt-3">
+          <ErrorState error={simulation.error} />
+        </div>
+      )}
+      {result &&
+        (result.edges.length === 0 ? (
+          <p className="mt-3 text-sm text-gray-500">No single edge clears a matched path.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {result.edges.map((edge) => (
+              <li key={edge.id} className="text-sm">
+                <span className="font-medium text-gray-900">{edge.label}</span>{' '}
+                <span className="text-gray-500">
+                  {shortArn(edge.from)} → {shortArn(edge.to)}
+                </span>
+                <div className="text-xs text-gray-600">
+                  clears {edge.pathsUsing} of {total} matched path{total === 1 ? '' : 's'} · worst
+                  likelihood {Math.round(edge.worstLikelihood * 100)}%
+                </div>
+              </li>
+            ))}
+          </ul>
+        ))}
+    </Card>
   );
 }
 
@@ -531,6 +600,8 @@ export default function IssueDetailPage() {
                 </dl>
               </Card>
             )}
+
+            <FixSimulation ruleId={detail.ruleId} />
           </div>
         </div>
 

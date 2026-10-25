@@ -176,11 +176,42 @@ export interface AttackPathSearchParams {
   maxPathLength?: number;
 }
 
+export interface PathLikelihoodFactors {
+  exposure: number;
+  privilege: number;
+  exploitability: number;
+  reachability: number;
+}
+
 export interface ScoredPath {
   nodes: GraphVertex[];
   edges: GraphEdge[];
   score: number;
   severity: Severity;
+  /** Explainable 0..1 path likelihood (product of the factors). */
+  likelihood: number;
+  likelihoodFactors: PathLikelihoodFactors;
+}
+
+export interface AttackPathSimulationEdge {
+  id: string;
+  label: string;
+  from: string;
+  to: string;
+  /** Matched paths that traverse this edge. */
+  pathsUsing: number;
+  /** Matched paths the rule would still return without the edge. */
+  remainingPaths: number;
+  /** Likelihood of the worst path the edge clears, 0..1. */
+  worstLikelihood: number;
+}
+
+export interface AttackPathSimulationResponse {
+  ruleId: string;
+  ruleName: string;
+  totalPaths: number;
+  truncated: boolean;
+  edges: AttackPathSimulationEdge[];
 }
 
 export interface AttackPathSearchResponse {

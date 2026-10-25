@@ -2,6 +2,21 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Path likelihood and fix simulation (P2)
+
+### Added
+
+- **Path likelihood**: `pathLikelihood()` (risk-engine) returns an explainable 0..1 value — the product of exposure (internet 1 / cross-account 0.7 / internal 0.3), privilege (admin 1 … service-linked 0.4), exploitability (CVSS/10, +0.2 with a known exploit, capped at 1) and reachability (halved when a path vertex marks its exposure or state as unreadable). Unknown detail is a mid-value (0.5), not zero. It is persisted on issues (`metadata.likelihood` / `metadata.likelihoodFactors`), returned with every attack-path search result, and the explorer breaks score ties by it. `RiskScoreInput.reachabilityRestricted` reflects `lambda_exposure_restricted` / `collection_restricted` vertices.
+- **Fix simulation**: `GET /attack-paths/simulate?ruleId=…` (Viewer + expensive-query limiter) re-runs the rule against the live graph — bounded at 200 matched paths and 10 ranked edges — and counts, per edge, how many of the matched paths traverse it, ordered by paths cleared then worst cleared likelihood. Nothing is mutated; removal is simulated over the returned paths. The issue page gains a "What removes these paths" panel that runs the simulation on demand and shows `clears N of M matched paths · worst likelihood P%` per fix, with empty and error states.
+
+### Changed
+
+- **`extractRulePath` is shared**: the driver-result parser moved to `rule-path.ts` and is exported (with the `RulePath` type), so the rule runner and the simulation API read the same result shape instead of duplicating it.
+
+### Notes
+
+- The roadmap's third P2 exit item — recomputing predictions immediately from incremental-collector deltas — remains open: incremental writes are picked up by the next scheduled evaluator run, and an event-triggered dispatch needs a scheduling surface decision.
+
 ## [Unreleased] - Exploitability (P1)
 
 ### Added

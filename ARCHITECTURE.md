@@ -165,6 +165,22 @@ A scheduled Lambda (`lambdas/cloudtrail-analyzer`) runs daily (02:00 UTC) and ex
 
 A scheduled Lambda (`lambdas/least-privilege-sweep`) runs daily (03:00 UTC, after the CloudTrail analyzer) and iterates every `IamUser` and `IamRole` across all accounts. For each principal it joins the `EffectivePermission` vertex (Neptune) with actual usage from `AccessAnalyzerCache` (DynamoDB), computes a rightsizing recommendation via the shared `rightsizer` module, and persists the result to the `LeastPrivilegeFindings` table. Service-linked roles (`/aws-service-role/`) and principals with only AWS-managed policies are skipped.
 
+## Path likelihood and fix simulation
+
+Beyond severity, every matched path carries an explainable **likelihood**: the
+product of four visible factors — exposure, privilege (identity blast radius),
+exploitability (Amazon Inspector CVSS/exploit data) and reachability (halved
+when a vertex says its exposure or state could not be read). Unknown detail is
+a mid-value, not zero, and the factors are persisted with the value (issue
+metadata, attack-path search results) so a ranking can be argued with; it is a
+v1 heuristic, calibrated against outcomes only in a later phase.
+
+`GET /attack-paths/simulate?ruleId=…` re-runs one rule against the live graph
+(bounded at 200 paths / 10 edges) and counts, per edge on the matched paths,
+how many paths traverse it — the "what removes these paths" panel on the issue
+page. Removal is simulated by filtering the returned paths, not by mutating the
+graph, and the top row is the cheapest fix for the most (or worst) paths.
+
 ## Compliance reconciliation and the trust center
 
 The compliance job evaluates the CIS AWS Foundations v3.0.0 and Khalifa
