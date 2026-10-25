@@ -1,7 +1,8 @@
 name: Mirror Gremlin Server image
 
-# Run by hand. Copies the pinned Gremlin Server image to GHCR so the
-# graph-queries job does not hit Docker Hub's pull rate limit.
+# Run by hand. Builds test/gremlin/Dockerfile (the pinned Gremlin Server image
+# with its CA trust store upgraded) and pushes it to GHCR, so the graph-queries
+# job does not hit Docker Hub's pull rate limit.
 on:
   workflow_dispatch:
 
@@ -9,34 +10,38 @@ permissions:
   contents: read
 
 env:
-  SOURCE: docker.io/tinkerpop/gremlin-server@sha256:911e27acc8a43209fee272408fa99045f5ba48ae410c8cef6da8c500eca42416
-  DIGEST: sha256:911e27acc8a43209fee272408fa99045f5ba48ae410c8cef6da8c500eca42416
-  TARGET: ghcr.io/therandomsecurityguy/khalifa-gremlin-server:3.7.1
+  TARGET: ghcr.io/therandomsecurityguy/khalifa-gremlin-server:3.7.1-ca20261020
 
 jobs:
   mirror:
-    name: Copy to GHCR
+    name: Build and push to GHCR
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
       packages: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
       - name: Log in to GHCR
         env:
           ACTOR: ${{ github.actor }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
 
-      # Copies the multi-platform index as-is, so the digest is unchanged.
-      - name: Copy image
-        run: docker buildx imagetools create --tag "$TARGET" "$SOURCE"
+      # graph-queries runs on amd64 runners only. The Dockerfile fails the
+      # build if ca-certificates is still below the fixed version.
+      - name: Build and push image
+        run: docker buildx build --platform linux/amd64 --pull --push --tag "$TARGET" test/gremlin
 
-      - name: Verify digest
+      - name: Print digest
         run: |
-          copied=$(docker buildx imagetools inspect "$TARGET" --format '{{json .Manifest}}' | jq -r .digest)
-          echo "Copied $copied"
-          test "$copied" = "$DIGEST"
+          pushed=$(docker buildx imagetools inspect "$TARGET" --format '{{json .Manifest}}' | jq -r .digest)
+          echo "Pushed $TARGET@$pushed (pin it in graph-queries.yml)"
+          echo "Pushed \`$TARGET@$pushed\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Log out
         if: always()

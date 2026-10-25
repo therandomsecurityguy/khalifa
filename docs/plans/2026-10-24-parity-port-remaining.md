@@ -1,6 +1,6 @@
 # Plan: remaining upstream parity port (khalifa-main → this repo)
 
-Status: planned (2026-10-24); G1 merged (PR #23); G2 merged (PR #24); G5 merged (PR #25); G3 merged (PR #26) — mirror-workflow decision (§7.3) still open; §7.2 decided (auto-ticketing stays off for RULE-006/031–034) and no mapped-framework citations for KH-IAM-3; G4 implemented on `dac/parity-g4-compliance` with §7.1 decided (coexistence: mapped requirements gate on canonical controls' publishable flag, which now follows Security Hub). Next: G6 (build/CI hygiene), then revisit §7.3/§7.4.
+Status: planned (2026-10-24); G1 merged (PR #23); G2 merged (PR #24); G5 merged (PR #25); G3 merged (PR #26); G4 merged (PR #27); G6 implemented on `dac/parity-g6-hygiene` — §7.3 decided (build the hardened Gremlin image from `test/gremlin/Dockerfile` and pin the GHCR digest), §7.4 decided (version bumps folded into G6), §7.1 decided (coexistence), §7.2 decided (auto-ticketing stays off for RULE-006/031–034). §7.5 remains open (private SOC2 module and its App-token CI are deliberately not ported). All gap groups done.
 Source of truth for the gap list: a working-tree snapshot of the upstream repo at
 `~/Desktop/khalifa-main` (2026-10-23, no `.git`), compared against this repo's `main`.
 Read-only reference — nothing is copied wholesale; every port is scrubbed and merged.
