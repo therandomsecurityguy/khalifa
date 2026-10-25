@@ -104,29 +104,30 @@ export const riskRules: RiskRule[] = [
   },
   {
     id: 'RULE-003',
-    name: 'Container Images with Critical CVEs on Internet-Exposed Workloads',
+    name: 'Internet-Exposed Workloads with Critical CVEs',
     description:
-      'Detects internet-exposed instances or pods running a container image with a critical CVE. Disabled until image vulnerability data (for example Amazon Inspector) is collected; nothing creates HAS_CVE today.',
+      'Detects internet-exposed instances, pods or Lambda functions with a critical-severity Amazon Inspector finding (CVSS 9.0+) on the workload itself or on a container image running on it. Requires Inspector collection; with no findings, nothing matches. The exploitability factor in the risk score reads the same findings.',
     severityHint: 'critical',
     riskFactors: [...baseRiskFactors],
     gremlinQueryTemplate: `
-      g.V().hasLabel(within('Ec2Instance', 'KubernetesPod'))
+      g.V().hasLabel(within('Ec2Instance', 'KubernetesPod', 'LambdaFunction'))
         .has('is_internet_exposed', true)
         .as('workload')
-        .inE('RUNS_ON').outV().hasLabel('ContainerImage')
-        .as('image')
-        .outE('HAS_CVE').inV()
+        .union(
+          outE('HAS_CVE').inV(),
+          inE('RUNS_ON').outV().hasLabel('ContainerImage').outE('HAS_CVE').inV()
+        )
+        .hasLabel('Vulnerability')
         .has('severity', 'CRITICAL')
         .has('cvss_base_score', gte(9.0))
         .as('cve')
         .${PATH_PROJECTION}
     `,
     ownerTeam: 'container-security',
-    enabled: false,
+    enabled: true,
+    // No tickets until its firing rate has been observed on real Inspector data.
     autoTicketConfig: {
-      enabled: true,
-      projectKey: 'SEC',
-      priority: 'P1',
+      enabled: false,
     },
   },
   {

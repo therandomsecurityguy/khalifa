@@ -2,6 +2,18 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Exploitability (P1)
+
+### Added
+
+- **Amazon Inspector collection**: the collector's `inspector` stage writes one `Vulnerability` vertex per active CRITICAL or HIGH finding — the finding ARN as id, plus `cve_id`, `severity`, `cvss_base_score` (highest CVSS base score, falling back to Inspector's own score), `exploit_available`, `fixed_versions`, `inspector_score`, and first/last observed — and a `HAS_CVE` edge from the EC2 instance, Lambda function or ECR image the finding affects, matched by ARN against the vertices other stages collected. Inspector not being enabled records the stage `SKIPPED` with the reason rather than an empty success; findings are capped at 5000 per account/region with the truncation logged, and Inspector ARNs are excluded from tag lookups. New IAM read: `inspector2:ListFindings` on the spoke `SecurityGraphCollectorRole` policy and `khalifa-data` `PlatformRead` — a policy widening that requires the operator's confirmation before it is applied to member accounts (AGENTS.md §1.1).
+
+### Changed
+
+- **RULE-003 is live**: renamed "Internet-Exposed Workloads with Critical CVEs" and enabled. It matches a CRITICAL finding (CVSS 9.0+) on an internet-exposed EC2 instance, Kubernetes pod or Lambda function — on the workload itself or on a container image running on it — using edge steps so the drawn path keeps its edge labels. Auto-ticketing stays off until its firing rate is observed on real Inspector data; the REVIEWED_MAPPING entry (KH-VULN-1, "critical CVEs, on exposed workloads only") is unchanged.
+- **Exploitability in the risk score**: `RiskScoreOutput.factors.exploitabilityContribution` (additive, at most 15 points: `cvss/10`, +0.2 when an exploit is known, capped at 1.0). Findings without CVE data keep exactly the scores they had — the zero-value CVSS weight the engine removed is not restored as a reweighting. The scoring factors and the audit trail explain it like every other factor.
+- **UI**: `Vulnerability` facts (CVE, severity, CVSS, exploit known, fixed-in, Inspector score) render on the issue page's involved resources, and the scoring-factors card labels the new factor.
+
 ## [Unreleased] - Upstream parity (2026-10)
 
 ### Added

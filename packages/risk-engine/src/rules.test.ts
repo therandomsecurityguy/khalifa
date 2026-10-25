@@ -4,7 +4,7 @@ import { ADMIN_PORT_RANGE_PREDICATE } from './admin-ports';
 const MANAGED_HOP = "optional(outE('CONTAINS').inV().hasLabel('IamPolicyDocument'))";
 
 describe('riskRules', () => {
-  test('should have exactly 33 rules', () => {
+  test('should have exactly 34 rules', () => {
     expect(riskRules.length).toBe(34);
   });
 
@@ -66,14 +66,9 @@ describe('getEnabledRules', () => {
     }
   });
 
-  test('RULE-003 should be disabled (vulnerability scanning not yet built)', () => {
-    const rule = getRuleById('RULE-003');
-    expect(rule?.enabled).toBe(false);
-  });
-
-  test('should return 32 enabled rules (RULE-003 disabled)', () => {
+  test('should return 34 enabled rules', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(33);
+    expect(enabledRules.length).toBe(34);
   });
 });
 
@@ -93,7 +88,11 @@ describe('getRuleById', () => {
         "has('port_from', lte(22)).has('port_to', gte(22))",
       ],
     ],
-    ['RULE-003', 'Container', ['ContainerImage', 'HAS_CVE', 'CRITICAL', 'cvss_base_score']],
+    [
+      'RULE-003',
+      'Critical CVEs',
+      ['Ec2Instance', 'LambdaFunction', 'HAS_CVE', 'ContainerImage', 'CRITICAL', 'cvss_base_score'],
+    ],
     ['RULE-004', 'IAM', ['HAS_IAM_ROLE', "has('is_admin', true)"]],
     ['RULE-005', 'Crown Jewel', ['crown_jewel']],
     [

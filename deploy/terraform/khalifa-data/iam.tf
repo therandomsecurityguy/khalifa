@@ -178,6 +178,7 @@ locals {
         "guardduty:ListDetectors",
         "guardduty:ListMembers",
         "guardduty:ListPublishingDestinations",
+        "inspector2:ListFindings",
         "lambda:GetPolicy",
         "lambda:ListAliases",
         "lambda:ListFunctions",

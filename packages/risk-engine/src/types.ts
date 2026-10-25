@@ -126,6 +126,13 @@ export interface IdentityBlastRadius {
   scope: number;
 }
 
+export interface PathExploitability {
+  /** Highest CVSS base score among the path's vulnerability vertices. */
+  cvssBaseScore?: number;
+  /** An Amazon Inspector finding on the path reports a known exploit. */
+  exploitAvailable?: boolean;
+}
+
 export interface RiskScoreInput {
   exposureLevel: ExposureLevel;
   identityBlastRadius?: IdentityBlastRadius;
@@ -133,6 +140,8 @@ export interface RiskScoreInput {
   environment: Environment;
   attackPathLength?: number;
   isCrownJewel: boolean;
+  /** Set when the path carries Amazon Inspector vulnerability vertices. */
+  exploitability?: PathExploitability;
 }
 
 export interface RiskScoreOutput {
@@ -144,5 +153,6 @@ export interface RiskScoreOutput {
     dataClassificationContribution: number;
     environmentContribution: number;
     crownJewelContribution: number;
+    exploitabilityContribution: number;
   };
 }

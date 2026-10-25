@@ -68,6 +68,7 @@ import {
   ListFindingsCommand,
 } from '@aws-sdk/client-accessanalyzer';
 import { GuardDutyClient } from '@aws-sdk/client-guardduty';
+import { Inspector2Client } from '@aws-sdk/client-inspector2';
 import { SecurityHubClient } from '@aws-sdk/client-securityhub';
 import { Route53Client, ListHostedZonesCommand } from '@aws-sdk/client-route-53';
 import {
@@ -137,6 +138,7 @@ import {
   grantTarget,
 } from './src/policy-statements';
 import { collectGuardDuty, collectSecurityHub } from './src/security-services';
+import { collectInspectorFindings, INSPECTOR_MAX_FINDINGS } from './src/inspector';
 import { collectLambdaExposure } from './src/lambda-exposure';
 import { buildExposureContext, applyExposureToNodes, type ExposureContext } from './src/exposure';
 import { isRoleArn, roleVertexId } from './src/iam-ids';
@@ -388,6 +390,7 @@ function createClients(region: string, credentials?: ClientCredentials) {
     configClient: new ConfigServiceClient({ ...baseConfig, ...credConfig }),
     accessAnalyzerClient: new AccessAnalyzerClient({ ...baseConfig, ...credConfig }),
     guardDutyClient: new GuardDutyClient({ ...baseConfig, ...credConfig }),
+    inspector2Client: new Inspector2Client({ ...baseConfig, ...credConfig }),
     securityHubClient: new SecurityHubClient({ ...baseConfig, ...credConfig }),
     route53Client: new Route53Client({ ...baseConfig, ...credConfig }),
     apiGatewayClient: new APIGatewayClient({ ...baseConfig, ...credConfig }),
@@ -481,6 +484,7 @@ export const collect = async (
     configClient,
     accessAnalyzerClient,
     guardDutyClient,
+    inspector2Client,
     securityHubClient,
     route53Client,
     apiGatewayClient,
@@ -697,6 +701,52 @@ export const collect = async (
       }
     )
   );
+
+  // Inspector findings attach HAS_CVE to resource vertices by ARN, so like
+  // Security Hub they run after the resource stages have contributed their
+  // nodes. Inspector not being enabled is recorded as SKIPPED, not an empty
+  // success: nothing was read, and the CVE data does not exist.
+  const inspectorStart = Date.now();
+  try {
+    const result = await collectInspectorFindings(
+      inspector2Client,
+      accountId,
+      region,
+      new Set(nodes.map((node) => node.id))
+    );
+    appendAll(nodes, result.nodes);
+    appendAll(edges, result.edges);
+    coverage.push({
+      service: 'inspector',
+      status: result.notEnabled ? 'SKIPPED' : 'SUCCEEDED',
+      completedAt: new Date().toISOString(),
+      nodes: result.nodes.length,
+      edges: result.edges.length,
+      error: result.notEnabled
+        ? 'Amazon Inspector is not enabled in this account/region'
+        : result.truncated
+          ? `Findings truncated at ${INSPECTOR_MAX_FINDINGS}`
+          : undefined,
+    });
+  } catch (error) {
+    const failure: CoverageRecord = {
+      service: 'inspector',
+      status: 'FAILED',
+      completedAt: new Date().toISOString(),
+      nodes: 0,
+      edges: 0,
+      error: error instanceof Error ? error.message : String(error),
+      failureType: classifyFailure(error),
+    };
+    coverage.push(failure);
+    logger.error('Inspector collection incomplete', {
+      accountId,
+      region,
+      failureType: failure.failureType,
+      error: failure.error,
+    });
+  }
+  stageDurations.inspector = Date.now() - inspectorStart;
 
   const uniqueNodes = mergeDuplicateNodes(nodes);
   const exposureCtx: ExposureContext = buildExposureContext(uniqueNodes);

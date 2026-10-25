@@ -603,20 +603,49 @@ describe('exposure rules', () => {
     expect(starts(await run('RULE-029'))).toEqual(['backdoor', 'crypto']);
   });
 
-  // RULE-003 stays disabled until CVE data exists; its query is ready for it.
-  it('RULE-003 matches an exposed workload running an image with a critical CVE', async () => {
-    for (const [ec2, exposed, score] of [
-      ['ec2-hit', true, 9.8],
-      ['ec2-internal', false, 9.8],
-      ['ec2-low', true, 7.5],
-    ] as const) {
-      await vertex('ContainerImage', `${ec2}-image`);
-      await vertex('Vulnerability', `${ec2}-cve`, { severity: 'CRITICAL', cvss_base_score: score });
-      await vertex('Ec2Instance', ec2, { is_internet_exposed: exposed });
-      await edge(`${ec2}-image`, 'HAS_CVE', `${ec2}-cve`);
-      await edge(`${ec2}-image`, 'RUNS_ON', ec2);
-    }
-    expect(starts(await run('RULE-003'))).toEqual(['ec2-hit']);
+  // Inspector findings reach a workload directly (EC2, Lambda) or through the
+  // container image running on it (ECR image scanning).
+  it('RULE-003 matches a critical CVE on an exposed workload, directly or via its image', async () => {
+    // Direct instance and function findings.
+    await vertex('Ec2Instance', 'ec2-direct', { is_internet_exposed: true });
+    await vertex('Vulnerability', 'ec2-direct-cve', { severity: 'CRITICAL', cvss_base_score: 9.8 });
+    await edge('ec2-direct', 'HAS_CVE', 'ec2-direct-cve');
+    await vertex('LambdaFunction', 'fn-direct', { is_internet_exposed: true });
+    await vertex('Vulnerability', 'fn-direct-cve', { severity: 'CRITICAL', cvss_base_score: 9.1 });
+    await edge('fn-direct', 'HAS_CVE', 'fn-direct-cve');
+
+    // An image finding on an exposed instance.
+    await vertex('ContainerImage', 'img', {});
+    await vertex('Vulnerability', 'img-cve', { severity: 'CRITICAL', cvss_base_score: 9.8 });
+    await vertex('Ec2Instance', 'ec2-image', { is_internet_exposed: true });
+    await edge('img', 'HAS_CVE', 'img-cve');
+    await edge('img', 'RUNS_ON', 'ec2-image');
+
+    // Not matched: unexposed workloads, high (not critical) CVSS, LOW severity.
+    await vertex('Ec2Instance', 'ec2-internal', { is_internet_exposed: false });
+    await vertex('Vulnerability', 'ec2-internal-cve', {
+      severity: 'CRITICAL',
+      cvss_base_score: 9.8,
+    });
+    await edge('ec2-internal', 'HAS_CVE', 'ec2-internal-cve');
+    await vertex('Ec2Instance', 'ec2-low', { is_internet_exposed: true });
+    await vertex('Vulnerability', 'ec2-low-cve', { severity: 'CRITICAL', cvss_base_score: 7.5 });
+    await edge('ec2-low', 'HAS_CVE', 'ec2-low-cve');
+    await vertex('Ec2Instance', 'ec2-medium', { is_internet_exposed: true });
+    await vertex('Vulnerability', 'ec2-medium-cve', { severity: 'MEDIUM', cvss_base_score: 9.8 });
+    await edge('ec2-medium', 'HAS_CVE', 'ec2-medium-cve');
+
+    // An image finding on an unexposed instance stays out too.
+    await vertex('ContainerImage', 'img-internal', {});
+    await vertex('Vulnerability', 'img-internal-cve', {
+      severity: 'CRITICAL',
+      cvss_base_score: 9.9,
+    });
+    await vertex('Ec2Instance', 'ec2-image-internal', { is_internet_exposed: false });
+    await edge('img-internal', 'HAS_CVE', 'img-internal-cve');
+    await edge('img-internal', 'RUNS_ON', 'ec2-image-internal');
+
+    expect(starts(await run('RULE-003'))).toEqual(['ec2-direct', 'ec2-image', 'fn-direct']);
   });
 });
 
