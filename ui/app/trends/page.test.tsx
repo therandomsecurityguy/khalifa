@@ -110,4 +110,35 @@ describe('TrendsPage', () => {
       screen.queryByRole('option', { name: /usersWithoutMfa|without MFA/ })
     ).not.toBeInTheDocument();
   });
+  it('shows the projection with its confidence and any staleness note', async () => {
+    mockedTrend.mockResolvedValue({
+      metric: 'openRiskScore',
+      points: [
+        { date: '2026-10-01', value: 10 },
+        { date: '2026-10-02', value: 12 },
+        { date: '2026-10-03', value: 14 },
+        { date: '2026-10-04', value: 16 },
+        { date: '2026-10-05', value: 18 },
+      ],
+      forecast: {
+        basisDays: 5,
+        slopePerDay: 2,
+        confidence: 'medium',
+        projected: [
+          { days: 7, date: '2026-10-12', value: 32, lower: 30, upper: 34 },
+          { days: 30, date: '2026-11-04', value: 78, lower: 70, upper: 86 },
+        ],
+        note: 'No runner pass in the last two days',
+      },
+    });
+
+    render(<TrendsPage />);
+
+    const block = await screen.findByTestId('trend-forecast');
+    expect(within(block).getByText('medium confidence')).toBeInTheDocument();
+    expect(within(block).getByText(/In 7 days:/)).toHaveTextContent('32');
+    expect(within(block).getByText(/range 30–34/)).toBeInTheDocument();
+    expect(within(block).getByText(/moving \+2 per day/)).toBeInTheDocument();
+    expect(within(block).getByText(/No runner pass in the last two days/)).toBeInTheDocument();
+  });
 });

@@ -223,7 +223,7 @@ Unauthenticated: `/health`, `/livez`, `/readyz`, `/metrics`. Everything else nee
 | `GET /identity/escalation-paths` · `/identity/unused-permissions` · `/identity/trust-graph`   | CIEM views (Viewer+)                                                                                 |
 | `GET /identity/rightsizing/:principal`                                                        | Least-privilege recommendation (Viewer+)                                                             |
 | `GET /identity/least-privilege`                                                               | Sweep findings, `/summary`, and per-principal detail (Viewer+)                                       |
-| `GET /trends` · `/trends/:metric`                                                             | Posture trend metrics and series (Viewer+)                                                           |
+| `GET /trends` · `/trends/:metric`                                                             | Posture trend metrics and series, each with a 7/30-day projection and confidence (Viewer+)           |
 | `GET /integrations/status`                                                                    | Issue sink status (Viewer+)                                                                          |
 
 ```bash

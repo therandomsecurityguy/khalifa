@@ -181,6 +181,20 @@ how many paths traverse it — the "what removes these paths" panel on the issue
 page. Removal is simulated by filtering the returned paths, not by mutating the
 graph, and the top row is the cheapest fix for the most (or worst) paths.
 
+## Trajectory forecasting
+
+The rule runner writes three more daily series beside the issue counts: the
+backlog's total risk score (a few criticals weigh more than many lows), mean
+time to resolution over issues resolved in the last 30 days, and the
+admin-principal count from the policy evaluator's findings. `GET
+/trends/:metric` fits an explainable least-squares line over the window and
+returns 7/30-day projections with a residual band and a confidence level
+derived from fit quality and point count — degraded a level, with the reason in
+`note`, when no runner pass recorded in two days or the window has three or
+more missing days. The Trends page renders the projection beside the series.
+Publishing projections to the trust center is deferred until the publishable
+discipline covers them.
+
 ## Compliance reconciliation and the trust center
 
 The compliance job evaluates the CIS AWS Foundations v3.0.0 and Khalifa

@@ -2,6 +2,18 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Trajectory forecasting (P3)
+
+### Added
+
+- **Three more trend series**: `openRiskScore` (the sum of every open finding's risk score, so a few criticals weigh more than many lows), `mttrHours` (mean hours from opening to resolution over issues resolved in the last 30 days, from one bounded page of the resolved status), and `adminPrincipals` (IAM users and roles the policy evaluator found to be admin — a leading indicator of blast-radius growth). The optional sources fail soft: an unreadable issue store or graph skips the day's point instead of failing the snapshot.
+- **Explainable projections**: `forecastSeries()` (risk-engine) fits an ordinary least-squares line over the window and returns 7/30-day projections with a residual band and a confidence level (`high` = ≥14 points, tight residuals; `medium` = ≥7 points, moderate; otherwise `low`). `GET /trends/:metric` now returns `forecast` for every series with at least five points, and degrades the confidence a level — with the reason in `note` — when no runner pass recorded in two days or the window has three or more missing days (the trend-store equivalent of the compliance engine's `freshCoverage` gate).
+- **Trends page projections**: the summary card renders the 7- and 30-day projections with their ranges, a confidence badge, the recent slope, and any staleness note; the metric picker gains copy for the three new series.
+
+### Notes
+
+- Deferred: trust-center publication of projections (needs the publishable discipline to cover them), a per-issue risk window from resolution history, SLO-burn thresholds, and an exposure-by-type series (a graph-wide group-by scan was judged too heavy for the hourly runner).
+
 ## [Unreleased] - Path likelihood and fix simulation (P2)
 
 ### Added

@@ -161,6 +161,7 @@ export class RiskRuleRunner {
     const store = new PostureTrendStore();
 
     let totalOpen = 0;
+    let openRiskScore = 0;
     let created = 0;
     let resolved = 0;
     const byRule = new Map<string, number>();
@@ -172,10 +173,20 @@ export class RiskRuleRunner {
       byRule.set(result.ruleId, (byRule.get(result.ruleId) ?? 0) + openIssues.length);
       for (const issue of openIssues) {
         if (issue.severity in bySeverity) bySeverity[issue.severity] += 1;
+        if (typeof issue.riskScore === 'number' && Number.isFinite(issue.riskScore)) {
+          openRiskScore += issue.riskScore;
+        }
       }
       created += result.issuesCreated;
       resolved += result.issuesResolved;
     }
+
+    // The two series that need more than the run's own results: mean time to
+    // resolution over recently resolved issues, and the admin-principal count.
+    // Both are optional — an unreadable source skips the day's point rather
+    // than failing the trend snapshot.
+    const mttrHours = await this.meanResolutionHours();
+    const adminPrincipals = await this.countAdminPrincipals();
 
     await store.recordMany([
       // The value is the total open count; the severity split rides in `sample`.
@@ -188,9 +199,55 @@ export class RiskRuleRunner {
       { metric: 'publicBuckets', value: byRule.get('RULE-007') ?? 0, accountIds: [] },
       { metric: 'crossAccountTrusts', value: byRule.get('RULE-006') ?? 0, accountIds: [] },
       { metric: 'usersWithoutMfa', value: byRule.get('RULE-015') ?? 0, accountIds: [] },
+      // Open risk score: the backlog's sum, so a few criticals weigh more than
+      // many lows.
+      { metric: 'openRiskScore', value: Math.round(openRiskScore * 10) / 10, accountIds: [] },
+      ...(mttrHours !== undefined
+        ? [{ metric: 'mttrHours' as const, value: mttrHours, accountIds: [] }]
+        : []),
+      ...(adminPrincipals !== undefined
+        ? [{ metric: 'adminPrincipals' as const, value: adminPrincipals, accountIds: [] }]
+        : []),
     ]);
     await store.increment('issuesCreated', created);
     await store.increment('issuesResolved', resolved);
+  }
+
+  // Mean hours from creation to resolution for issues resolved in the last 30
+  // days, over one bounded page of the resolved status. Undefined when nothing
+  // resolved recently or the store is unreadable.
+  private async meanResolutionHours(now: Date = new Date()): Promise<number | undefined> {
+    try {
+      const page = await this.issueStore.listIssues({ status: ['resolved'], limit: 100 });
+      const cutoff = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+      const durations = page.items
+        .filter((issue) => issue.resolvedAt && Date.parse(issue.resolvedAt) >= cutoff)
+        .map((issue) => (Date.parse(issue.resolvedAt!) - Date.parse(issue.createdAt)) / 3_600_000)
+        .filter((hours) => Number.isFinite(hours) && hours >= 0);
+      if (durations.length === 0) return undefined;
+      return Math.round((durations.reduce((a, b) => a + b, 0) / durations.length) * 10) / 10;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Admins the policy evaluator marked this collection window; a leading
+  // indicator of blast-radius growth. Failures skip the point.
+  private async countAdminPrincipals(): Promise<number | undefined> {
+    try {
+      const rows = await this.neptuneClient.executeQuery(
+        `g.V().hasLabel(within('IamUser', 'IamRole')).has('is_admin', true).count()`
+      );
+      const first = rows[0] as unknown;
+      const value =
+        first && typeof first === 'object' && 'value' in (first as Record<string, unknown>)
+          ? (first as { value: unknown }).value
+          : first;
+      const count = Number(value);
+      return Number.isFinite(count) ? count : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   // Rule traversals step through outE()/inV(), so a path alternates vertex,

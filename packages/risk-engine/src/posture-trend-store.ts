@@ -14,7 +14,10 @@ export type TrendMetric =
   | 'usersWithoutMfa'
   | 'crossAccountTrusts'
   | 'issuesCreated'
-  | 'issuesResolved';
+  | 'issuesResolved'
+  | 'openRiskScore'
+  | 'mttrHours'
+  | 'adminPrincipals';
 
 export interface PostureTrendPoint {
   metric: string;
