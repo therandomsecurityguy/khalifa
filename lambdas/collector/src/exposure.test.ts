@@ -42,6 +42,15 @@ describe('deriveIsInternetExposed', () => {
     expect(deriveIsInternetExposed({ scheme: 'internet-facing' }, baseCtx)).toBe(true);
   });
 
+  it.each([
+    [{ function_url_public: true }, true],
+    [{ public_invoke_policy: true }, true],
+    [{ function_url_auth_type: 'NONE', function_url_public: false }, false],
+    [{ lambda_exposure_restricted: true }, false],
+  ])('exposes a Lambda from %j: %s', (props, exposed) => {
+    expect(deriveIsInternetExposed(props, baseCtx)).toBe(exposed);
+  });
+
   it('does not expose private subnet without IGW', () => {
     expect(
       deriveIsInternetExposed(
@@ -80,9 +89,41 @@ describe('applyExposureToNodes', () => {
       subnetVpcIds: new Map<string, string>(),
       vpcHasIgw: new Map<string, boolean>(),
     };
-    const result = applyExposureToNodes(nodes, ctx);
+    const result = applyExposureToNodes(nodes, ctx, true);
     expect(result[0].properties.is_internet_exposed).toBe(true);
-    expect(result[1].properties.is_internet_exposed).toBeUndefined();
+    expect(result[1].properties.is_internet_exposed).toBe(false);
+  });
+
+  it('keeps the last value for a Lambda whose exposure could not be read', () => {
+    const nodes: GraphNode[] = [
+      node('LambdaFunction', { id: 'fn-1', lambda_exposure_restricted: true }),
+      node('LambdaFunction', { id: 'fn-2', lambda_exposure_restricted: false }),
+    ];
+    const ctx = {
+      publicSubnetIds: new Set<string>(),
+      subnetVpcIds: new Map<string, string>(),
+      vpcHasIgw: new Map<string, boolean>(),
+    };
+    const result = applyExposureToNodes(nodes, ctx, true);
+    expect(result[0]).toEqual(nodes[0]);
+    expect(result[1].properties.is_internet_exposed).toBe(false);
+  });
+
+  it('keeps the last value when the network stages failed', () => {
+    // Without subnets and internet gateways, a resource exposed only through a
+    // public subnet would derive as unexposed.
+    const nodes: GraphNode[] = [
+      node('Ec2Instance', { id: 'i-1', public_ip: '1.2.3.4' }),
+      node('RdsInstance', { id: 'db-1', subnet_id: 'subnet-1' }),
+    ];
+    const ctx = {
+      publicSubnetIds: new Set<string>(),
+      subnetVpcIds: new Map<string, string>(),
+      vpcHasIgw: new Map<string, boolean>(),
+    };
+    const result = applyExposureToNodes(nodes, ctx, false);
+    expect(result[0].properties.is_internet_exposed).toBe(true);
+    expect(result[1]).toEqual(nodes[1]);
   });
 
   it('leaves non-exposable labels untouched', () => {
@@ -92,7 +133,7 @@ describe('applyExposureToNodes', () => {
       subnetVpcIds: new Map<string, string>(),
       vpcHasIgw: new Map<string, boolean>(),
     };
-    const result = applyExposureToNodes(nodes, ctx);
+    const result = applyExposureToNodes(nodes, ctx, true);
     expect(result[0]).toEqual(nodes[0]);
   });
 });

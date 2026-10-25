@@ -46,6 +46,9 @@ export function deriveIsInternetExposed(
   if (properties.publicly_accessible === true) return true;
   if (properties.PubliclyAccessible === true) return true;
   if (properties.is_internet_facing === true) return true;
+  // Lambda: a function URL anyone can call, or a policy letting anyone invoke.
+  if (properties.function_url_public === true) return true;
+  if (properties.public_invoke_policy === true) return true;
 
   if (properties.scheme === 'internet-facing') return true;
 
@@ -62,7 +65,14 @@ export function deriveIsInternetExposed(
   return false;
 }
 
-export function applyExposureToNodes(nodes: GraphNode[], ctx: ExposureContext): GraphNode[] {
+// networkComplete: the subnets and internet-gateways stages succeeded. Without
+// them, a resource exposed only through a public subnet would derive as
+// unexposed, so false is not written and the previous value stands.
+export function applyExposureToNodes(
+  nodes: GraphNode[],
+  ctx: ExposureContext,
+  networkComplete: boolean
+): GraphNode[] {
   const exposedLabels = new Set([
     'Ec2Instance',
     'LambdaFunction',
@@ -73,15 +83,24 @@ export function applyExposureToNodes(nodes: GraphNode[], ctx: ExposureContext): 
     'LoadBalancer',
   ]);
 
+  // Written as true or false every run so a fixed resource stops showing as
+  // exposed. A Lambda whose URLs and policy could not be read, or any resource
+  // when the network stages failed, keeps its last value: unknown is not
+  // unexposed.
   return nodes.map((node) => {
     if (!exposedLabels.has(node.label)) return node;
     const isInternetExposed = deriveIsInternetExposed(node.properties, ctx);
-    if (!isInternetExposed) return node;
+    if (
+      !isInternetExposed &&
+      (node.properties.lambda_exposure_restricted === true || !networkComplete)
+    ) {
+      return node;
+    }
     return {
       ...node,
       properties: {
         ...node.properties,
-        is_internet_exposed: true,
+        is_internet_exposed: isInternetExposed,
       },
     };
   });

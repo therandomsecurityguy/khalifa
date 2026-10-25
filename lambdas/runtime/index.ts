@@ -50,6 +50,7 @@ interface RuntimeDependencies {
   runLeastPrivilegeSweep?: typeof runLeastPrivilegeSweep;
   graphWriter?: ReturnType<typeof createRuntimeWriter>;
   fetch?: typeof fetch;
+  random?: () => number;
 }
 
 const logger = new Logger('runtime');
@@ -380,6 +381,17 @@ async function delay(milliseconds: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+// Fisher-Yates over a copy. Account collection stops at the run deadline, so a
+// fixed order would leave the same accounts uncollected every run.
+export function shuffle<T>(items: readonly T[], random: () => number = Math.random): T[] {
+  const shuffled = [...items];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 export async function runBounded<T>(
   items: T[],
   concurrency: number,
@@ -431,7 +443,7 @@ async function runOrganization(
   let accountFailure: unknown;
   try {
     await runBounded(
-      inventory.workItems,
+      shuffle(inventory.workItems, dependencies.random),
       positiveInteger(environment, 'COLLECTION_CONCURRENCY', 4, 20),
       signal,
       async (item) => {

@@ -9,6 +9,7 @@ import type { GraphNode, GraphEdge } from '../../shared/types';
 import { collectPaginated } from '../../shared/pagination';
 import type { TagMap } from './tags';
 import { extractCommonProperties } from './tags';
+import { roleVertexId } from './iam-ids';
 
 const EXTERNAL_ACCOUNT_NODE_PREFIX = 'arn:aws:khalifa:external-account:';
 
@@ -94,13 +95,16 @@ export async function collectCrossAccountTrust(
       const isAdminRole = await checkIsAdminRole(client, role.RoleName);
       const tags = tagsByArn.get(role.Arn);
       const tagProps = extractCommonProperties(tags);
+      // The same vertex collectIam writes, so these properties merge onto it
+      // instead of creating a second IamRole at the ARN with its path.
+      const roleId = roleVertexId(accountId, role.Arn);
 
       nodes.push({
-        id: role.Arn,
+        id: roleId,
         label: 'IamRole',
         properties: {
           id: role.RoleName,
-          arn: role.Arn,
+          arn: roleId,
           account_id: accountId,
           path: role.Path,
           create_date: role.CreateDate?.toISOString(),
@@ -112,7 +116,7 @@ export async function collectCrossAccountTrust(
 
       for (const trustedAccount of trustAccountIds) {
         const externalArn = `${EXTERNAL_ACCOUNT_NODE_PREFIX}${trustedAccount}`;
-        edges.push({ from: role.Arn, to: externalArn, label: 'TRUSTS' });
+        edges.push({ from: roleId, to: externalArn, label: 'TRUSTS' });
       }
     }
   }

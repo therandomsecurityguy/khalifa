@@ -55,9 +55,13 @@ describe('organization collection infrastructure', () => {
     ]) {
       expect(roleTemplate).toContain(action);
     }
-    // Resolves an EC2 instance profile to its role (SEC-3185). Also granted to
-    // the hub in khalifa-data/iam.tf.
+    // Resolves an EC2 instance profile to its role. Also granted to the hub
+    // in khalifa-data/iam.tf.
     expect(roleTemplate).toContain('iam:ListInstanceProfiles');
+    // Finds Lambda function URLs and invoke policies open to the internet.
+    // Also granted to the hub in khalifa-data/iam.tf.
+    expect(roleTemplate).toContain('lambda:ListFunctionUrlConfigs');
+    expect(roleTemplate).toContain('lambda:GetPolicy');
     expect(roleTemplate).toContain('CreateCollectorRole');
     expect(roleTemplate).toMatch(/ExternalId:[\s\S]*?MinLength: 16/);
   });

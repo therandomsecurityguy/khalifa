@@ -135,7 +135,13 @@ export async function scanBuckets(
   return results;
 }
 
-async function optedInFor(s3Client: S3Client, bucketName: string): Promise<boolean> {
+/**
+ * The bucket has opted in to content sampling via the `dspm-scan` tag.
+ * Shared by the scheduled scan and the SQS path: event-driven scans must
+ * apply the same opt-in gate, or any queue producer could force object
+ * reads on buckets that never opted in.
+ */
+export async function optedInFor(s3Client: S3Client, bucketName: string): Promise<boolean> {
   try {
     const tagging = await s3Client.send(new GetBucketTaggingCommand({ Bucket: bucketName }));
     return (tagging.TagSet || []).some(

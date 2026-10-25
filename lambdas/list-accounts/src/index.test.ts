@@ -15,6 +15,7 @@ describe('discoverAccounts', () => {
         accountIds: ['444455556666', '111122223333'],
         parentIds: [],
         regions: ['us-west-2'],
+        prodAccountIds: [],
       })
     ).resolves.toEqual([
       { accountId: '111122223333', state: 'ACTIVE' },
@@ -50,6 +51,7 @@ describe('discoverAccounts', () => {
         accountIds: ['111122223333', '999900001111'],
         parentIds: ['r-root'],
         regions: ['us-west-2'],
+        prodAccountIds: [],
       })
     ).resolves.toEqual([
       { accountId: '111122223333', name: undefined, state: 'ACTIVE', parentId: 'r-root' },

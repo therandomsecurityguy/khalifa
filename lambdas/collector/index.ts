@@ -106,7 +106,13 @@ import { writeGraphInBatches, type GraphWriter } from '../shared/graph-batch-wri
 import { invokeGraphWriter } from '../shared/graph-writer-client';
 import { collectPaginated } from '../shared/pagination';
 import { mapBounded } from '../shared/concurrency';
-import { fetchTagsForArns, extractCommonProperties, isTaggableArn, type TagMap } from './src/tags';
+import {
+  fetchTagsForArns,
+  extractCommonProperties,
+  isTaggableArn,
+  staleTagProperties,
+  type TagMap,
+} from './src/tags';
 import {
   collectSecurityGroups,
   collectInternetGateways,
@@ -123,9 +129,17 @@ import { summarizePublicAccessBlock } from './src/bucket-public-access';
 import { collectContainerImages } from './src/containers';
 import { collectCrossAccountTrust } from './src/cross-account';
 import { collectIamAccessKeys, collectIamCredentialReport } from './src/iam-posture';
-import { deriveStatementSecretProperties, grantTarget } from './src/policy-statements';
+import { secretAgeProperties } from './src/secret-ages';
+import { instanceRoleEdges, listInstanceProfileRoles } from './src/instance-profiles';
+import {
+  deriveStatementPrincipalProperties,
+  deriveStatementSecretProperties,
+  grantTarget,
+} from './src/policy-statements';
 import { collectGuardDuty, collectSecurityHub } from './src/security-services';
+import { collectLambdaExposure } from './src/lambda-exposure';
 import { buildExposureContext, applyExposureToNodes, type ExposureContext } from './src/exposure';
+import { isRoleArn, roleVertexId } from './src/iam-ids';
 
 const logger = new Logger('collector');
 
@@ -298,6 +312,15 @@ function coverageNode(accountId: string, region: string, record: CoverageRecord)
   };
 }
 
+// The five slowest stages, slowest first, so a log line stays short.
+export function slowestStages(durations: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(durations)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+  );
+}
+
 export async function collectServiceStage(
   service: string,
   enabled: boolean,
@@ -405,6 +428,7 @@ export const collect = async (
   }
   const runId = randomUUID();
   const collectionScope = `resource-inventory:${region}`;
+  const startedAt = Date.now();
   logger.info('Starting collection', { accountId, region });
 
   let credentials: Awaited<ReturnType<typeof getTargetCredentials>>;
@@ -511,12 +535,17 @@ export const collect = async (
     return result;
   };
 
+  // Milliseconds per stage, logged with the result: the organization run stops
+  // at its deadline, and these show which accounts and stages use the time.
+  const stageDurations: Record<string, number> = {};
   const collectStage = async (
     service: string,
     enabled: boolean,
     operation: () => Promise<CollectionData>
   ): Promise<void> => {
+    const stageStart = Date.now();
     const result = await runStage({ service, enabled, run: operation });
+    if (enabled) stageDurations[service] = Date.now() - stageStart;
     appendAll(nodes, result.data.nodes);
     appendAll(edges, result.data.edges);
     coverage.push(result.coverage);
@@ -533,7 +562,7 @@ export const collect = async (
     {
       service: 'ec2-instances',
       enabled: true,
-      run: () => collectEc2(ec2Client, accountId, region),
+      run: () => collectEc2(ec2Client, iamClient, accountId, region),
     },
     {
       service: 's3',
@@ -671,12 +700,21 @@ export const collect = async (
 
   const uniqueNodes = mergeDuplicateNodes(nodes);
   const exposureCtx: ExposureContext = buildExposureContext(uniqueNodes);
-  const exposedNodes = applyExposureToNodes(uniqueNodes, exposureCtx);
+  const stageSucceeded = (service: string) =>
+    coverage.some((c) => c.service === service && c.status === 'SUCCEEDED');
+  const exposedNodes = applyExposureToNodes(
+    uniqueNodes,
+    exposureCtx,
+    stageSucceeded('subnets') && stageSucceeded('internet-gateways')
+  );
 
   const tagArns = exposedNodes.map((n) => n.id).filter(isTaggableArn);
   let tagsByArn = new Map<string, TagMap>();
+  let tagsCollected = false;
+  const tagsStart = Date.now();
   try {
     tagsByArn = await fetchTagsForArns(taggingClient, tagArns);
+    tagsCollected = true;
     coverage.push({
       service: 'tags',
       status: 'SUCCEEDED',
@@ -702,6 +740,7 @@ export const collect = async (
       error: failure.error,
     });
   }
+  stageDurations.tags = Date.now() - tagsStart;
 
   const completedAt = new Date().toISOString();
   const { failedServices, retryableServices } = summarizeCoverage(coverage);
@@ -726,22 +765,36 @@ export const collect = async (
     // if that account then detached the policy, its reconcile would drop the
     // vertex and every other account's ATTACHED_TO edge with it until their
     // next run. The per-account edges stay scoped and reconcile normally.
-    if (node.id === INTERNET_NODE_ID || isAwsManagedPolicyArn(node.id)) {
+    // ExternalAccount is shared the same way, and scoping would also overwrite
+    // its account_id (the trusted account) with the collecting account.
+    if (
+      node.id === INTERNET_NODE_ID ||
+      isAwsManagedPolicyArn(node.id) ||
+      node.label === 'ExternalAccount'
+    ) {
       scopedNodes.push(node);
       continue;
     }
     const tagProps = extractCommonProperties(tagsByArn.get(node.id));
+    const properties: Record<string, unknown> = {
+      ...node.properties,
+      ...tagProps,
+      account_id: accountId,
+      collection_region: region,
+      collection_scope: collectionScope,
+      collection_run_id: runId,
+      active: true,
+    };
+    // A duplicate of the node from another stage may still set a key one stage
+    // cleared; the set value wins.
+    const clearProperties = [
+      ...(node.clearProperties ?? []),
+      ...staleTagProperties(node.id, tagProps, node.properties, tagsCollected),
+    ].filter((key) => properties[key] === undefined || properties[key] === null);
     scopedNodes.push({
       ...node,
-      properties: {
-        ...node.properties,
-        ...tagProps,
-        account_id: accountId,
-        collection_region: region,
-        collection_scope: collectionScope,
-        collection_run_id: runId,
-        active: true,
-      },
+      ...(clearProperties.length > 0 ? { clearProperties } : {}),
+      properties,
     });
   }
   for (const record of coverage) {
@@ -770,6 +823,7 @@ export const collect = async (
       active: true,
     },
   }));
+  const writeStart = Date.now();
   const writeResult = await writeGraphInBatches(
     {
       nodes: scopedNodes,
@@ -789,9 +843,13 @@ export const collect = async (
     { write: writeGraph }
   );
 
+  const writeMs = Date.now() - writeStart;
   logger.info(failedServices.length === 0 ? 'Collection complete' : 'Collection incomplete', {
     accountId,
     region,
+    durationMs: Date.now() - startedAt,
+    writeMs,
+    slowestStages: slowestStages(stageDurations),
     failedServices,
     retryableServices,
     nodes: scopedNodes.length,
@@ -818,9 +876,15 @@ export const handler = (event: CollectorEvent) => collect(event);
 
 export { collectGuardDutyFindings } from './src/guardduty-sweep';
 
-async function collectEc2(client: EC2Client, accountId: string, region: string) {
+async function collectEc2(
+  client: EC2Client,
+  iamClient: IAMClient,
+  accountId: string,
+  region: string
+) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
+  const instanceProfiles: { instanceArn: string; profileArn: string }[] = [];
 
   const paginator = paginateDescribeInstances({ client }, {});
   for await (const page of paginator) {
@@ -831,6 +895,8 @@ async function collectEc2(client: EC2Client, accountId: string, region: string) 
         nodes.push({
           id: instanceArn,
           label: 'Ec2Instance',
+          // A released public IP must not keep the instance looking reachable.
+          ...(instance.PublicIpAddress ? {} : { clearProperties: ['public_ip'] }),
           properties: {
             id: instance.InstanceId,
             arn: instanceArn,
@@ -859,11 +925,7 @@ async function collectEc2(client: EC2Client, accountId: string, region: string) 
         }
 
         if (instance.IamInstanceProfile?.Arn) {
-          edges.push({
-            from: instanceArn,
-            to: instance.IamInstanceProfile.Arn,
-            label: 'HAS_IAM_ROLE',
-          });
+          instanceProfiles.push({ instanceArn, profileArn: instance.IamInstanceProfile.Arn });
         }
 
         for (const ni of instance.NetworkInterfaces || []) {
@@ -894,6 +956,20 @@ async function collectEc2(client: EC2Client, accountId: string, region: string) 
             });
           }
         }
+      }
+    }
+  }
+
+  if (instanceProfiles.length > 0) {
+    const profileRoles = await listInstanceProfileRoles(iamClient);
+    if (!profileRoles) {
+      logger.warn('iam:ListInstanceProfiles denied; EC2 instances not linked to their roles', {
+        accountId,
+        region,
+      });
+    } else {
+      for (const { instanceArn, profileArn } of instanceProfiles) {
+        appendAll(edges, instanceRoleEdges(instanceArn, profileArn, profileRoles, accountId));
       }
     }
   }
@@ -1104,7 +1180,7 @@ async function collectIam(client: IAMClient, accountId: string) {
     (page) => (page.IsTruncated ? page.Marker : undefined)
   );
   for (const role of roles) {
-    const roleArn = `arn:aws:iam::${accountId}:role/${role.RoleName}`;
+    const roleArn = roleVertexId(accountId, role.RoleName!);
     nodes.push({
       id: roleArn,
       label: 'IamRole',
@@ -1462,6 +1538,7 @@ export function addStatementNodeAndEdges(
       const hasWildcardResource = resources.includes('*');
       const hasWildcardAction = actions.some((a: any) => a === '*' || a === '*:*');
       const secretProperties = deriveStatementSecretProperties(stmt, accountId);
+      const principalProperties = deriveStatementPrincipalProperties(stmt, accountId);
 
       nodes.push({
         id: stmtArn,
@@ -1478,10 +1555,23 @@ export function addStatementNodeAndEdges(
           has_wildcard_resource: hasWildcardResource,
           has_wildcard_action: hasWildcardAction,
           ...secretProperties,
+          ...principalProperties,
           account_id: accountId,
         },
       });
       edges.push({ from: policyDocArn, to: stmtArn, label: 'CONTAINS' });
+
+      // Only collected accounts have an AwsAccount vertex, so the edge to any
+      // other account is skipped; rules count the gap as an outside share.
+      if (stmt.Effect === 'Allow') {
+        for (const sharedAccount of principalProperties.principal_account_ids ?? []) {
+          edges.push({
+            from: stmtArn,
+            to: `arn:aws:iam::${sharedAccount}:root`,
+            label: 'SHARES_WITH',
+          });
+        }
+      }
 
       const targets: string[] = resources
         .filter((r: unknown): r is string => typeof r === 'string' && r !== '*')
@@ -1517,7 +1607,11 @@ function parseTrustPolicy(
           const isCrossAccount = isCrossAccountPrincipal(normalizedPrincipal, accountId);
 
           edges.push({
-            from: normalizedPrincipal,
+            // A role principal may carry a path (SSO roles are under
+            // /aws-reserved/...); the role vertex never does.
+            from: isRoleArn(normalizedPrincipal)
+              ? roleVertexId(accountId, normalizedPrincipal)
+              : normalizedPrincipal,
             to: roleArn,
             label: 'TRUSTS',
             properties: {
@@ -1548,7 +1642,7 @@ function isCrossAccountPrincipal(principal: string, accountId: string): boolean 
   return false;
 }
 
-async function collectKms(client: KMSClient, accountId: string) {
+export async function collectKms(client: KMSClient, accountId: string) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -1557,17 +1651,30 @@ async function collectKms(client: KMSClient, accountId: string) {
     (page) => page.Keys,
     (page) => (page.Truncated ? page.NextMarker : undefined)
   );
-  // Key policies, not IAM, govern KMS reads: AWS-managed keys deny DescribeKey
-  // and GetKeyRotationStatus outside their service context, so a denied key is
-  // skipped (or its rotation left unknown) instead of failing the stage.
+  // Key policies, not IAM, govern KMS reads, and a key policy that names only
+  // specific roles denies ours. A key we can't describe is written as a stub with
+  // `collection_restricted` so CIS 3.6 leaves its account/region unassessed rather than
+  // passing it; a denied rotation status is left unknown. Neither fails the stage.
   for (const key of keys) {
     try {
       let km;
       try {
         km = await client.send(new DescribeKeyCommand({ KeyId: key.KeyId }));
       } catch (e) {
-        if (isNamedError(e, 'AccessDeniedException')) continue;
-        throw e;
+        if (!isNamedError(e, 'AccessDeniedException')) throw e;
+        if (key.KeyArn) {
+          nodes.push({
+            id: key.KeyArn,
+            label: 'KmsKey',
+            properties: {
+              id: key.KeyId,
+              arn: key.KeyArn,
+              account_id: accountId,
+              collection_restricted: true,
+            },
+          });
+        }
+        continue;
       }
       if (km.KeyMetadata) {
         const kmd = km.KeyMetadata;
@@ -1605,6 +1712,7 @@ async function collectKms(client: KMSClient, accountId: string) {
             origin: kmd.Origin,
             custom_key_store_id: kmd.CustomKeyStoreId,
             rotation_enabled: rotationEnabled,
+            collection_restricted: false,
           },
         });
         edges.push({ from: `arn:aws:iam::${accountId}:root`, to: kmd.Arn!, label: 'OWNS' });
@@ -2216,6 +2324,14 @@ async function collectServerless(
     for (const fn of functions) {
       const fnArn =
         fn.FunctionArn || `arn:aws:lambda:${region}:${accountId}:function:${fn.FunctionName}`;
+      const exposure = await collectLambdaExposure(lambdaClient, fn.FunctionName!);
+      if (exposure.lambda_exposure_restricted) {
+        logger.warn('Lambda URL or policy read denied; exposure unknown', {
+          accountId,
+          region,
+          functionName: fn.FunctionName,
+        });
+      }
       nodes.push({
         id: fnArn,
         label: 'LambdaFunction',
@@ -2234,12 +2350,13 @@ async function collectServerless(
           is_in_vpc: !!(fn.VpcConfig?.SubnetIds && fn.VpcConfig.SubnetIds.length > 0),
           has_internet_access: !(fn.VpcConfig?.SubnetIds && fn.VpcConfig.SubnetIds.length > 0),
           last_modified: fn.LastModified,
+          ...exposure,
         },
       });
       edges.push({ from: `arn:aws:iam::${accountId}:root`, to: fnArn, label: 'OWNS' });
 
       if (fn.Role) {
-        edges.push({ from: fnArn, to: fn.Role, label: 'HAS_IAM_ROLE' });
+        edges.push({ from: fnArn, to: roleVertexId(accountId, fn.Role), label: 'HAS_IAM_ROLE' });
       }
 
       try {
@@ -2485,11 +2602,12 @@ async function collectDataStores(
   return { nodes, edges };
 }
 
-async function collectSecrets(
+export async function collectSecrets(
   secretsManagerClient: SecretsManagerClient,
   ssmClient: SSMClient,
   accountId: string,
-  region: string
+  region: string,
+  now: Date = new Date()
 ) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -2502,11 +2620,41 @@ async function collectSecrets(
     );
     for (const secret of secrets) {
       try {
-        const desc = await secretsManagerClient.send(
-          new DescribeSecretCommand({ SecretId: secret.ARN || secret.Name })
-        );
+        // A secret's resource policy can deny the collector. That secret is
+        // recorded from its ListSecrets entry instead of failing the stage,
+        // which would also stop cleanup for the whole account.
+        let desc: typeof secret = secret;
+        let restricted = false;
+        try {
+          desc = await secretsManagerClient.send(
+            new DescribeSecretCommand({ SecretId: secret.ARN || secret.Name })
+          );
+        } catch (e) {
+          if (!isNamedError(e, 'AccessDeniedException')) throw e;
+          restricted = true;
+        }
         const secretArn =
           desc.ARN || `arn:aws:secretsmanager:${region}:${accountId}:secret:${secret.Name}`;
+
+        let policy: { ResourcePolicy?: string } = {};
+        if (!restricted) {
+          try {
+            policy = await secretsManagerClient.send(
+              new GetResourcePolicyCommand({ SecretId: desc.ARN || secret.Name })
+            );
+          } catch (e) {
+            if (!isNamedError(e, 'AccessDeniedException')) throw e;
+            restricted = true;
+          }
+        }
+        if (restricted) {
+          logger.warn('Secret access denied by its resource policy; recorded as restricted', {
+            accountId,
+            region,
+            secretArn,
+          });
+        }
+
         nodes.push({
           id: secretArn,
           label: 'Secret',
@@ -2519,15 +2667,14 @@ async function collectSecrets(
             rotation_enabled: desc.RotationEnabled,
             rotation_rules: desc.RotationRules,
             last_rotated: desc.LastRotatedDate?.toISOString(),
+            ...secretAgeProperties(desc, now),
             kms_key_id: desc.KmsKeyId,
             secret_type: secret.Name?.includes('rds') ? 'database' : 'other',
+            collection_restricted: restricted,
           },
         });
         edges.push({ from: `arn:aws:iam::${accountId}:root`, to: secretArn, label: 'OWNS' });
 
-        const policy = await secretsManagerClient.send(
-          new GetResourcePolicyCommand({ SecretId: desc.ARN || secret.Name })
-        );
         if (policy.ResourcePolicy) {
           const documentJson = decodeURIComponent(policy.ResourcePolicy);
           const policyArn = `${secretArn}/resource-policy`;
@@ -2562,7 +2709,11 @@ async function collectSecrets(
       (page) => page.NextToken
     );
     for (const param of parameters) {
-      const paramArn = `arn:aws:ssm:${region}:${accountId}:parameter${param.Name}`;
+      // A name without a leading slash still has one in its ARN: parameter/name.
+      const name = param.Name ?? '';
+      const paramArn =
+        param.ARN ||
+        `arn:aws:ssm:${region}:${accountId}:parameter${name.startsWith('/') ? '' : '/'}${name}`;
       nodes.push({
         id: paramArn,
         label: 'Parameter',

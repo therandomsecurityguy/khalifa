@@ -1,16 +1,10 @@
+import { globMatch } from '../../shared/glob';
+
 // Verbs that return secret values. ListSecrets returns names only and cannot be
 // scoped to a resource, so counting it flagged every read-only and audit role.
 const SECRET_READ_VERBS = ['getsecretvalue', 'batchgetsecretvalue'];
 
 export type SecretGrantScope = 'wildcard' | 'scoped' | 'not_resource' | 'none';
-
-function escapeRegex(text: string): string {
-  return text.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function matchesPattern(pattern: string, value: string): boolean {
-  return new RegExp(`^${escapeRegex(pattern).replace(/\*/g, '.*')}$`).test(value);
-}
 
 export function actionGrantsSecretRead(action: string): boolean {
   const normalized = action.toLowerCase();
@@ -23,7 +17,7 @@ export function actionGrantsSecretRead(action: string): boolean {
 
   if (service !== 'secretsmanager' && service !== '*') return false;
   if (verb === '*' || verb.startsWith('*')) return true;
-  return SECRET_READ_VERBS.some((candidate) => matchesPattern(verb, candidate));
+  return SECRET_READ_VERBS.some((candidate) => globMatch(verb, candidate));
 }
 
 export function statementGrantsSecretRead(actions: unknown): boolean {
@@ -37,22 +31,62 @@ export function isWildcardSecretResource(resource: string): boolean {
   return resource.includes('*');
 }
 
-export function hasCrossAccountPrincipal(stmt: any, accountId: string): boolean {
+function awsPrincipals(stmt: any): unknown[] {
   const principal = stmt?.Principal;
-  if (!principal) return false;
-  if (principal === '*') return true;
-  if (typeof principal !== 'object') return false;
-
+  if (principal === '*') return ['*'];
+  if (!principal || typeof principal !== 'object') return [];
   const aws = (principal as Record<string, unknown>).AWS;
-  if (aws === undefined) return false;
-  const values = Array.isArray(aws) ? aws : [aws];
+  if (aws === undefined) return [];
+  return Array.isArray(aws) ? aws : [aws];
+}
 
-  return values.some((value) => {
-    if (value === '*') return true;
-    const match =
-      typeof value === 'string' ? value.match(/^arn:aws(?:-us-gov|-cn)?:iam::(\d+)/) : null;
-    if (!match) return false;
-    return match[1] !== accountId;
+export function principalIsAnyone(stmt: any): boolean {
+  return awsPrincipals(stmt).includes('*');
+}
+
+// Accounts other than the policy's own that a principal names, as an ARN or a
+// bare account ID.
+export function principalAccountIds(stmt: any, accountId: string): string[] {
+  const ids = new Set<string>();
+  for (const value of awsPrincipals(stmt)) {
+    if (typeof value !== 'string') continue;
+    const match = /^(?:arn:aws(?:-us-gov|-cn)?:iam::)?(\d{12})(?::|$)/.exec(value);
+    if (match && match[1] !== accountId) ids.add(match[1]);
+  }
+  return [...ids].sort();
+}
+
+export function hasCrossAccountPrincipal(stmt: any, accountId: string): boolean {
+  return principalIsAnyone(stmt) || principalAccountIds(stmt, accountId).length > 0;
+}
+
+// Operators that require the key to be present and match. IfExists, negated
+// and ForAllValues forms pass for a principal outside any organization.
+const ORG_CONDITION_OPERATORS = new Set([
+  'stringequals',
+  'stringequalsignorecase',
+  'stringlike',
+  'foranyvalue:stringequals',
+  'foranyvalue:stringlike',
+]);
+const ORG_CONDITION_KEYS = new Set(['aws:principalorgid', 'aws:principalorgpaths']);
+// A literal organization ID, optionally followed by an OU path.
+const LITERAL_ORG_VALUE = /^o-[a-z0-9]{10,32}(?:\/|$)/;
+
+// True when a condition limits the principal to a named organization.
+export function isOrgRestricted(stmt: any): boolean {
+  const condition = stmt?.Condition;
+  if (!condition || typeof condition !== 'object') return false;
+  return Object.entries(condition as Record<string, unknown>).some(([operator, keys]) => {
+    if (!ORG_CONDITION_OPERATORS.has(operator.toLowerCase())) return false;
+    if (!keys || typeof keys !== 'object') return false;
+    return Object.entries(keys as Record<string, unknown>).some(([key, value]) => {
+      if (!ORG_CONDITION_KEYS.has(key.toLowerCase())) return false;
+      const values = Array.isArray(value) ? value : [value];
+      return (
+        values.length > 0 && values.every((v) => typeof v === 'string' && LITERAL_ORG_VALUE.test(v))
+      );
+    });
   });
 }
 
@@ -92,6 +126,29 @@ export function deriveStatementSecretProperties(
     grants_secret_read: stmt?.Effect === 'Allow' && statementGrantsSecretRead(stmt?.Action),
     secret_grant_scope: deriveSecretGrantScope(stmt),
     has_cross_account_principal: hasCrossAccountPrincipal(stmt, accountId),
+  };
+}
+
+// Who a resource policy statement shares with. Identity policy statements have
+// no Principal and get none of these.
+export function deriveStatementPrincipalProperties(
+  stmt: any,
+  accountId: string
+):
+  | {
+      principal_is_anyone: boolean;
+      principal_org_restricted: boolean;
+      principal_account_ids: string[];
+      principal_account_count: number;
+    }
+  | Record<string, never> {
+  if (stmt?.Principal === undefined) return {};
+  const accountIds = principalAccountIds(stmt, accountId);
+  return {
+    principal_is_anyone: principalIsAnyone(stmt),
+    principal_org_restricted: isOrgRestricted(stmt),
+    principal_account_ids: accountIds,
+    principal_account_count: accountIds.length,
   };
 }
 

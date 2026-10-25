@@ -1,4 +1,9 @@
-import { collectServiceStage, mergeDuplicateNodes, summarizeCoverage } from '../index';
+import {
+  collectServiceStage,
+  mergeDuplicateNodes,
+  slowestStages,
+  summarizeCoverage,
+} from '../index';
 
 describe('collectServiceStage', () => {
   it('records successful service coverage', async () => {
@@ -128,5 +133,26 @@ describe('mergeDuplicateNodes', () => {
     ]);
 
     expect(merged[0].properties.mfa_enabled).toBe(true);
+  });
+});
+
+describe('slowestStages', () => {
+  it('keeps the five slowest stages, slowest first', () => {
+    const result = slowestStages({
+      iam: 40,
+      ec2: 900,
+      s3: 300,
+      tags: 5,
+      rds: 70,
+      kms: 20,
+      lambda: 10,
+    });
+
+    expect(Object.keys(result)).toEqual(['ec2', 's3', 'rds', 'iam', 'kms']);
+    expect(result.ec2).toBe(900);
+  });
+
+  it('is empty when nothing ran', () => {
+    expect(slowestStages({})).toEqual({});
   });
 });

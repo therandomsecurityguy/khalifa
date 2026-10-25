@@ -187,8 +187,10 @@ Resources:
               - guardduty:ListFindings
               - guardduty:ListMembers
               - guardduty:ListPublishingDestinations
+              - lambda:GetPolicy
               - lambda:ListAliases
               - lambda:ListFunctions
+              - lambda:ListFunctionUrlConfigs
               - logs:DescribeLogGroups
               - logs:DescribeMetricFilters
               - route53:ListHostedZones

@@ -1,9 +1,11 @@
 import {
   actionGrantsSecretRead,
   deriveSecretGrantScope,
+  deriveStatementPrincipalProperties,
   deriveStatementSecretProperties,
   grantTarget,
   hasCrossAccountPrincipal,
+  isOrgRestricted,
   isWildcardSecretResource,
   statementGrantsSecretRead,
 } from './policy-statements';
@@ -78,6 +80,10 @@ describe('hasCrossAccountPrincipal', () => {
         accountId
       )
     ).toBe(true);
+  });
+
+  it('flags a bare foreign account ID', () => {
+    expect(hasCrossAccountPrincipal({ Principal: { AWS: '999999999999' } }, accountId)).toBe(true);
   });
 
   it('does not flag same-account or service principals', () => {
@@ -198,5 +204,133 @@ describe('grantTarget', () => {
     expect(edges.filter((edge) => edge.label === 'GRANTS').map((edge) => edge.to)).toEqual([
       'arn:aws:s3:::payments-exports',
     ]);
+  });
+});
+
+describe('deriveStatementPrincipalProperties', () => {
+  const accountId = '111122223333';
+
+  it('lists the other accounts a statement names, once each', () => {
+    expect(
+      deriveStatementPrincipalProperties(
+        {
+          Principal: {
+            AWS: [
+              'arn:aws:iam::999999999999:role/reader',
+              '999999999999',
+              'arn:aws:iam::444455556666:root',
+              'arn:aws:iam::111122223333:role/own',
+            ],
+          },
+        },
+        accountId
+      )
+    ).toEqual({
+      principal_is_anyone: false,
+      principal_org_restricted: false,
+      principal_account_ids: ['444455556666', '999999999999'],
+      principal_account_count: 2,
+    });
+  });
+
+  it('marks anyone, and anyone limited to an organization', () => {
+    const orgOnly = {
+      Principal: '*',
+      Condition: { StringEquals: { 'aws:PrincipalOrgID': 'o-2pydbopsis' } },
+    };
+    expect(deriveStatementPrincipalProperties(orgOnly, accountId)).toMatchObject({
+      principal_is_anyone: true,
+      principal_org_restricted: true,
+      principal_account_count: 0,
+    });
+    expect(
+      deriveStatementPrincipalProperties({ Principal: { AWS: '*' } }, accountId)
+    ).toMatchObject({ principal_is_anyone: true, principal_org_restricted: false });
+  });
+
+  it('adds nothing to identity policy statements', () => {
+    expect(deriveStatementPrincipalProperties({ Effect: 'Allow' }, accountId)).toEqual({});
+  });
+});
+
+describe('isOrgRestricted', () => {
+  const condition = (operator: string, key: string, value: unknown) => ({
+    Condition: { [operator]: { [key]: value } },
+  });
+
+  it.each([
+    ['StringEquals', 'aws:PrincipalOrgID', 'o-2pydbopsis'],
+    ['StringEquals', 'aws:PrincipalOrgID', ['o-2pydbopsis']],
+    ['StringLike', 'AWS:PrincipalOrgID', 'o-2pydbopsis'],
+    ['ForAnyValue:StringLike', 'aws:PrincipalOrgPaths', 'o-2pydbopsis/r-ab12/ou-ab12-11111111/*'],
+  ])('accepts %s %s %j', (operator, key, value) => {
+    expect(isOrgRestricted(condition(operator, key, value))).toBe(true);
+  });
+
+  it.each([
+    // Passes for a principal in no organization, or any organization.
+    ['StringEqualsIfExists', 'aws:PrincipalOrgID', 'o-2pydbopsis'],
+    ['StringNotEquals', 'aws:PrincipalOrgID', 'o-2pydbopsis'],
+    ['ForAllValues:StringLike', 'aws:PrincipalOrgPaths', 'o-2pydbopsis/*'],
+    ['StringLike', 'aws:PrincipalOrgID', 'o-*'],
+    ['StringLike', 'aws:PrincipalOrgID', '*'],
+    ['StringEquals', 'aws:PrincipalOrgID', []],
+    // Not an organization limit.
+    ['StringEquals', 'aws:SourceAccount', '999999999999'],
+  ])('rejects %s %s %j', (operator, key, value) => {
+    expect(isOrgRestricted(condition(operator, key, value))).toBe(false);
+  });
+
+  it('rejects a statement without conditions', () => {
+    expect(isOrgRestricted({ Principal: '*' })).toBe(false);
+  });
+});
+
+describe('SHARES_WITH edges', () => {
+  it('link an Allow statement to each other account it names', () => {
+    const nodes: GraphNode[] = [];
+    const edges: GraphEdge[] = [];
+    const policy =
+      'arn:aws:secretsmanager:us-west-2:111122223333:secret:app-AbCdEf/resource-policy';
+    addStatementNodeAndEdges(
+      nodes,
+      edges,
+      policy,
+      JSON.stringify({
+        Statement: [
+          {
+            Sid: 'Share',
+            Effect: 'Allow',
+            Principal: { AWS: ['arn:aws:iam::999999999999:root', '444455556666'] },
+            Action: 'secretsmanager:GetSecretValue',
+            Resource: '*',
+          },
+          {
+            Sid: 'Block',
+            Effect: 'Deny',
+            Principal: { AWS: 'arn:aws:iam::777777777777:root' },
+            Action: 'secretsmanager:*',
+            Resource: '*',
+          },
+        ],
+      }),
+      '111122223333'
+    );
+
+    expect(edges.filter((edge) => edge.label === 'SHARES_WITH')).toEqual([
+      {
+        from: `${policy}/statement/Share`,
+        to: 'arn:aws:iam::444455556666:root',
+        label: 'SHARES_WITH',
+      },
+      {
+        from: `${policy}/statement/Share`,
+        to: 'arn:aws:iam::999999999999:root',
+        label: 'SHARES_WITH',
+      },
+    ]);
+    expect(nodes.find((node) => node.id === `${policy}/statement/Share`)?.properties).toMatchObject(
+      { principal_account_ids: ['444455556666', '999999999999'], principal_account_count: 2 }
+    );
   });
 });

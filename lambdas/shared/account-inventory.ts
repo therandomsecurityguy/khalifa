@@ -16,6 +16,8 @@ export interface CollectionConfig {
   accountIds: string[];
   parentIds: string[];
   regions: string[];
+  // Collected accounts that hold production. Empty leaves accounts unmarked.
+  prodAccountIds: string[];
 }
 
 export interface InventoryAccount {
@@ -63,6 +65,7 @@ export function parseCollectionConfig(environment: NodeJS.ProcessEnv): Collectio
   const accountIds = parseList(environment.COLLECTION_ACCOUNT_IDS);
   const parentIds = parseList(environment.COLLECTION_PARENT_IDS);
   const regions = parseList(environment.COLLECTION_REGIONS || environment.AWS_REGION);
+  const prodAccountIds = parseList(environment.PROD_ACCOUNT_IDS);
 
   if (accountIds.length === 0 && parentIds.length === 0) {
     throw new Error('COLLECTION_ACCOUNT_IDS or COLLECTION_PARENT_IDS is required');
@@ -72,8 +75,9 @@ export function parseCollectionConfig(environment: NodeJS.ProcessEnv): Collectio
   requireMatching(accountIds, ACCOUNT_ID_PATTERN, 'COLLECTION_ACCOUNT_IDS');
   requireMatching(parentIds, PARENT_ID_PATTERN, 'COLLECTION_PARENT_IDS');
   requireMatching(regions, REGION_PATTERN, 'COLLECTION_REGIONS');
+  requireMatching(prodAccountIds, ACCOUNT_ID_PATTERN, 'PROD_ACCOUNT_IDS');
 
-  return { accountIds, parentIds, regions };
+  return { accountIds, parentIds, regions, prodAccountIds };
 }
 
 export function toInventoryAccount(account: Account, parentId?: string): InventoryAccount {
