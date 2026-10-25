@@ -38,11 +38,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Neptune engine 1.4.7.0 supports Gremlin 3.7.1 only, pinned by digest from
-  # tinkerpop/gremlin-server. Point the GREMLIN_SERVER_IMAGE repository
-  # variable at a mirror (mirror-gremlin-server.yml publishes one to GHCR) to
-  # avoid Docker Hub pull rate limits.
-  GREMLIN_SERVER_IMAGE: ${{ vars.GREMLIN_SERVER_IMAGE || 'docker.io/tinkerpop/gremlin-server@sha256:911e27acc8a43209fee272408fa99045f5ba48ae410c8cef6da8c500eca42416' }}
+  # Neptune engine 1.4.7.0 supports Gremlin 3.7.1 only. Built from
+  # test/gremlin/Dockerfile (tinkerpop/gremlin-server 3.7.1 with its CA trust
+  # store upgraded) by mirror-gremlin-server.yml, tag 3.7.1-ca20261020; the
+  # repository variable GREMLIN_SERVER_IMAGE overrides the pin.
+  GREMLIN_SERVER_IMAGE: ${{ vars.GREMLIN_SERVER_IMAGE || 'ghcr.io/therandomsecurityguy/khalifa-gremlin-server@sha256:b090b1242ece1e98a6dce5203b1b4f86512273690fba92ef86e3aa6244759a8d' }}
 
 jobs:
   graph-queries:
