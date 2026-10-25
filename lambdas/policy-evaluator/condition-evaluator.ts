@@ -1,3 +1,4 @@
+import { globMatch } from '../shared/glob';
 import type { ConditionResult, ConditionEvaluationContext, IamConditionBlock } from './types';
 
 export function evaluateCondition(
@@ -21,9 +22,9 @@ export function evaluateCondition(
     case 'StringNotEqualsIgnoreCase':
       return values.every((v) => cv.toLowerCase() !== v.toLowerCase());
     case 'StringLike':
-      return values.some((v) => wildcardMatch(v, cv));
+      return values.some((v) => globMatch(v, cv));
     case 'StringNotLike':
-      return values.every((v) => !wildcardMatch(v, cv));
+      return values.every((v) => !globMatch(v, cv));
     case 'IpAddress':
     case 'NotIpAddress': {
       const ipResult = values.some((v) => isIpInCidr(cv, v));
@@ -127,17 +128,8 @@ function getContextValue(key: string, context: ConditionEvaluationContext): stri
   return undefined;
 }
 
-function wildcardMatch(pattern: string, text: string): boolean {
-  const regexStr = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*/g, '.*')
-    .replace(/\?/g, '.');
-  const regex = new RegExp(`^${regexStr}$`, 'i');
-  return regex.test(text);
-}
-
 function arnMatch(pattern: string, arn: string): boolean {
-  return wildcardMatch(pattern, arn);
+  return globMatch(pattern, arn);
 }
 
 function isIpInCidr(ip: string, cidr: string): boolean {

@@ -55,6 +55,16 @@ describe('CIEM query shapes', () => {
     expect(q).toContain(JSON.stringify(['out', 'CONTAINS']));
   });
 
+  it("follows a user's groups and counts a shared policy once", async () => {
+    const { client, queries } = recordingClient();
+    await fetchPoliciesForPrincipal(client, arn);
+
+    const q = encoded(queries[0]);
+    expect(q).toContain('"union"');
+    expect(q).toContain(JSON.stringify(['out', 'MEMBER_OF']));
+    expect(q).toContain(JSON.stringify(['dedup']));
+  });
+
   it('projects trust-edge endpoints from the edge, not unset label properties', async () => {
     const { client, queries } = recordingClient();
     await fetchTrustEdges(client);

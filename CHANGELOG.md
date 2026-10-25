@@ -34,6 +34,8 @@ All notable changes to Khalifa.
 - **Collector timing in its logs**: `Collection complete` / `Collection incomplete` now carry `durationMs`, `writeMs`, and the five slowest stages.
 - **Fair organization collector runs**: work items are shuffled (injectable RNG) so a run's deadline does not starve the same accounts every time.
 
+- **CIEM pass-role escalation detection**: the policy evaluator now reports a principal that can pass a same-account admin role to a compute service the role trusts and create that service's compute (Lambda, EC2, CloudFormation, Glue, SageMaker, CodeBuild, ECS action sets) as a `pass_role` escalation path. `iam:PassRole` grants honour `NotResource` and `iam:PassedToService`; unmodelled conditions only ever report more, never hide a path. Paths carry the `via` service principals and are written as `CAN_ESCALATE_TO` edges with a distinct `can-escalate:pass-role:` id (a trust path between the same pair keeps its own edge) plus `via_services`. RULE-030 excludes these links and RULE-034 consumes them.
+
 ### Changed
 
 - **Releases no longer require AWS configuration**: digest-only image publishing activates only when `KHALIFA_AWS_ROLE_ARN` and the ECR repository variables are set; without them a release ships Lambda archives, the Helm chart, the `khalifa-eks` bundle, the SBOM, and checksums, recording `published: false` in `release-manifest.json`.
@@ -41,6 +43,7 @@ All notable changes to Khalifa.
 - **Helm schema allows `mountIn: dspmScanner`**, matching the scanner template, so the DSPM scanner can receive the graph-writer token through External Secrets.
 - **Compliance documentation corrected**: the evaluated frameworks are CIS AWS Foundations v3.0.0 (47 controls) and the Khalifa baseline (41 controls), 55 automated; the README no longer claims SOC 2 or ISO 27001 evaluations.
 - **UI dependency security bump**: `next` moves to `^16.4.2` (resolved 16.4.3) and the lockfile brings `body-parser` to 1.20.9, clearing the new high/critical advisories (the Next.js Image Optimization and `use cache` RCEs, the Next.js Server Actions DoS, and the body-parser trailing-bytes DoS); the now-resolved `GHSA-vfj7-8cjw-p6xm` suppression is removed from the npm-audit baseline.
+- **Policy matching uses the shared `globMatch`**: the policy evaluator's condition evaluator and parser replace their local generated-regex wildcard matcher with the iterative one, so policy text can no longer make matching backtrack. A user's group policies are also unioned in (`MEMBER_OF`, deduplicated) when resolving effective permissions.
 
 ### Fixed
 

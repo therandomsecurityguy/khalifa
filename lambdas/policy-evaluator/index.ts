@@ -7,6 +7,13 @@ import { resolveEffectivePermissions } from './effect-resolver';
 import type { EffectivePermission, EscalationPath } from './types';
 import { detectEscalationPaths, detectLateralMovement } from './escalation-detector';
 import type { TrustEdge, RoleWithPermissions } from './escalation-detector';
+import {
+  detectPassRoleEscalations,
+  passableAdminRole,
+  passRoleCapability,
+  type PassableAdminRole,
+  type PassRoleCapability,
+} from './pass-role';
 
 const { single } = Gremlin.process.cardinality;
 const { t, P } = Gremlin.process;
@@ -65,6 +72,7 @@ export const handler = async (
     const principals = await fetchPrincipals(gremlinClient);
     logger.info(`Found ${principals.length} principals`);
 
+    const passRoleCapabilities: PassRoleCapability[] = [];
     for (const principal of principals) {
       const policies = await fetchPoliciesForPrincipal(gremlinClient, principal.arn);
       const effectivePerm = resolveEffectivePermissions({
@@ -77,6 +85,15 @@ export const handler = async (
 
       await writeEffectivePermission(gremlinClient, effectivePerm);
       permissionsEvaluated++;
+
+      // An admin has nothing to escalate to.
+      if (!effectivePerm.isAdmin) {
+        const capability = passRoleCapability(
+          principal.arn,
+          policies.map((p) => p.documentJson)
+        );
+        if (capability) passRoleCapabilities.push(capability);
+      }
     }
 
     const trustEdges = await fetchTrustEdges(gremlinClient);
@@ -84,7 +101,14 @@ export const handler = async (
 
     const adminEscPaths = detectEscalationPaths(trustEdges, rolesWithPerms, undefined, maxHops);
     const lateralPaths = detectLateralMovement(trustEdges, rolesWithPerms, maxHops);
-    const allPaths = [...adminEscPaths, ...lateralPaths];
+    const passRolePaths = passRoleCapabilities.length
+      ? detectPassRoleEscalations(
+          passRoleCapabilities,
+          await fetchPassableAdminRoles(gremlinClient),
+          runStartedAt
+        )
+      : [];
+    const allPaths = [...adminEscPaths, ...lateralPaths, ...passRolePaths];
 
     for (const path of allPaths) {
       await writeEscalationPath(gremlinClient, path);
@@ -124,10 +148,14 @@ export async function fetchPoliciesForPrincipal(
   const results = await gremlinClient.submit(
     graph()
       .V(principalArn)
+      // A user also holds the policies of every group it is a member of.
+      .union(__.identity(), __.out('MEMBER_OF').hasLabel('IamGroup'))
       .out('ATTACHED_TO')
       // Managed policies sit one hop further: principal -> IamPolicy -> document.
       .optional(__.out('CONTAINS').hasLabel('IamPolicyDocument'))
       .hasLabel('IamPolicyDocument')
+      // Attached to both the user and its group, a policy counts once.
+      .dedup()
       .project('policyArn', 'documentJson')
       .by('policy_arn')
       .by('document_json')
@@ -169,6 +197,33 @@ export async function fetchTrustEdges(gremlinClient: GraphSubmitter): Promise<Tr
       isCrossAccount: item.get('isCrossAccount') === true,
       conditionsJson: (item.get('conditionsJson') as string) || undefined,
     };
+  });
+}
+
+// Admin roles a compute service can assume; is_admin was written this run.
+export async function fetchPassableAdminRoles(
+  gremlinClient: GraphSubmitter
+): Promise<PassableAdminRole[]> {
+  const rows = await enumerateGraph(
+    gremlinClient,
+    (start, end) => `
+      g.V().hasLabel('IamRole').has('is_admin', true)
+        .project('arn', 'path', 'trust')
+          .by(T.id)
+          .by(coalesce(values('path'), constant('/')))
+          .by(coalesce(values('assume_role_policy_document'), constant('')))
+        .range(${start}, ${end})
+    `,
+    { label: 'admin-roles' }
+  );
+  return rows.flatMap((row) => {
+    const item = row as { get(key: string): unknown };
+    const role = passableAdminRole(
+      String(item.get('arn') || ''),
+      String(item.get('path') || '/'),
+      String(item.get('trust') || '')
+    );
+    return role ? [role] : [];
   });
 }
 
@@ -256,6 +311,7 @@ export async function writeEscalationPath(
   path: EscalationPath
 ): Promise<void> {
   const conditionsJson = JSON.stringify(path.conditions);
+  const viaJson = JSON.stringify(path.via ?? []);
 
   const refresh = __.unfold()
     .property(single, 'source_arn', path.sourceArn)
@@ -264,6 +320,7 @@ export async function writeEscalationPath(
     .property(single, 'risk_level', path.riskLevel)
     .property(single, 'escalation_type', path.escalationType)
     .property(single, 'conditions_json', conditionsJson)
+    .property(single, 'via_services', viaJson)
     .property(single, 'detected_at', path.detectedAt);
 
   // Id step, not a label scan: the create branch pins T.id, so a re-run
@@ -278,6 +335,7 @@ export async function writeEscalationPath(
     .property(single, 'risk_level', path.riskLevel)
     .property(single, 'escalation_type', path.escalationType)
     .property(single, 'conditions_json', conditionsJson)
+    .property(single, 'via_services', viaJson)
     .property(single, 'detected_at', path.detectedAt);
 
   await gremlinClient.submit(graph().V(path.id).fold().coalesce(refresh, create).getBytecode());
@@ -289,12 +347,18 @@ export async function writeEscalationEdge(
   gremlinClient: GraphSubmitter,
   path: EscalationPath
 ): Promise<void> {
-  const id = `can-escalate:${path.sourceArn}:${path.targetArn}`;
+  // A pass_role link is its own edge: the same pair can also have a trust
+  // path, and one must not overwrite the other's type.
+  const id =
+    path.escalationType === 'pass_role'
+      ? `can-escalate:pass-role:${path.sourceArn}:${path.targetArn}`
+      : `can-escalate:${path.sourceArn}:${path.targetArn}`;
   const props = (traversal: Gremlin.process.GraphTraversal) =>
     traversal
       .property('risk_level', path.riskLevel)
       .property('escalation_type', path.escalationType)
       .property('path_length', path.pathLength)
+      .property('via_services', JSON.stringify(path.via ?? []))
       .property('detected_at', path.detectedAt);
 
   await gremlinClient.submit(
