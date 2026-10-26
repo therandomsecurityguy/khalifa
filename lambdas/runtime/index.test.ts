@@ -28,6 +28,12 @@ const analyzerEnvironment = {
   ACCESS_ANALYZER_TABLE: 'AccessAnalyzerCache',
 };
 
+const threatIntelEnvironment = {
+  AWS_REGION: 'us-west-2',
+  THREAT_INDICATORS_TABLE: 'khalifa-threat-indicators',
+  THREAT_INTEL_IP_LIST_S3_URI: ['s3', 'lists.example.com/threat/ips.txt'].join('://'),
+};
+
 const flowLogEnvironment = {
   AWS_REGION: 'us-west-2',
   ATHENA_DATABASE: 'cloudtrail_database',
@@ -79,6 +85,25 @@ describe('Kubernetes runtime', () => {
       })
     ).toThrow('GRAPH_WRITER_TOKEN is required');
     expect(() => validateRuntime('flow-log-analyzer', flowLogEnvironment)).not.toThrow();
+    expect(() => validateRuntime('threat-intel-import', threatIntelEnvironment)).not.toThrow();
+    expect(() =>
+      validateRuntime('threat-intel-import', {
+        AWS_REGION: 'us-west-2',
+        THREAT_INDICATORS_TABLE: 't',
+      })
+    ).toThrow('THREAT_INTEL_IP_LIST_S3_URI or THREAT_INTEL_ACCOUNT_LIST_S3_URI is required');
+    expect(() =>
+      validateRuntime('threat-intel-import', {
+        ...threatIntelEnvironment,
+        THREAT_INTEL_IP_LIST_S3_URI: 'https://example.com/ips.txt',
+      })
+    ).toThrow('must be s3://bucket/key');
+    expect(() =>
+      validateRuntime('threat-intel-import', {
+        ...threatIntelEnvironment,
+        THREAT_INTEL_TTL_DAYS: '400',
+      })
+    ).toThrow('THREAT_INTEL_TTL_DAYS must be an integer between 1 and 365');
     expect(() =>
       validateRuntime('flow-log-analyzer', {
         AWS_REGION: 'us-west-2',
@@ -163,6 +188,23 @@ describe('Kubernetes runtime', () => {
         analyzeFlowLogs: failing,
       })
     ).rejects.toThrow('Athena query FAILED');
+  });
+
+  it('runs the threat-intel importer once and exits nonzero on failure', async () => {
+    const importFn = jest.fn().mockResolvedValue({ written: 2, lists: [] });
+    await expect(
+      runCommand('threat-intel-import', threatIntelEnvironment, new AbortController().signal, {
+        importThreatIntel: importFn,
+      })
+    ).resolves.toBeUndefined();
+    expect(importFn).toHaveBeenCalledWith({}, {}, threatIntelEnvironment);
+
+    const failing = jest.fn().mockRejectedValue(new Error('NoSuchKey'));
+    await expect(
+      runCommand('threat-intel-import', threatIntelEnvironment, new AbortController().signal, {
+        importThreatIntel: failing,
+      })
+    ).rejects.toThrow('NoSuchKey');
   });
 
   it('runs the DSPM scanner once with the HTTP graph writer', async () => {

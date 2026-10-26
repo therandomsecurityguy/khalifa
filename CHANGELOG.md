@@ -2,6 +2,17 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Threat-intelligence matching (P7b-1)
+
+### Added
+
+- **Customer threat-intel matching**: `threat-intel-import` (runtime command; CronJob **suspended by default**, running as the rule-runner service account) imports plain S3 lists — one indicator per line, `#` comments, IPs (v4/v6) and 12-digit account ids — into a `ThreatIndicators` table with a TTL (`threat_intel_ttl_days`, default 90): freshness is the TTL, so a dropped indicator expires by itself, and invalid lines are skipped and counted in the log. Nothing calls the internet — the lists live in an account-owned bucket, and AWS's own managed reputation lists need no import because GuardDuty applies them (the findings they drive already feed RULE-018/RULE-029). Terraform creates the table, grants the rule-runner role read/write on it, and `s3:GetObject` on `threat_intel_list_bucket` when set; the list URIs, table name, and TTL flow through the chart config.
+- **Matches change ranking**: the rule runner joins the store against the facts rules already match — an anomaly's `source_ip` and a trusted `ExternalAccount`'s account id — and a match adds a flat **+10 `threatIntelContribution`** to the risk score (additive like exploitability; a fact about the path, not a proportional strength). The issue records `threatIntelMatches` (type, value, source) and the issue page renders a "Threat intelligence" card; a refresh clears matches whose indicator is gone. **No auto-ticketing** for matched issues until `/rules/quality` shows the measured precision P6 requires, and the offline `risk:plan` gate is unaffected (no store to read, so it never claims a match). The lookup is failure-tolerant: a missing table or grant scores without it and logs a warning.
+
+### Notes
+
+- P7b-2 (TTP mapping to MITRE ATT&CK and graph-only adversary-emulation scenarios) remains open — it depends on the curated mapping table this phase deliberately left out; and the importer does not fetch external feeds (commercial/open IoC subscriptions would add the deployment's first outbound-internet component and licensing constraints on storing indicators).
+
 ## [Unreleased] - Observed reachability (P7a)
 
 ### Added

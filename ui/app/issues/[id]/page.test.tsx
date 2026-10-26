@@ -274,4 +274,27 @@ describe('IssuePage fix simulation', () => {
       await within(card).findByText('No single edge clears a matched path.')
     ).toBeInTheDocument();
   });
+
+  it('lists the threat-intel matches recorded on the issue', async () => {
+    mockedIssue.mockResolvedValue(
+      detail({
+        metadata: {
+          ...detail().metadata,
+          threatIntelMatches: [{ type: 'ip', value: '203.0.113.7', source: 's3://lists/ips.txt' }],
+        },
+      })
+    );
+
+    render(<IssuePage />);
+
+    const card = (await screen.findByText('Threat intelligence')).closest('section')!;
+    expect(within(card).getByText('203.0.113.7')).toBeInTheDocument();
+    expect(within(card).getByText(/ip · s3:\/\/lists\/ips.txt/)).toBeInTheDocument();
+  });
+
+  it('shows no threat-intel card without a match', async () => {
+    render(<IssuePage />);
+    expect(await screen.findByText('Involved resources')).toBeInTheDocument();
+    expect(screen.queryByText('Threat intelligence')).not.toBeInTheDocument();
+  });
 });

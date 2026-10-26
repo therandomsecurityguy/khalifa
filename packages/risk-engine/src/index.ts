@@ -53,6 +53,17 @@ export { extractRulePath, type RulePath } from './rule-path';
 export { pathLikelihood, type PathLikelihood, type PathLikelihoodFactors } from './likelihood';
 export { forecastSeries, type Forecast, type ForecastProjection } from './forecast';
 export {
+  indicatorKey,
+  isValidIndicator,
+  parseIndicatorList,
+  pathIndicators,
+  ThreatIndicatorStore,
+  THREAT_INDICATOR_DEFAULT_TTL_DAYS,
+  THREAT_INDICATOR_MAX_LINES,
+  type ThreatIndicator,
+  type ThreatIndicatorType,
+} from './threat-intel';
+export {
   buildRuleQuality,
   RULE_QUALITY_MIN_HANDLED,
   RULE_QUALITY_RELIABLE_DISMISSAL_RATE,

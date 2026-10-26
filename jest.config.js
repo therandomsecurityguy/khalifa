@@ -64,6 +64,14 @@ module.exports = {
       modulePathIgnorePatterns: ['<rootDir>/dist/', '<rootDir>/node_modules/'],
     },
     {
+      displayName: 'threat-intel-import',
+      rootDir: '<rootDir>/lambdas/threat-intel-import',
+      preset: 'ts-jest',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/**/*.test.ts'],
+      modulePathIgnorePatterns: ['<rootDir>/dist/', '<rootDir>/node_modules/'],
+    },
+    {
       displayName: 'flow-log-analyzer',
       rootDir: '<rootDir>/lambdas/flow-log-analyzer',
       preset: 'ts-jest',

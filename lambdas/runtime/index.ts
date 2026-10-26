@@ -28,6 +28,7 @@ import {
   normalizeAthenaResultsLocation as normalizeFlowLogResultsLocation,
 } from '../flow-log-analyzer';
 import { validateObservationDays } from '../flow-log-analyzer/src/queries';
+import { importThreatIntel, parseS3Uri, validateTtlDays } from '../threat-intel-import';
 
 export { createHttpGraphWriter } from '../shared/graph-writer-client';
 
@@ -39,6 +40,7 @@ export type RuntimeCommand =
   | 'graph-writer'
   | 'cloudtrail-analyzer'
   | 'flow-log-analyzer'
+  | 'threat-intel-import'
   | 'dspm-scanner'
   | 'policy-evaluator'
   | 'least-privilege-sweep';
@@ -52,6 +54,7 @@ interface RuntimeDependencies {
   runRisk?: typeof runOnce;
   analyzeCloudTrail?: typeof analyzeCloudTrail;
   analyzeFlowLogs?: typeof analyzeFlowLogs;
+  importThreatIntel?: typeof importThreatIntel;
   runDspm?: typeof runDspmScan;
   runPolicyEvaluation?: typeof runPolicyEvaluation;
   runLeastPrivilegeSweep?: typeof runLeastPrivilegeSweep;
@@ -69,6 +72,7 @@ const commands = new Set<RuntimeCommand>([
   'graph-writer',
   'cloudtrail-analyzer',
   'flow-log-analyzer',
+  'threat-intel-import',
   'dspm-scanner',
   'policy-evaluator',
   'least-privilege-sweep',
@@ -84,6 +88,7 @@ Commands:
   risk                     Run all enabled risk rules once
   cloudtrail-analyzer      Query org CloudTrail usage into AccessAnalyzerCache
   flow-log-analyzer        Aggregate VPC flow logs into TrafficObservations
+  threat-intel-import      Import customer threat-intel lists into ThreatIndicators
   dspm-scanner             Scan S3 objects and Lambda env vars for secrets
   policy-evaluator         Resolve effective permissions and escalation paths once
   least-privilege-sweep     Rightsize over-permissioned principals once`;
@@ -207,6 +212,21 @@ export function validateRuntime(command: RuntimeCommand, environment: NodeJS.Pro
     normalizeFlowLogResultsLocation(environment.ATHENA_RESULTS_S3_LOCATION);
     required(environment, 'TRAFFIC_OBSERVATIONS_TABLE');
     validateObservationDays(environment.FLOW_LOG_DAYS ?? '7', 'FLOW_LOG_DAYS');
+    return;
+  }
+  if (command === 'threat-intel-import') {
+    required(environment, 'AWS_REGION');
+    required(environment, 'THREAT_INDICATORS_TABLE');
+    const ipList = environment.THREAT_INTEL_IP_LIST_S3_URI?.trim();
+    const accountList = environment.THREAT_INTEL_ACCOUNT_LIST_S3_URI?.trim();
+    if (!ipList && !accountList) {
+      throw new Error(
+        'THREAT_INTEL_IP_LIST_S3_URI or THREAT_INTEL_ACCOUNT_LIST_S3_URI is required'
+      );
+    }
+    if (ipList) parseS3Uri(ipList);
+    if (accountList) parseS3Uri(accountList);
+    validateTtlDays(environment.THREAT_INTEL_TTL_DAYS ?? '90');
     return;
   }
   if (command === 'cloudtrail-analyzer') {
@@ -653,6 +673,13 @@ export async function runCommand(
       environment
     );
     logger.info('Flow-log analysis complete', summary);
+  } else if (command === 'threat-intel-import') {
+    const summary = await (dependencies.importThreatIntel || importThreatIntel)(
+      {},
+      {},
+      environment
+    );
+    logger.info('Threat-intel import complete', summary);
   } else if (command === 'dspm-scanner') {
     const summary = await (dependencies.runDspm || runDspmScan)({}, {}, environment);
     logger.info('DSPM scan complete', summary);

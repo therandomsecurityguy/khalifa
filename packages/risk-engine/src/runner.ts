@@ -16,6 +16,7 @@ import type {
 } from './types';
 import { extractRulePath, type RulePath } from './rule-path';
 import { pathLikelihood } from './likelihood';
+import { pathIndicators, ThreatIndicatorStore, type ThreatIndicator } from './threat-intel';
 
 // Neptune Serverless rejects every path query with MemoryLimitExceededException
 // for a minute or two after a burst of heavy ones (measured 2026-09-19: the same
@@ -42,7 +43,8 @@ export class RiskRuleRunner {
       neptuneEndpoint
     ),
     private readonly sleep: (ms: number) => Promise<void> = (ms) =>
-      new Promise((resolve) => setTimeout(resolve, ms))
+      new Promise((resolve) => setTimeout(resolve, ms)),
+    private readonly threatStore: ThreatIndicatorStore = new ThreatIndicatorStore()
   ) {}
 
   async initialize(): Promise<void> {
@@ -74,6 +76,26 @@ export class RiskRuleRunner {
         throw new Error('Neptune returned a malformed risk-rule path');
       }
 
+      // Customer threat-intel matches for anything this rule's paths touch
+      // (anomaly source IPs, trusted external accounts). Failure-tolerant: a
+      // missing table or grant means no matches, never a failed run.
+      let threatIntel: ThreatIndicator[] = [];
+      try {
+        threatIntel = await this.threatStore.find(paths.flatMap((path) => pathIndicators(path)));
+      } catch (error) {
+        console.warn(
+          `${rule.id}: threat-intel lookup failed; scoring without it (${error instanceof Error ? error.message : String(error)})`
+        );
+      }
+      const matchesFor = (path: RulePath): ThreatIndicator[] => {
+        const candidates = pathIndicators(path);
+        return threatIntel.filter((indicator) =>
+          candidates.some(
+            (candidate) => candidate.type === indicator.type && candidate.value === indicator.value
+          )
+        );
+      };
+
       const activeIssueIds = new Set<string>();
 
       for (const { identity, resources, path, matchCount } of this.groupPaths(rule, paths)) {
@@ -94,14 +116,22 @@ export class RiskRuleRunner {
             rule,
             path,
             resources,
-            matchCount
+            matchCount,
+            matchesFor(path)
           );
           if (refreshed.status === 'suppressed') {
             await this.endSuppressionIfDue(refreshed, existingIssue.resourcesInvolved);
           }
           activeIssueIds.add(existingIssue.id);
         } else {
-          const issue = this.createIssueFromMatch(rule, path, resources, identity, matchCount);
+          const issue = this.createIssueFromMatch(
+            rule,
+            path,
+            resources,
+            identity,
+            matchCount,
+            matchesFor(path)
+          );
           const created = await this.issueStore.createIssue(issue);
           if (created) {
             issuesCreated++;
@@ -335,10 +365,11 @@ export class RiskRuleRunner {
     path: RulePath,
     resources: { resourceId: string; resourceType: string; resourceName?: string }[],
     identity: string[],
-    matchCount: number
+    matchCount: number,
+    threatIntel: ThreatIndicator[] = []
   ): Issue {
     const now = new Date().toISOString();
-    const riskInput = this.buildRiskInput(path.vertices);
+    const riskInput = this.riskInputWithThreatIntel(path, threatIntel);
     const scoreResult = computeRiskScore(riskInput);
     const likelihood = pathLikelihood(riskInput);
 
@@ -362,6 +393,19 @@ export class RiskRuleRunner {
         ruleDescription: rule.description,
         environment: riskInput.environment,
         matchCount,
+        ...(threatIntel.length > 0 ? { threatIntelMatches: threatIntel } : {}),
+      },
+    };
+  }
+
+  // The path's risk input plus customer threat-intel matches, when any.
+  private riskInputWithThreatIntel(path: RulePath, threatIntel: ThreatIndicator[]): RiskScoreInput {
+    const riskInput = this.buildRiskInput(path.vertices);
+    if (threatIntel.length === 0) return riskInput;
+    return {
+      ...riskInput,
+      threatIntel: {
+        indicators: threatIntel.map((indicator) => `${indicator.type}:${indicator.value}`),
       },
     };
   }
@@ -375,9 +419,10 @@ export class RiskRuleRunner {
     rule: RiskRule,
     path: RulePath,
     resources: Issue['resourcesInvolved'],
-    matchCount: number
+    matchCount: number,
+    threatIntel: ThreatIndicator[] = []
   ): Promise<Issue> {
-    const riskInput = this.buildRiskInput(path.vertices);
+    const riskInput = this.riskInputWithThreatIntel(path, threatIntel);
     const scoreResult = computeRiskScore(riskInput);
     const likelihood = pathLikelihood(riskInput);
     const updatedAt = new Date().toISOString();
@@ -390,17 +435,20 @@ export class RiskRuleRunner {
       severity: cappedSeverity(rule, scoreResult.severity),
       remediationHint: getRemediationHint(rule.id, {}),
       updatedAt,
-      metadata: {
-        ...existing.metadata,
-        scoringFactors: scoreResult.factors,
-        likelihood: likelihood.value,
-        likelihoodFactors: likelihood.factors,
-        ruleName: rule.name,
-        ruleDescription: rule.description,
-        environment: riskInput.environment,
-        matchCount,
-        lastRefreshedAt: updatedAt,
-      },
+      metadata: metadataWithThreatIntel(
+        {
+          ...existing.metadata,
+          scoringFactors: scoreResult.factors,
+          likelihood: likelihood.value,
+          likelihoodFactors: likelihood.factors,
+          ruleName: rule.name,
+          ruleDescription: rule.description,
+          environment: riskInput.environment,
+          matchCount,
+          lastRefreshedAt: updatedAt,
+        },
+        threatIntel
+      ),
     };
 
     const updated = await this.issueStore.updateIssue(refreshed);
@@ -477,4 +525,18 @@ export class RiskRuleRunner {
       edgeType: path.edges[index]?.label ?? 'CONNECTED',
     }));
   }
+}
+
+// A refresh clears yesterday's matches when the indicator is gone: metadata
+// spread alone would keep a stale match forever.
+function metadataWithThreatIntel(
+  metadata: Record<string, unknown>,
+  threatIntel: ThreatIndicator[]
+): Record<string, unknown> {
+  if (threatIntel.length > 0) {
+    metadata.threatIntelMatches = threatIntel;
+  } else {
+    delete metadata.threatIntelMatches;
+  }
+  return metadata;
 }

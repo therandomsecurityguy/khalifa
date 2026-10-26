@@ -16,6 +16,7 @@
     "graphWriter",
     "compliance",
     "reconciliation",
+    "threatIntelImport",
     "flowLogAnalyzer",
     "cloudtrailAnalyzer",
     "dspmScanner",
@@ -86,6 +87,10 @@
         "postureTrendsTable",
         "accessAnalyzerTable",
         "trafficObservationsTable",
+        "threatIndicatorsTable",
+        "threatIntelIpListS3Uri",
+        "threatIntelAccountListS3Uri",
+        "threatIntelTtlDays",
         "leastPrivilegeTable",
         "cognitoUserPoolId",
         "cognitoClientId",
@@ -110,6 +115,10 @@
         "postureTrendsTable": { "type": "string", "minLength": 1 },
         "accessAnalyzerTable": { "type": "string", "minLength": 1 },
         "trafficObservationsTable": { "type": "string" },
+        "threatIndicatorsTable": { "type": "string" },
+        "threatIntelIpListS3Uri": { "type": "string", "pattern": "^(|s3://.+/.+)$" },
+        "threatIntelAccountListS3Uri": { "type": "string", "pattern": "^(|s3://.+/.+)$" },
+        "threatIntelTtlDays": { "type": "integer", "minimum": 1, "maximum": 365 },
         "leastPrivilegeTable": { "type": "string", "minLength": 1 },
         "cognitoUserPoolId": {
           "type": "string",
@@ -189,6 +198,7 @@
         "trustCenterSyncClientId": { "type": "string", "pattern": "^(|[0-9a-f]{32}\\.access)$" }
       }
     },
+    "threatIntelImport": { "$ref": "#/definitions/cronJob" },
     "flowLogAnalyzer": { "$ref": "#/definitions/cronJob" },
     "cloudtrailAnalyzer": { "$ref": "#/definitions/cronJob" },
     "dspmScanner": { "$ref": "#/definitions/cronJob" },
@@ -796,6 +806,7 @@
                     "compliance",
                     "cloudtrail-analyzer",
                     "flow-log-analyzer",
+                    "threat-intel-import",
                     "dspm-scanner",
                     "policy-evaluator",
                     "least-privilege-sweep"

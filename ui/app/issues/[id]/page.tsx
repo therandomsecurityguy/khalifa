@@ -58,6 +58,7 @@ const FACTOR_LABELS: Record<string, string> = {
   environmentContribution: 'Environment',
   crownJewelContribution: 'Crown jewel / short path',
   exploitabilityContribution: 'Exploitability (CVE)',
+  threatIntelContribution: 'Threat intelligence',
 };
 
 function metaString(
@@ -196,6 +197,40 @@ function FixSimulation({ ruleId }: { ruleId: string }) {
             ))}
           </ul>
         ))}
+    </Card>
+  );
+}
+
+// Customer threat-intel matches recorded on the issue (anomaly source IPs and
+// trusted external accounts on the customer's own lists).
+function ThreatIntelMatches({ detail }: { detail: IssueDetail }) {
+  const raw = detail.metadata?.threatIntelMatches;
+  const matches = Array.isArray(raw)
+    ? (raw as Array<{ type?: unknown; value?: unknown; source?: unknown }>).filter(
+        (match): match is { type?: unknown; value: string; source?: unknown } =>
+          !!match && typeof match.value === 'string'
+      )
+    : [];
+  if (matches.length === 0) return null;
+  return (
+    <Card
+      title="Threat intelligence"
+      description="Indicators from your own lists matching this finding's facts."
+    >
+      <ul className="space-y-2 text-sm">
+        {matches.map((match) => (
+          <li
+            key={`${String(match.type)}:${match.value}`}
+            className="flex flex-wrap items-baseline justify-between gap-3"
+          >
+            <span className="font-medium text-gray-900">{match.value}</span>
+            <span className="text-xs text-gray-500">
+              {typeof match.type === 'string' ? match.type : 'indicator'}
+              {typeof match.source === 'string' && match.source ? ` · ${match.source}` : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }
@@ -583,6 +618,8 @@ export default function IssueDetailPage() {
 
           <div className="space-y-6">
             <StatusDetails issue={detail} />
+
+            <ThreatIntelMatches detail={detail} />
 
             {detail.metadata?.scoringFactors != null && (
               <Card title="Scoring factors">

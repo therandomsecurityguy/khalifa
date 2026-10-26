@@ -289,3 +289,28 @@ describe('riskInputFromPath observed reachability', () => {
     expect(input.reachabilityObserved).toBeUndefined();
   });
 });
+
+describe('threat-intel factor', () => {
+  const base: RiskScoreInput = {
+    exposureLevel: 'internet',
+    dataClassification: 'public',
+    environment: 'dev',
+    isCrownJewel: false,
+  };
+
+  test('adds the flat bonus when the path carries a matched indicator', () => {
+    const clean = computeRiskScore(base);
+    const matched = computeRiskScore({
+      ...base,
+      threatIntel: { indicators: ['ip:203.0.113.7'] },
+    });
+    expect(clean.factors.threatIntelContribution).toBe(0);
+    expect(matched.factors.threatIntelContribution).toBe(10);
+    expect(matched.score).toBe(clean.score + 10);
+  });
+
+  test('adds nothing for an empty indicator list', () => {
+    const result = computeRiskScore({ ...base, threatIntel: { indicators: [] } });
+    expect(result.factors.threatIntelContribution).toBe(0);
+  });
+});

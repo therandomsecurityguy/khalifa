@@ -245,6 +245,24 @@ beside the configured ones. Everything is cost-gated: Terraform creates
 nothing without `flow_logs_bucket`, the CronJob ships suspended, and a
 deployment without the table simply has no observed traffic.
 
+## Threat-intelligence matching
+
+Customer-supplied intelligence arrives as plain S3 lists (one indicator per
+line): `threat-intel-import` validates them (IPs v4/v6, 12-digit account ids),
+caps each list, and writes `ThreatIndicators` with a TTL — freshness is the
+TTL, so an indicator dropped from a list drains itself. Nothing here calls the
+internet: AWS's own managed reputation lists need no import because GuardDuty
+applies them and the findings they drive already feed RULE-018/RULE-029. The
+rule runner joins the store against the facts rules already match: an anomaly's
+`source_ip` and a trusted `ExternalAccount`'s account id. A match adds a flat
+**+10 threat-intelligence factor** to the risk score (a fact about the path,
+not a proportional strength; recorded as `threatIntelMatches` on the issue and
+labelled on the score card) and matches clear on refresh once the indicator is
+gone. Matched issues do **not** auto-ticket until `/rules/quality` shows the
+measured precision P6 requires; the local
+`scripts/risk-plan` gate is unaffected (it has no store to read, so it never
+claims a match).
+
 ## Compliance reconciliation and the trust center
 
 The compliance job evaluates the CIS AWS Foundations v3.0.0 and Khalifa

@@ -16,6 +16,10 @@ data:
   POSTURE_TRENDS_TABLE: {{ .Values.config.postureTrendsTable | quote }}
   ACCESS_ANALYZER_TABLE: {{ .Values.config.accessAnalyzerTable | quote }}
   TRAFFIC_OBSERVATIONS_TABLE: {{ .Values.config.trafficObservationsTable | quote }}
+  THREAT_INDICATORS_TABLE: {{ .Values.config.threatIndicatorsTable | quote }}
+  THREAT_INTEL_IP_LIST_S3_URI: {{ .Values.config.threatIntelIpListS3Uri | quote }}
+  THREAT_INTEL_ACCOUNT_LIST_S3_URI: {{ .Values.config.threatIntelAccountListS3Uri | quote }}
+  THREAT_INTEL_TTL_DAYS: {{ .Values.config.threatIntelTtlDays | quote }}
   LEAST_PRIVILEGE_TABLE: {{ .Values.config.leastPrivilegeTable | quote }}
   COGNITO_USER_POOL_ID: {{ .Values.config.cognitoUserPoolId | quote }}
   COGNITO_CLIENT_ID: {{ .Values.config.cognitoClientId | quote }}
