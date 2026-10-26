@@ -70,3 +70,24 @@ describe('pathLikelihood', () => {
     expect(internet.value).toBeGreaterThan(inside.value);
   });
 });
+
+describe('pathLikelihood observed reachability', () => {
+  const base: RiskScoreInput = {
+    exposureLevel: 'internet',
+    dataClassification: 'public',
+    environment: 'dev',
+    isCrownJewel: false,
+  };
+
+  it('keeps reachability at 1 when traffic was observed despite a restricted read', () => {
+    const restricted = pathLikelihood({ ...base, reachabilityRestricted: true });
+    const observed = pathLikelihood({
+      ...base,
+      reachabilityRestricted: true,
+      reachabilityObserved: true,
+    });
+    expect(restricted.factors.reachability).toBe(0.5);
+    expect(observed.factors.reachability).toBe(1);
+    expect(observed.value).toBeGreaterThan(restricted.value);
+  });
+});

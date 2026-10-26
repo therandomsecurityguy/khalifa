@@ -123,6 +123,11 @@ cloudtrailAnalyzer:
   schedule: '0 2 * * *'
   timeZone: America/Los_Angeles
 
+flowLogAnalyzer:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  schedule: '0 4 * * *'
+  timeZone: America/Los_Angeles
+
 dspmScanner:
   image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
   schedule: '0 4 * * *'

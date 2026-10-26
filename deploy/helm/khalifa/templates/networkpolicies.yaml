@@ -1,5 +1,5 @@
 {{- if .Values.networkPolicies.enabled }}
-{{- range $component := list "api" "ui" "rule-runner" "org-collector" "incremental" "graph-writer" "compliance" "cloudtrail-analyzer" "dspm-scanner" "policy-evaluator" "least-privilege-sweep" }}
+{{- range $component := list "api" "ui" "rule-runner" "org-collector" "incremental" "graph-writer" "compliance" "cloudtrail-analyzer" "flow-log-analyzer" "dspm-scanner" "policy-evaluator" "least-privilege-sweep" }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

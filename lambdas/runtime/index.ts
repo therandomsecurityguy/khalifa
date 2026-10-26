@@ -23,6 +23,11 @@ import {
   normalizeAthenaResultsLocation,
   validateAnalysisDays,
 } from '../cloudtrail-analyzer';
+import {
+  analyzeFlowLogs,
+  normalizeAthenaResultsLocation as normalizeFlowLogResultsLocation,
+} from '../flow-log-analyzer';
+import { validateObservationDays } from '../flow-log-analyzer/src/queries';
 
 export { createHttpGraphWriter } from '../shared/graph-writer-client';
 
@@ -33,6 +38,7 @@ export type RuntimeCommand =
   | 'incremental-collector'
   | 'graph-writer'
   | 'cloudtrail-analyzer'
+  | 'flow-log-analyzer'
   | 'dspm-scanner'
   | 'policy-evaluator'
   | 'least-privilege-sweep';
@@ -45,6 +51,7 @@ interface RuntimeDependencies {
   runCompliance?: typeof runComplianceOnce;
   runRisk?: typeof runOnce;
   analyzeCloudTrail?: typeof analyzeCloudTrail;
+  analyzeFlowLogs?: typeof analyzeFlowLogs;
   runDspm?: typeof runDspmScan;
   runPolicyEvaluation?: typeof runPolicyEvaluation;
   runLeastPrivilegeSweep?: typeof runLeastPrivilegeSweep;
@@ -61,6 +68,7 @@ const commands = new Set<RuntimeCommand>([
   'incremental-collector',
   'graph-writer',
   'cloudtrail-analyzer',
+  'flow-log-analyzer',
   'dspm-scanner',
   'policy-evaluator',
   'least-privilege-sweep',
@@ -75,6 +83,7 @@ Commands:
   compliance               Run all compliance assessments once
   risk                     Run all enabled risk rules once
   cloudtrail-analyzer      Query org CloudTrail usage into AccessAnalyzerCache
+  flow-log-analyzer        Aggregate VPC flow logs into TrafficObservations
   dspm-scanner             Scan S3 objects and Lambda env vars for secrets
   policy-evaluator         Resolve effective permissions and escalation paths once
   least-privilege-sweep     Rightsize over-permissioned principals once`;
@@ -189,6 +198,15 @@ export function validateRuntime(command: RuntimeCommand, environment: NodeJS.Pro
     required(environment, 'NEPTUNE_ENDPOINT');
     required(environment, 'ACCESS_ANALYZER_TABLE');
     required(environment, 'LEAST_PRIVILEGE_TABLE');
+    return;
+  }
+  if (command === 'flow-log-analyzer') {
+    required(environment, 'AWS_REGION');
+    required(environment, 'ATHENA_DATABASE');
+    required(environment, 'ATHENA_WORKGROUP');
+    normalizeFlowLogResultsLocation(environment.ATHENA_RESULTS_S3_LOCATION);
+    required(environment, 'TRAFFIC_OBSERVATIONS_TABLE');
+    validateObservationDays(environment.FLOW_LOG_DAYS ?? '7', 'FLOW_LOG_DAYS');
     return;
   }
   if (command === 'cloudtrail-analyzer') {
@@ -628,6 +646,13 @@ export async function runCommand(
       environment
     );
     logger.info('CloudTrail analysis complete', summary);
+  } else if (command === 'flow-log-analyzer') {
+    const summary = await (dependencies.analyzeFlowLogs || analyzeFlowLogs)(
+      {},
+      { signal },
+      environment
+    );
+    logger.info('Flow-log analysis complete', summary);
   } else if (command === 'dspm-scanner') {
     const summary = await (dependencies.runDspm || runDspmScan)({}, {}, environment);
     logger.info('DSPM scan complete', summary);

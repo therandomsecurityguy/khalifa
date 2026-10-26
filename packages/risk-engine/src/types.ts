@@ -144,6 +144,8 @@ export interface RiskScoreInput {
   exploitability?: PathExploitability;
   /** A path vertex marks exposure or state as unreadable (restricted reads). */
   reachabilityRestricted?: boolean;
+  /** A path vertex has observed traffic (flow-log analyzer), so reachability is proven. */
+  reachabilityObserved?: boolean;
 }
 
 export interface RiskScoreOutput {

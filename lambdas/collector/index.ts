@@ -139,6 +139,11 @@ import {
 } from './src/policy-statements';
 import { collectGuardDuty, collectSecurityHub } from './src/security-services';
 import { collectInspectorFindings, INSPECTOR_MAX_FINDINGS } from './src/inspector';
+import {
+  instanceObservation,
+  loadTrafficObservations,
+  type TrafficObservation,
+} from './src/observations';
 import { collectLambdaExposure } from './src/lambda-exposure';
 import { buildExposureContext, applyExposureToNodes, type ExposureContext } from './src/exposure';
 import { isRoleArn, roleVertexId } from './src/iam-ids';
@@ -398,6 +403,9 @@ function createClients(region: string, credentials?: ClientCredentials) {
     sfnClient: new SFNClient({ ...baseConfig, ...credConfig }),
     eventBridgeClient: new EventBridgeClient({ ...baseConfig, ...credConfig }),
     dynamoDBClient: new DynamoDBClient({ ...baseConfig, ...credConfig }),
+    // Ambient (hub) credentials on purpose: TrafficObservations lives in the
+    // hub, and member-account collection must not read it with member creds.
+    trafficClient: new DynamoDBClient({ ...baseConfig }),
     elasticacheClient: new ElastiCacheClient({ ...baseConfig, ...credConfig }),
     opensearchClient: new OpenSearchClient({ ...baseConfig, ...credConfig }),
     redshiftClient: new RedshiftClient({ ...baseConfig, ...credConfig }),
@@ -492,6 +500,7 @@ export const collect = async (
     sfnClient,
     eventBridgeClient,
     dynamoDBClient,
+    trafficClient,
     elasticacheClient,
     opensearchClient,
     redshiftClient,
@@ -566,7 +575,14 @@ export const collect = async (
     {
       service: 'ec2-instances',
       enabled: true,
-      run: () => collectEc2(ec2Client, iamClient, accountId, region),
+      run: () =>
+        collectEc2(
+          ec2Client,
+          iamClient,
+          accountId,
+          region,
+          trafficObservationLoader(trafficClient)
+        ),
     },
     {
       service: 's3',
@@ -926,15 +942,27 @@ export const handler = (event: CollectorEvent) => collect(event);
 
 export { collectGuardDutyFindings } from './src/guardduty-sweep';
 
+// The env-gated loader for the flow-log analyzer's observations: absent table
+// name means the observed-reachability feature is off for this deployment.
+function trafficObservationLoader(
+  client: DynamoDBClient
+): ((interfaceIds: string[]) => Promise<Map<string, TrafficObservation>>) | undefined {
+  const table = process.env.TRAFFIC_OBSERVATIONS_TABLE?.trim();
+  if (!table) return undefined;
+  return (interfaceIds) => loadTrafficObservations(client, table, interfaceIds);
+}
+
 async function collectEc2(
   client: EC2Client,
   iamClient: IAMClient,
   accountId: string,
-  region: string
+  region: string,
+  loadObservations?: (interfaceIds: string[]) => Promise<Map<string, TrafficObservation>>
 ) {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const instanceProfiles: { instanceArn: string; profileArn: string }[] = [];
+  const interfaceIdsByInstance = new Map<string, string[]>();
 
   const paginator = paginateDescribeInstances({ client }, {});
   for await (const page of paginator) {
@@ -978,6 +1006,13 @@ async function collectEc2(
           instanceProfiles.push({ instanceArn, profileArn: instance.IamInstanceProfile.Arn });
         }
 
+        interfaceIdsByInstance.set(
+          instanceArn,
+          (instance.NetworkInterfaces || [])
+            .map((ni) => ni.NetworkInterfaceId)
+            .filter((id): id is string => Boolean(id))
+        );
+
         for (const ni of instance.NetworkInterfaces || []) {
           const niArn = `arn:aws:ec2:${region}:${accountId}:network-interface/${ni.NetworkInterfaceId}`;
           nodes.push({
@@ -1020,6 +1055,24 @@ async function collectEc2(
     } else {
       for (const { instanceArn, profileArn } of instanceProfiles) {
         appendAll(edges, instanceRoleEdges(instanceArn, profileArn, profileRoles, accountId));
+      }
+    }
+  }
+
+  // Observed reachability: an instance whose interface the flow-log analyzer
+  // saw accepted traffic on gets traffic_observed, so paths through it cite
+  // observed traffic rather than only configured exposure. The loader is
+  // tolerant (absent table, denied role, never-run analyzer all mean "none").
+  if (loadObservations) {
+    const observations = await loadObservations([...interfaceIdsByInstance.values()].flat());
+    for (const node of nodes) {
+      const observation = instanceObservation(
+        interfaceIdsByInstance.get(node.id) ?? [],
+        observations
+      );
+      if (observation) {
+        node.properties.traffic_observed = true;
+        if (observation.lastSeen) node.properties.traffic_observed_at = observation.lastSeen;
       }
     }
   }

@@ -269,3 +269,23 @@ describe('riskInputFromPath reachability', () => {
     expect(input.reachabilityRestricted).toBeUndefined();
   });
 });
+
+describe('riskInputFromPath observed reachability', () => {
+  test('reads traffic_observed from a workload vertex', () => {
+    const input = riskInputFromPath([
+      {
+        id: 'ec2',
+        label: 'Ec2Instance',
+        properties: { is_internet_exposed: true, traffic_observed: true },
+      },
+    ]);
+    expect(input.reachabilityObserved).toBe(true);
+  });
+
+  test('leaves observation unset without the fact', () => {
+    const input = riskInputFromPath([
+      { id: 'ec2', label: 'Ec2Instance', properties: { is_internet_exposed: true } },
+    ]);
+    expect(input.reachabilityObserved).toBeUndefined();
+  });
+});

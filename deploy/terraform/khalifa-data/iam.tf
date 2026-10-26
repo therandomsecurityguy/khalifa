@@ -195,6 +195,15 @@ locals {
       ]
       Resource = ["*"]
     },
+    {
+      # Observed reachability: the collector reads the flow-log analyzer's
+      # per-interface observations while it collects instances. The read runs
+      # with the hub's own credentials, so only the hub roles need it.
+      Sid      = "TrafficObservationsRead"
+      Effect   = "Allow"
+      Action   = ["dynamodb:BatchGetItem", "dynamodb:DescribeTable", "dynamodb:GetItem"]
+      Resource = [aws_dynamodb_table.traffic_observations.arn]
+    },
   ]
 }
 
@@ -509,6 +518,47 @@ resource "aws_iam_role_policy" "cloudtrail_analyzer" {
           Effect   = "Allow"
           Action   = ["kms:Decrypt"]
           Resource = [var.cloudtrail_logs_kms_key_arn]
+        },
+      ] : [],
+      local.flow_logs_enabled ? [
+        {
+          Sid    = "TrafficObservations"
+          Effect = "Allow"
+          Action = [
+            "dynamodb:BatchWriteItem",
+            "dynamodb:DescribeTable",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+          ]
+          Resource = [aws_dynamodb_table.traffic_observations.arn]
+        },
+        {
+          Sid    = "FlowLogsGlueTable"
+          Effect = "Allow"
+          Action = [
+            "glue:GetPartition",
+            "glue:GetPartitions",
+            "glue:GetTable",
+          ]
+          Resource = [
+            "arn:aws:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:catalog",
+            aws_glue_catalog_database.cloudtrail[0].arn,
+            aws_glue_catalog_table.vpc_flow_logs[0].arn,
+          ]
+        },
+        {
+          Sid      = "FlowLogsBucket"
+          Effect   = "Allow"
+          Action   = ["s3:GetBucketLocation", "s3:GetObject", "s3:ListBucket"]
+          Resource = ["arn:aws:s3:::${var.flow_logs_bucket}", "arn:aws:s3:::${var.flow_logs_bucket}/*"]
+        },
+      ] : [],
+      local.flow_logs_enabled && var.flow_logs_kms_key_arn != "" ? [
+        {
+          Sid      = "FlowLogsKey"
+          Effect   = "Allow"
+          Action   = ["kms:Decrypt"]
+          Resource = [var.flow_logs_kms_key_arn]
         },
       ] : []
     )

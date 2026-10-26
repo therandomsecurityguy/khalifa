@@ -13,7 +13,10 @@ export interface PathLikelihoodFactors {
   privilege: number;
   /** CVSS/10, +0.2 when an exploit is known, capped at 1; no data 0.5. */
   exploitability: number;
-  /** 1 when exposure was derived from complete data, 0.5 when a vertex says it was not. */
+  /**
+   * 1 when exposure was derived (or observed traffic proves it), 0.5 when a
+   * vertex says exposure or state could not be read.
+   */
   reachability: number;
 }
 
@@ -53,7 +56,10 @@ export function pathLikelihood(input: RiskScoreInput): PathLikelihood {
     exploitability = Math.min(1, Math.max(0, value));
   }
 
-  const reachability = input.reachabilityRestricted ? UNKNOWN : 1;
+  // Observed traffic (the flow-log analyzer's facts on a workload) proves
+  // reachability even when a restricted read left the configuration unknown:
+  // confidence becomes observed AND configured, and observation wins.
+  const reachability = input.reachabilityObserved ? 1 : input.reachabilityRestricted ? UNKNOWN : 1;
 
   return {
     value: Math.round(exposure * privilege * exploitability * reachability * 10000) / 10000,

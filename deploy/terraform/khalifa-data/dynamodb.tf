@@ -252,3 +252,35 @@ resource "aws_dynamodb_table" "least_privilege" {
 
   tags = merge(var.tags, { Name = "${local.name}-least-privilege" })
 }
+
+# Observed reachability for the flow-log-analyzer: one row per network
+# interface, overwritten each run and expired by TTL. The collector reads it
+# when it collects instances.
+resource "aws_dynamodb_table" "traffic_observations" {
+  name         = "${local.name}-traffic-observations"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "interface_id"
+
+  attribute {
+    name = "interface_id"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  deletion_protection_enabled = true
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.this.arn
+  }
+
+  tags = merge(var.tags, { Name = "${local.name}-traffic-observations" })
+}
