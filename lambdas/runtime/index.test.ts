@@ -28,6 +28,14 @@ const analyzerEnvironment = {
   ACCESS_ANALYZER_TABLE: 'AccessAnalyzerCache',
 };
 
+const flowLogEnvironment = {
+  AWS_REGION: 'us-west-2',
+  ATHENA_DATABASE: 'cloudtrail_database',
+  ATHENA_WORKGROUP: 'cloudtrail_workgroup',
+  ATHENA_RESULTS_S3_LOCATION: ['s3', 'example.invalid/athena-results'].join('://'),
+  TRAFFIC_OBSERVATIONS_TABLE: 'khalifa-traffic-observations',
+};
+
 describe('Kubernetes runtime', () => {
   it('validates required configuration for each command', () => {
     expect(() => validateRuntime('organization-collector', collectionEnvironment)).not.toThrow();
@@ -70,6 +78,21 @@ describe('Kubernetes runtime', () => {
         GRAPH_WRITER_URL: 'http://graph-writer:8080',
       })
     ).toThrow('GRAPH_WRITER_TOKEN is required');
+    expect(() => validateRuntime('flow-log-analyzer', flowLogEnvironment)).not.toThrow();
+    expect(() =>
+      validateRuntime('flow-log-analyzer', {
+        AWS_REGION: 'us-west-2',
+        ATHENA_DATABASE: 'cloudtrail_database',
+        ATHENA_WORKGROUP: 'cloudtrail_workgroup',
+        TRAFFIC_OBSERVATIONS_TABLE: 'khalifa-traffic-observations',
+      })
+    ).toThrow('ATHENA_RESULTS_S3_LOCATION is required');
+    expect(() =>
+      validateRuntime('flow-log-analyzer', {
+        ...flowLogEnvironment,
+        FLOW_LOG_DAYS: '90',
+      })
+    ).toThrow('FLOW_LOG_DAYS must be an integer between 1 and 31');
     expect(() =>
       validateRuntime('dspm-scanner', {
         AWS_REGION: 'us-west-2',
@@ -113,6 +136,31 @@ describe('Kubernetes runtime', () => {
     await expect(
       runCommand('cloudtrail-analyzer', analyzerEnvironment, new AbortController().signal, {
         analyzeCloudTrail: failing,
+      })
+    ).rejects.toThrow('Athena query FAILED');
+  });
+
+  it('runs the flow-log analyzer once and exits nonzero on failure', async () => {
+    const analyze = jest.fn().mockResolvedValue({
+      observations: 2,
+      truncated: false,
+      queryExecutionId: 'query-456',
+    });
+    await expect(
+      runCommand('flow-log-analyzer', flowLogEnvironment, new AbortController().signal, {
+        analyzeFlowLogs: analyze,
+      })
+    ).resolves.toBeUndefined();
+    expect(analyze).toHaveBeenCalledWith(
+      {},
+      { signal: expect.any(AbortSignal) },
+      flowLogEnvironment
+    );
+
+    const failing = jest.fn().mockRejectedValue(new Error('Athena query FAILED'));
+    await expect(
+      runCommand('flow-log-analyzer', flowLogEnvironment, new AbortController().signal, {
+        analyzeFlowLogs: failing,
       })
     ).rejects.toThrow('Athena query FAILED');
   });

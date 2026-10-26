@@ -16,6 +16,7 @@
     "graphWriter",
     "compliance",
     "reconciliation",
+    "flowLogAnalyzer",
     "cloudtrailAnalyzer",
     "dspmScanner",
     "policyEvaluator",
@@ -84,6 +85,7 @@
         "reportsTable",
         "postureTrendsTable",
         "accessAnalyzerTable",
+        "trafficObservationsTable",
         "leastPrivilegeTable",
         "cognitoUserPoolId",
         "cognitoClientId",
@@ -107,6 +109,7 @@
         "reportsTable": { "type": "string", "minLength": 1 },
         "postureTrendsTable": { "type": "string", "minLength": 1 },
         "accessAnalyzerTable": { "type": "string", "minLength": 1 },
+        "trafficObservationsTable": { "type": "string" },
         "leastPrivilegeTable": { "type": "string", "minLength": 1 },
         "cognitoUserPoolId": {
           "type": "string",
@@ -186,6 +189,7 @@
         "trustCenterSyncClientId": { "type": "string", "pattern": "^(|[0-9a-f]{32}\\.access)$" }
       }
     },
+    "flowLogAnalyzer": { "$ref": "#/definitions/cronJob" },
     "cloudtrailAnalyzer": { "$ref": "#/definitions/cronJob" },
     "dspmScanner": { "$ref": "#/definitions/cronJob" },
     "policyEvaluator": { "$ref": "#/definitions/cronJob" },
@@ -501,7 +505,8 @@
         "backoffLimit": { "type": "integer", "minimum": 0 },
         "podAnnotations": { "$ref": "#/definitions/stringMap" },
         "podLabels": { "$ref": "#/definitions/stringMap" },
-        "resources": { "$ref": "#/definitions/resources" }
+        "resources": { "$ref": "#/definitions/resources" },
+        "days": { "type": "integer", "minimum": 1, "maximum": 31 }
       }
     },
     "collection": {
@@ -790,6 +795,7 @@
                     "graph-writer",
                     "compliance",
                     "cloudtrail-analyzer",
+                    "flow-log-analyzer",
                     "dspm-scanner",
                     "policy-evaluator",
                     "least-privilege-sweep"

@@ -1,0 +1,75 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "khalifa.fullname" . }}-flow-log-analyzer
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: flow-log-analyzer
+spec:
+  schedule: {{ .Values.flowLogAnalyzer.schedule | quote }}
+  {{- with .Values.flowLogAnalyzer.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.flowLogAnalyzer.suspend }}
+  concurrencyPolicy: {{ .Values.flowLogAnalyzer.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.flowLogAnalyzer.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.flowLogAnalyzer.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.flowLogAnalyzer.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "flow-log-analyzer") | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.flowLogAnalyzer.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.flowLogAnalyzer.ttlSecondsAfterFinished }}
+      backoffLimit: {{ .Values.flowLogAnalyzer.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "khalifa.selectorLabels" (dict "root" . "component" "flow-log-analyzer") | nindent 12 }}
+            {{- with .Values.flowLogAnalyzer.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.flowLogAnalyzer.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          # Reuses the cloudtrail-analyzer IRSA role: it already reaches the
+          # shared Athena workgroup and database, and gains the flow-log
+          # bucket/table and TrafficObservations permissions when
+          # flow_logs_bucket is set in khalifa-data.
+          serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "cloudtrailAnalyzer" "suffix" "cloudtrail-analyzer") }}
+          automountServiceAccountToken: {{ .Values.serviceAccounts.cloudtrailAnalyzer.automountServiceAccountToken }}
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "khalifa.podSecurityContext" . | nindent 12 }}
+          {{- if .Values.topologySpread.enabled }}
+          topologySpreadConstraints:
+            {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "flow-log-analyzer") | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: flow-log-analyzer
+              image: {{ required "flowLogAnalyzer.image must be an immutable repository@sha256 digest" .Values.flowLogAnalyzer.image | quote }}
+              imagePullPolicy: IfNotPresent
+              args: ["flow-log-analyzer"]
+              securityContext:
+                {{- include "khalifa.containerSecurityContext" . | nindent 16 }}
+              env:
+                - name: FLOW_LOG_DAYS
+                  value: {{ .Values.flowLogAnalyzer.days | default 7 | quote }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-config
+              resources:
+                {{- toYaml .Values.flowLogAnalyzer.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

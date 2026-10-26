@@ -12,9 +12,10 @@
 6. **graph-writer** - ClusterIP-only graph persistence Deployment
 7. **compliance** - Compliance CronJob
 8. **cloudtrail-analyzer** - CloudTrail usage CronJob (Athena → AccessAnalyzerCache; optional anomaly nodes via graph-writer)
-9. **dspm-scanner** - CronJob: secret scanning of S3 objects and Lambda environment variables (Macie primary, regex fallback; findings written via graph-writer)
-10. **policy-evaluator / least-privilege-sweep** - Lambdas: effective permissions, escalation paths, rightsizing
-11. **IRSA roles** - IAM roles for pod authentication to Neptune/DynamoDB/SQS
+9. **flow-log-analyzer** - VPC flow-log CronJob (Athena → TrafficObservations; **suspended by default**, reuses the cloudtrail-analyzer IRSA role)
+10. **dspm-scanner** - CronJob: secret scanning of S3 objects and Lambda environment variables (Macie primary, regex fallback; findings written via graph-writer)
+11. **policy-evaluator / least-privilege-sweep** - Lambdas: effective permissions, escalation paths, rightsizing
+12. **IRSA roles** - IAM roles for pod authentication to Neptune/DynamoDB/SQS
 
 ### Network Flow
 
@@ -174,6 +175,31 @@ kubectl scale deployment khalifa-api --replicas=5 -n security-graph
 # Manual rule runner execution
 kubectl create job --from=cronjob/khalifa-rule-runner rule-runner-manual -n security-graph
 ```
+
+### Runbook: Enabling observed reachability (VPC flow logs)
+
+1. Confirm VPC flow logs are delivered to an S3 bucket for the collected
+   accounts (org delivery under `AWSLogs/<org-id>/<account>/vpcflowlogs/...`,
+   or the single-account path without the org id).
+2. In `khalifa-data`: set `flow_logs_bucket` (plus `flow_logs_prefix`,
+   `flow_logs_organization_id`, `flow_logs_kms_key_arn` as applicable).
+   `cloudtrail_logs_bucket` must also be set: the analyzer reuses that
+   database, workgroup, and results bucket. Apply; neither the bucket policy
+   nor a KMS key is changed here — the owning account must allow the
+   `cloudtrail-analyzer` IRSA role (see above).
+3. Set the flow-log image in the environment values and unsuspend:
+   `flowLogAnalyzer.image` (the rule-runner digest) and
+   `flowLogAnalyzer.suspend=false`. The window is `flowLogAnalyzer.days`
+   (default 7, max 31). Cost note: each run scans the window with Athena and
+   writes up to 5000 observations; `flowLogAnalyzer.schedule` defaults to
+   daily 04:00 UTC.
+4. Verify: run the job once (`kubectl create job --from=cronjob/khalifa-flow-log-analyzer flow-log-manual -n security-graph`),
+   check `TrafficObservations` has rows, then the next collector run marks
+   instances `traffic_observed` (visible as the Observed traffic fact on
+   issue pages, and in path likelihood as observed reachability).
+5. Rollback: re-suspend the CronJob; observations expire by TTL (30 days) and
+   the collector stops seeing fresh rows (a stale row still marks an instance
+   until it expires — acceptable, traffic was real).
 
 ## I. Graph Query Profiling
 

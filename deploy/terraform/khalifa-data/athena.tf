@@ -18,6 +18,35 @@ locals {
   # this only stops a runaway query, not a normal run.
   athena_bytes_scanned_cutoff = 500 * 1024 * 1024 * 1024
 
+  # The flow-log analyzer reuses the CloudTrail database and workgroup, so it
+  # is enabled only alongside them.
+  flow_logs_enabled = local.cloudtrail_enabled && var.flow_logs_bucket != ""
+  flow_logs_root = join("/", compact([
+    "s3://${var.flow_logs_bucket}",
+    trim(var.flow_logs_prefix, "/"),
+    "AWSLogs",
+    var.flow_logs_organization_id,
+  ]))
+
+  # Standard VPC flow-log v5 default fields (space-delimited, 14 groups). The
+  # second group (account-id) is skipped: account_id is a partition key, so the
+  # RegexSerDe output format maps the remaining groups to the columns.
+  flow_logs_columns = [
+    { name = "version", type = "int" },
+    { name = "interface_id", type = "string" },
+    { name = "srcaddr", type = "string" },
+    { name = "dstaddr", type = "string" },
+    { name = "srcport", type = "int" },
+    { name = "dstport", type = "int" },
+    { name = "protocol", type = "bigint" },
+    { name = "packets", type = "bigint" },
+    { name = "bytes", type = "bigint" },
+    { name = "start", type = "bigint" },
+    { name = "end", type = "bigint" },
+    { name = "action", type = "string" },
+    { name = "log_status", type = "string" },
+  ]
+
   # Standard CloudTrail record layout, as documented for Athena.
   cloudtrail_columns = [
     { name = "eventversion", type = "string" },
@@ -226,6 +255,70 @@ resource "aws_glue_catalog_table" "cloudtrail_logs" {
 
     dynamic "columns" {
       for_each = local.cloudtrail_columns
+      content {
+        name = columns.value.name
+        type = columns.value.type
+      }
+    }
+  }
+}
+
+# VPC flow logs for the flow-log-analyzer CronJob, same layout conventions as
+# the CloudTrail table above (and the same database/workgroup). Only created
+# when flow_logs_bucket is set alongside cloudtrail_logs_bucket.
+resource "aws_glue_catalog_table" "vpc_flow_logs" {
+  count         = local.flow_logs_enabled ? 1 : 0
+  name          = "vpc_flow_logs"
+  database_name = aws_glue_catalog_database.cloudtrail[0].name
+  table_type    = "EXTERNAL_TABLE"
+
+  parameters = {
+    EXTERNAL                            = "TRUE"
+    classification                      = "vpc-flow-logs"
+    "projection.enabled"                = "true"
+    "projection.account_id.type"        = "enum"
+    "projection.account_id.values"      = join(",", local.collection_account_ids)
+    "projection.region.type"            = "enum"
+    "projection.region.values"          = join(",", sort(data.aws_regions.all[0].names))
+    "projection.log_date.type"          = "date"
+    "projection.log_date.range"         = "${var.cloudtrail_partition_start},NOW"
+    "projection.log_date.format"        = "yyyy/MM/dd"
+    "projection.log_date.interval"      = "1"
+    "projection.log_date.interval.unit" = "DAYS"
+    "storage.location.template"         = "${local.flow_logs_root}/$${account_id}/vpcflowlogs/$${region}/$${log_date}"
+  }
+
+  partition_keys {
+    name = "account_id"
+    type = "string"
+  }
+
+  partition_keys {
+    name = "region"
+    type = "string"
+  }
+
+  partition_keys {
+    name = "log_date"
+    type = "string"
+  }
+
+  storage_descriptor {
+    location      = "${local.flow_logs_root}/"
+    input_format  = "org.apache.hadoop.mapred.TextInputFormat"
+    output_format = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+
+    ser_de_info {
+      name                  = "vpc-flow-logs"
+      serialization_library = "org.apache.hadoop.hive.serde2.RegexSerDe"
+      parameters = {
+        input.regex   = "^(\\d+) (\\S+) (\\S+) (\\S+) (\\S+) (\\d+) (\\d+) (\\d+) (\\d+) (\\d+) (\\d+) (\\S+) (\\S+)$"
+        output.format = "%1%3%4%5%6%7%8%9%10%11%12%13%14"
+      }
+    }
+
+    dynamic "columns" {
+      for_each = local.flow_logs_columns
       content {
         name = columns.value.name
         type = columns.value.type

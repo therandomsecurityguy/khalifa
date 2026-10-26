@@ -188,6 +188,35 @@ variable "cloudtrail_logs_kms_key_arn" {
   default     = ""
 }
 
+variable "flow_logs_bucket" {
+  description = "S3 bucket that receives VPC flow logs. Empty leaves the flow-log analyzer unconfigured. Requires cloudtrail_logs_bucket too: the analyzer reuses the CloudTrail Athena database and workgroup."
+  type        = string
+  default     = ""
+}
+
+variable "flow_logs_prefix" {
+  description = "Key prefix the flow logs write under, before AWSLogs/. Empty when they write to the bucket root."
+  type        = string
+  default     = ""
+}
+
+variable "flow_logs_organization_id" {
+  description = "Organization id (o-...) that appears in organization flow-log key paths. Empty for single-account delivery."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.flow_logs_organization_id == "" || can(regex("^o-[a-z0-9]{10,32}$", var.flow_logs_organization_id))
+    error_message = "flow_logs_organization_id must be empty or an AWS Organizations id (o-...)."
+  }
+}
+
+variable "flow_logs_kms_key_arn" {
+  description = "KMS key that encrypts the flow-log objects. The analyzer role is allowed kms:Decrypt on it; the key policy in the owning account must allow the role as well."
+  type        = string
+  default     = ""
+}
+
 variable "cloudtrail_partition_start" {
   description = "First day (yyyy/MM/dd) the CloudTrail partition projection covers."
   type        = string

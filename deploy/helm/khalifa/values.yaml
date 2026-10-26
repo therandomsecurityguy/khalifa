@@ -80,6 +80,7 @@ config:
   reportsTable: ''
   postureTrendsTable: ''
   accessAnalyzerTable: ''
+  trafficObservationsTable: ''
   leastPrivilegeTable: ''
   cognitoUserPoolId: ''
   cognitoClientId: ''
@@ -304,6 +305,31 @@ compliance:
     limits:
       cpu: 1000m
       memory: 1Gi
+
+flowLogAnalyzer:
+  image: ''
+  days: 7
+  schedule: '0 4 * * *'
+  timeZone: ''
+  # Flow logs carry a real Athena/S3 cost; the CronJob ships suspended until
+  # the operator points flow_logs_bucket at a bucket and unsuspends it.
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 cloudtrailAnalyzer:
   image: ''

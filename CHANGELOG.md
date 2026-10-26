@@ -2,6 +2,18 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Observed reachability (P7a)
+
+### Added
+
+- **Observed reachability from VPC flow logs (optional, cost-gated)**: a new `flow-log-analyzer` runtime command aggregates ACCEPT flows per network interface — Athena over a `vpc_flow_logs` Glue table with partition projection (account/region/day) and the standard v5 fields, the account id taken from the partition — into a `TrafficObservations` DynamoDB table (one row per interface, TTL 30 days; window `flowLogAnalyzer.days`, default 7, max 31; at most 5000 interfaces per run, truncation logged). Terraform creates the table and the Glue table only when `flow_logs_bucket` is set (alongside the CloudTrail database it reuses), and the CronJob ships **suspended** by default: nothing runs or costs anything until an operator opts in. The collector reads the table during EC2 collection with the hub's own credentials (member-account credentials never touch it) and marks instances `traffic_observed` plus the latest observation time — the read is tolerant, so an absent table, a missing grant, or an analyzer that never ran simply means no observed traffic.
+- **Observation in prediction and evidence**: path likelihood reachability is now observed AND configured — traffic observed on a workload proves reachability even when a restricted read (`lambda_exposure_restricted`, `collection_restricted`) left the configuration unknown, where it previously halved the factor. The issue page lists the latest observation as an "Observed traffic" fact beside the configured ones.
+- **IAM**: the cloudtrail-analyzer role gains, only when flow logs are enabled, `TrafficObservations` writes, the flow-logs Glue table, and the bucket (plus optional KMS decrypt); the hub collector roles gain `dynamodb:BatchGetItem`/`GetItem` on the observations table. Helm values gain `flowLogAnalyzer` (with the standard NetworkPolicy egress component), `config.trafficObservationsTable`, and a `days` field on cron-job values.
+
+### Notes
+
+- Deferred: threat-intel enrichment (IOC feeds, TTP mapping) and adversary-emulation scenarios — both need a provider/format decision; source-ASN and time-of-day baselines from P4's note; and the CDK path does not create `TrafficObservations`, which the collector's tolerant read already handles.
+
 ## [Unreleased] - Rule quality and calibration (P6)
 
 ### Added

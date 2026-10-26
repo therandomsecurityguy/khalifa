@@ -19,6 +19,7 @@
                │  - Internet exposure derivation (incl. Lambda URLs)  │
                │  - Instance-profile role edges, generic secret inventory│
                │  - Amazon Inspector findings (CVEs on workloads/images)│
+               │  - Observed traffic from VPC flow logs (traffic_observed)│
                │  - Cross-account trust analysis                      │
                │  - Bounded graph-writer batches + coverage checkpoint│
               └───────────────────────────┬──────────────────────────┘
@@ -225,6 +226,25 @@ than collection (data classification, which accounts are collected, the real
 topology), so findings state what collection would add, and ports no catalogue
 rule covers yet are marked as such rather than given an invented rule id.
 
+## Observed reachability
+
+Flow logs are the one signal that says where traffic actually went. The
+optional `flow-log-analyzer` (runtime command; CronJob suspended by default)
+queries the `vpc_flow_logs` Glue table — partition projection over
+account/region/day, the standard v5 fields with the account id taken from the
+partition — for ACCEPT flows per network interface within a bounded window
+(default 7 days, max 31, at most 5000 interfaces per run) and writes
+`TrafficObservations` in DynamoDB (one row per interface, TTL 30 days). The
+collector reads that table during EC2 collection with the hub's own
+credentials and marks each instance `traffic_observed` (with the latest
+observation time); member-account credentials never read it. Reachability
+confidence in path likelihood is then **observed AND configured**: traffic
+observed on a workload proves reachability even when a restricted read left
+the configuration unknown, and the issue page lists the observed-traffic fact
+beside the configured ones. Everything is cost-gated: Terraform creates
+nothing without `flow_logs_bucket`, the CronJob ships suspended, and a
+deployment without the table simply has no observed traffic.
+
 ## Compliance reconciliation and the trust center
 
 The compliance job evaluates the CIS AWS Foundations v3.0.0 and Khalifa
@@ -388,6 +408,7 @@ the gate.
 | `principal_is_anyone` / `principal_account_count` | boolean / number | IAM policy statement principal analysis |
 | `principal_org_restricted`                       | boolean          | `aws:PrincipalOrgID` condition on a statement |
 | `is_prod`                                        | boolean          | `PROD_ACCOUNT_IDS` account marking  |
+| `traffic_observed` / `traffic_observed_at`       | boolean / string | Flow-log analyzer observation, read by the collector |
 | `anomaly_type`                                   | string           | CloudTrail analyzer anomaly queries |
 | `port_from` / `port_to`                          | number           | Security group rule                 |
 | `flow_logs_enabled`                              | boolean          | EC2 DescribeFlowLogs                |

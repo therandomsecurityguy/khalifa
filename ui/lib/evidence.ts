@@ -90,6 +90,7 @@ const SPECS: Record<string, Spec[]> = {
     { id: 'cidr_block', label: 'Source' },
   ],
   Ec2Instance: [
+    { id: 'traffic_observed', label: 'Observed traffic', format: yesNo },
     { id: 'state', label: 'State' },
     { id: 'is_internet_exposed', label: 'Internet exposed', format: yesNo },
     { id: 'metadata_http_tokens', label: 'Instance metadata', format: metadataTokens },

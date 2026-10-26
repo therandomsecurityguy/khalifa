@@ -15,6 +15,7 @@ data:
   REPORTS_TABLE: {{ .Values.config.reportsTable | quote }}
   POSTURE_TRENDS_TABLE: {{ .Values.config.postureTrendsTable | quote }}
   ACCESS_ANALYZER_TABLE: {{ .Values.config.accessAnalyzerTable | quote }}
+  TRAFFIC_OBSERVATIONS_TABLE: {{ .Values.config.trafficObservationsTable | quote }}
   LEAST_PRIVILEGE_TABLE: {{ .Values.config.leastPrivilegeTable | quote }}
   COGNITO_USER_POOL_ID: {{ .Values.config.cognitoUserPoolId | quote }}
   COGNITO_CLIENT_ID: {{ .Values.config.cognitoClientId | quote }}
