@@ -146,6 +146,8 @@ export interface RiskScoreInput {
   reachabilityRestricted?: boolean;
   /** A path vertex has observed traffic (flow-log analyzer), so reachability is proven. */
   reachabilityObserved?: boolean;
+  /** Customer threat-intel indicators matching this path's facts. */
+  threatIntel?: { indicators: string[] };
 }
 
 export interface RiskScoreOutput {
@@ -158,5 +160,6 @@ export interface RiskScoreOutput {
     environmentContribution: number;
     crownJewelContribution: number;
     exploitabilityContribution: number;
+    threatIntelContribution: number;
   };
 }

@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "khalifa.fullname" . }}-threat-intel-import
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: threat-intel-import
+spec:
+  schedule: {{ .Values.threatIntelImport.schedule | quote }}
+  {{- with .Values.threatIntelImport.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ .Values.threatIntelImport.suspend }}
+  concurrencyPolicy: {{ .Values.threatIntelImport.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.threatIntelImport.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.threatIntelImport.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.threatIntelImport.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "threat-intel-import") | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.threatIntelImport.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.threatIntelImport.ttlSecondsAfterFinished }}
+      backoffLimit: {{ .Values.threatIntelImport.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "khalifa.selectorLabels" (dict "root" . "component" "threat-intel-import") | nindent 12 }}
+            {{- with .Values.threatIntelImport.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.threatIntelImport.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          # The rule-runner service account owns the ThreatIndicators table:
+          # the runner reads it and this import writes it.
+          serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "ruleRunner" "suffix" "rule-runner") }}
+          automountServiceAccountToken: {{ .Values.serviceAccounts.ruleRunner.automountServiceAccountToken }}
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "khalifa.podSecurityContext" . | nindent 12 }}
+          {{- if .Values.topologySpread.enabled }}
+          topologySpreadConstraints:
+            {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "threat-intel-import") | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: threat-intel-import
+              image: {{ required "threatIntelImport.image must be an immutable repository@sha256 digest" .Values.threatIntelImport.image | quote }}
+              imagePullPolicy: IfNotPresent
+              args: ["threat-intel-import"]
+              securityContext:
+                {{- include "khalifa.containerSecurityContext" . | nindent 16 }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "khalifa.fullname" . }}-config
+              resources:
+                {{- toYaml .Values.threatIntelImport.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

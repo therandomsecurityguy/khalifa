@@ -188,6 +188,35 @@ variable "cloudtrail_logs_kms_key_arn" {
   default     = ""
 }
 
+variable "threat_intel_list_bucket" {
+  description = "S3 bucket holding the customer's threat-intel lists. Empty leaves the importer without a bucket grant; the URIs still configure the CronJob."
+  type        = string
+  default     = ""
+}
+
+variable "threat_intel_ip_list_s3_uri" {
+  description = "s3://bucket/key of the newline-separated IP indicator list. Empty disables that list."
+  type        = string
+  default     = ""
+}
+
+variable "threat_intel_account_list_s3_uri" {
+  description = "s3://bucket/key of the newline-separated account-id indicator list. Empty disables that list."
+  type        = string
+  default     = ""
+}
+
+variable "threat_intel_ttl_days" {
+  description = "Days an imported indicator stays valid before DynamoDB TTL drops it."
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.threat_intel_ttl_days >= 1 && var.threat_intel_ttl_days <= 365
+    error_message = "threat_intel_ttl_days must be between 1 and 365."
+  }
+}
+
 variable "flow_logs_bucket" {
   description = "S3 bucket that receives VPC flow logs. Empty leaves the flow-log analyzer unconfigured. Requires cloudtrail_logs_bucket too: the analyzer reuses the CloudTrail Athena database and workgroup."
   type        = string

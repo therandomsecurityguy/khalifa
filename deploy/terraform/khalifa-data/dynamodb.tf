@@ -284,3 +284,34 @@ resource "aws_dynamodb_table" "traffic_observations" {
 
   tags = merge(var.tags, { Name = "${local.name}-traffic-observations" })
 }
+
+# Customer threat-intel indicators for the rule runner's matching and the
+# threat-intel-import CronJob's writes; TTL is what makes an indicator stale.
+resource "aws_dynamodb_table" "threat_indicators" {
+  name         = "${local.name}-threat-indicators"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "indicator"
+
+  attribute {
+    name = "indicator"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  deletion_protection_enabled = true
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.this.arn
+  }
+
+  tags = merge(var.tags, { Name = "${local.name}-threat-indicators" })
+}

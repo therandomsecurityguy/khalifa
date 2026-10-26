@@ -53,6 +53,14 @@ const FACTOR_WEIGHTS = {
 // enough to order a vulnerable workload above an otherwise identical one.
 const EXPLOITABILITY_WEIGHT = 0.15;
 
+// A customer threat-intel match (an anomaly's source IP or a trusted external
+// account on the customer's list) is additive too, and flat rather than
+// proportional: the indicator is a fact about the path, not a strength. Ten
+// points ranks a matched path above the same path without the match without
+// crossing a severity threshold on its own; auto-ticketing still waits on
+// measured precision (rule-quality.ts).
+const THREAT_INTEL_BONUS = 10;
+
 const SEVERITY_THRESHOLDS: Record<Severity, number> = {
   critical: 80,
   high: 60,
@@ -86,6 +94,8 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
     crownJewelContribution += pathPenalty;
   }
 
+  const threatIntelContribution = input.threatIntel?.indicators?.length ? THREAT_INTEL_BONUS : 0;
+
   let exploitabilityContribution = 0;
   if (input.exploitability) {
     const cvss = input.exploitability.cvssBaseScore;
@@ -102,7 +112,8 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
       dataClassificationContribution +
       environmentContribution +
       crownJewelContribution +
-      exploitabilityContribution
+      exploitabilityContribution +
+      threatIntelContribution
   );
 
   const severity = mapScoreToSeverity(totalScore);
@@ -117,6 +128,7 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
       environmentContribution: Math.round(environmentContribution * 10) / 10,
       crownJewelContribution: Math.round(crownJewelContribution * 10) / 10,
       exploitabilityContribution: Math.round(exploitabilityContribution * 10) / 10,
+      threatIntelContribution,
     },
   };
 }

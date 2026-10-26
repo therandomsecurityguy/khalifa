@@ -215,6 +215,7 @@ describe('Types', () => {
           environmentContribution: 15,
           crownJewelContribution: 0,
           exploitabilityContribution: 0,
+          threatIntelContribution: 0,
         },
       };
       expect(output.score).toBe(85);

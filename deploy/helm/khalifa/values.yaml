@@ -81,6 +81,10 @@ config:
   postureTrendsTable: ''
   accessAnalyzerTable: ''
   trafficObservationsTable: ''
+  threatIndicatorsTable: ''
+  threatIntelIpListS3Uri: ''
+  threatIntelAccountListS3Uri: ''
+  threatIntelTtlDays: 90
   leastPrivilegeTable: ''
   cognitoUserPoolId: ''
   cognitoClientId: ''
@@ -305,6 +309,30 @@ compliance:
     limits:
       cpu: 1000m
       memory: 1Gi
+
+threatIntelImport:
+  image: ''
+  schedule: '0 5 * * *'
+  timeZone: ''
+  # Imports customer-supplied lists; nothing external is contacted. Runs as the
+  # rule-runner service account, which owns the ThreatIndicators table.
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 flowLogAnalyzer:
   image: ''

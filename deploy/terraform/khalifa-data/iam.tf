@@ -253,6 +253,12 @@ resource "aws_iam_role_policy" "api" {
         Resource = concat(local.compliance_table_arns, [for arn in local.compliance_table_arns : "${arn}/index/*"])
       },
       {
+        Sid      = "ThreatIndicators"
+        Effect   = "Allow"
+        Action   = local.dynamodb_full_actions
+        Resource = [aws_dynamodb_table.threat_indicators.arn]
+      },
+      {
         Sid      = "IssuesTopic"
         Effect   = "Allow"
         Action   = ["sns:Publish"]
@@ -300,6 +306,12 @@ resource "aws_iam_role_policy" "rule_runner" {
           "neptune-db:GetEngineStatus",
         ]
         Resource = [local.neptune_resource_arn]
+      },
+      {
+        Sid      = "ThreatIntelLists"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = var.threat_intel_list_bucket != "" ? ["arn:aws:s3:::${var.threat_intel_list_bucket}/*"] : []
       },
     ]
   })

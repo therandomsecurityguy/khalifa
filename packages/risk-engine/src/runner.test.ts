@@ -184,6 +184,94 @@ describe('RiskRuleRunner stale-issue fix', () => {
     expect(neptune.executeQuery).toHaveBeenCalledTimes(1);
   });
 
+  test('runRule marks customer threat-intel matches and scores them', async () => {
+    const { Path } = Gremlin.structure;
+    const { t } = Gremlin.process;
+    const element = (id: string, label: string, props: Record<string, unknown[]> = {}) =>
+      new Map<unknown, unknown>([[t.id, id], [t.label, label], ...Object.entries(props)]);
+    const path = new Path(
+      ['anomaly', 'account'],
+      [
+        element('anomaly-1', 'CloudTrailAnomaly', {
+          arn: ['anomaly-1'],
+          anomaly_type: ['SECRET_READ_NEW_SOURCE_IP'],
+          source_ip: ['203.0.113.7'],
+        }),
+      ]
+    );
+    const threatStore = {
+      find: jest
+        .fn()
+        .mockResolvedValue([{ type: 'ip', value: '203.0.113.7', source: 's3://lists/ips.txt' }]),
+    };
+    const runner = new RiskRuleRunner(
+      'localhost:8182',
+      undefined,
+      undefined,
+      undefined,
+      threatStore as never
+    );
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest.fn().mockResolvedValue([path]);
+    store.getIssueByRuleAndResources = jest.fn().mockResolvedValue(null);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+    let created: Issue | undefined;
+    store.createIssue = jest.fn().mockImplementation(async (issue: Issue) => {
+      created = issue;
+      return true;
+    });
+
+    await expect(runner.runRule(rule)).resolves.toEqual(
+      expect.objectContaining({ issuesCreated: 1, errors: undefined })
+    );
+
+    expect(threatStore.find).toHaveBeenCalledWith([{ type: 'ip', value: '203.0.113.7' }]);
+    expect(created?.metadata.threatIntelMatches).toEqual([
+      { type: 'ip', value: '203.0.113.7', source: 's3://lists/ips.txt' },
+    ]);
+    expect(created?.metadata.scoringFactors).toMatchObject({ threatIntelContribution: 10 });
+  });
+
+  test('runRule keeps running when the threat-intel store is unreadable', async () => {
+    const { Path } = Gremlin.structure;
+    const { t } = Gremlin.process;
+    const element = (id: string, label: string) =>
+      new Map<unknown, unknown>([
+        [t.id, id],
+        [t.label, label],
+      ]);
+    const path = new Path(['anomaly'], [element('anomaly-1', 'CloudTrailAnomaly')]);
+    const threatStore = {
+      find: jest.fn().mockRejectedValue(new Error('ResourceNotFoundException')),
+    };
+    const runner = new RiskRuleRunner(
+      'localhost:8182',
+      undefined,
+      undefined,
+      undefined,
+      threatStore as never
+    );
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest.fn().mockResolvedValue([path]);
+    store.getIssueByRuleAndResources = jest.fn().mockResolvedValue(null);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+    let created: Issue | undefined;
+    store.createIssue = jest.fn().mockImplementation(async (issue: Issue) => {
+      created = issue;
+      return true;
+    });
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(runner.runRule(rule)).resolves.toEqual(
+      expect.objectContaining({ issuesCreated: 1, errors: undefined })
+    );
+
+    warn.mockRestore();
+    expect(created?.metadata.threatIntelMatches).toBeUndefined();
+    expect(created?.metadata.scoringFactors).toMatchObject({ threatIntelContribution: 0 });
+  });
   test('runRule reads driver Path elements (Maps keyed by T enums, list values, edges between vertices)', async () => {
     const { Path } = Gremlin.structure;
     const { t } = Gremlin.process;

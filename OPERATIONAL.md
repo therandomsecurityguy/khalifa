@@ -13,9 +13,10 @@
 7. **compliance** - Compliance CronJob
 8. **cloudtrail-analyzer** - CloudTrail usage CronJob (Athena → AccessAnalyzerCache; optional anomaly nodes via graph-writer)
 9. **flow-log-analyzer** - VPC flow-log CronJob (Athena → TrafficObservations; **suspended by default**, reuses the cloudtrail-analyzer IRSA role)
-10. **dspm-scanner** - CronJob: secret scanning of S3 objects and Lambda environment variables (Macie primary, regex fallback; findings written via graph-writer)
-11. **policy-evaluator / least-privilege-sweep** - Lambdas: effective permissions, escalation paths, rightsizing
-12. **IRSA roles** - IAM roles for pod authentication to Neptune/DynamoDB/SQS
+10. **threat-intel-import** - CronJob: imports customer threat-intel lists from S3 into ThreatIndicators (**suspended by default**, runs as the rule-runner service account)
+11. **dspm-scanner** - CronJob: secret scanning of S3 objects and Lambda environment variables (Macie primary, regex fallback; findings written via graph-writer)
+12. **policy-evaluator / least-privilege-sweep** - Lambdas: effective permissions, escalation paths, rightsizing
+13. **IRSA roles** - IAM roles for pod authentication to Neptune/DynamoDB/SQS
 
 ### Network Flow
 
@@ -200,6 +201,29 @@ kubectl create job --from=cronjob/khalifa-rule-runner rule-runner-manual -n secu
 5. Rollback: re-suspend the CronJob; observations expire by TTL (30 days) and
    the collector stops seeing fresh rows (a stale row still marks an instance
    until it expires — acceptable, traffic was real).
+
+### Runbook: Importing customer threat-intel lists
+
+1. Put plain lists in an account-owned S3 bucket: one indicator per line,
+   `#` comments and blanks ignored. IPs (v4/v6) in one object, 12-digit
+   account ids in another.
+2. In `khalifa-data`: set `threat_intel_list_bucket` (grants the rule-runner
+   role `s3:GetObject` on it) and `threat_intel_ip_list_s3_uri` /
+   `threat_intel_account_list_s3_uri` (flow into the chart's config), plus
+   `threat_intel_ttl_days` (default 90). Apply.
+3. Set `threatIntelImport.image` (the rule-runner digest) and unsuspend or
+   run it once:
+   `kubectl create job --from=cronjob/khalifa-threat-intel-import threat-intel-manual -n security-graph`.
+   An unreadable list fails the job (exit non-zero) so the failure is visible;
+   invalid lines are skipped and counted in the log.
+4. Verify: `ThreatIndicators` gains rows with a TTL; the next rule run scores
+   matching anomaly IPs / trusted external accounts with the +10
+   threat-intelligence factor and records the match on the issue.
+5. Freshness is the TTL: an indicator dropped from the list expires by itself
+   up to `threat_intel_ttl_days` after it was last imported. AWS's own managed
+   reputation lists need no import (GuardDuty applies them; RULE-018/RULE-029
+   already consume the findings). Auto-ticketing stays off for matched issues
+   until `/rules/quality` shows measured precision.
 
 ## I. Graph Query Profiling
 
