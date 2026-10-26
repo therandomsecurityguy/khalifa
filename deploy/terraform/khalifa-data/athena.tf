@@ -312,8 +312,8 @@ resource "aws_glue_catalog_table" "vpc_flow_logs" {
       name                  = "vpc-flow-logs"
       serialization_library = "org.apache.hadoop.hive.serde2.RegexSerDe"
       parameters = {
-        input.regex   = "^(\\d+) (\\S+) (\\S+) (\\S+) (\\S+) (\\d+) (\\d+) (\\d+) (\\d+) (\\d+) (\\d+) (\\S+) (\\S+)$"
-        output.format = "%1%3%4%5%6%7%8%9%10%11%12%13%14"
+        "input.regex"   = "^(\\d+) (\\S+) (\\S+) (\\S+) (\\S+) (\\d+) (\\d+) (\\d+) (\\d+) (\\d+) (\\d+) (\\S+) (\\S+)$"
+        "output.format" = "%1%3%4%5%6%7%8%9%10%11%12%13%14"
       }
     }
 
