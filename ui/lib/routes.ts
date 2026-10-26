@@ -13,6 +13,7 @@ export const APP_SECTIONS: ReadonlyArray<{ label: string; routes: readonly AppRo
     routes: [
       { href: '/issues', label: 'Issues' },
       { href: '/compliance', label: 'Compliance' },
+      { href: '/rules', label: 'Rules' },
     ],
   },
   {

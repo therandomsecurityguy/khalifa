@@ -231,6 +231,9 @@ and in `CHANGELOG.md` under **Unreleased**:
 - Behavior changes update `CHANGELOG.md` (Unreleased), `README.md`, and the
   matching doc: `ARCHITECTURE.md` for design, `OPERATIONAL.md` for runbooks,
   module READMEs for Terraform inputs/outputs.
+- Calibration changes — a rule's severity, scoring weights, or auto-ticketing —
+  cite `GET /rules/quality` (the per-rule dismissal-rate report) as evidence in
+  the PR body; thresholds live in `rule-quality.ts` constants.
 - Security-sensitive surfaces (auth, publishable endpoint, External Secrets
   wiring, IAM statements, fail-closed logic) require a short "why this is safe"
   note in the PR description.

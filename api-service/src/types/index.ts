@@ -195,6 +195,28 @@ export interface SeverityCounts {
   low: number;
 }
 
+export interface RuleQualityItem {
+  ruleId: string;
+  name: string;
+  ownerTeam: string;
+  severityHint: Severity | null;
+  enabled: boolean;
+  autoTicket: boolean;
+  inCatalogue: boolean;
+  open: number;
+  suppressed: number;
+  resolved: number;
+  handled: number;
+  dismissalRate: number | null;
+  verdict: 'insufficient-data' | 'reliable' | 'mixed' | 'noisy';
+}
+
+export interface RuleQualityResponse {
+  rules: RuleQualityItem[];
+  thresholds: { minHandled: number; reliableDismissalRate: number; noisyDismissalRate: number };
+  generatedAt: string;
+}
+
 export interface TrendForecastProjection {
   days: number;
   date: string;

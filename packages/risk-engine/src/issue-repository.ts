@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { RuleStatusCounts } from './rule-quality';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -482,6 +483,36 @@ export class DynamoDBIssueRepository {
   }
 
   // Reads only `severity` through the status index, one partition per status.
+  // Per-rule open/suppressed/resolved counts from the same bounded StatusIndex
+  // reads the severity summary uses, projecting ruleId instead of severity.
+  async getRuleStatusCounts(): Promise<Record<string, RuleStatusCounts>> {
+    const counts: Record<string, RuleStatusCounts> = {};
+    for (const status of ISSUE_STATUSES) {
+      let exclusiveStartKey: Record<string, unknown> | undefined;
+      do {
+        const result = await this.docClient.send(
+          new QueryCommand({
+            TableName: this.tableName,
+            IndexName: 'StatusIndex',
+            KeyConditionExpression: '#status = :status',
+            ProjectionExpression: '#rule_id',
+            ExpressionAttributeNames: { '#status': 'status', '#rule_id': 'ruleId' },
+            ExpressionAttributeValues: { ':status': status },
+            ExclusiveStartKey: exclusiveStartKey,
+          })
+        );
+        for (const item of result.Items || []) {
+          const ruleId = item.ruleId as string;
+          if (!ruleId) continue;
+          counts[ruleId] ??= { open: 0, suppressed: 0, resolved: 0 };
+          counts[ruleId][status] += 1;
+        }
+        exclusiveStartKey = result.LastEvaluatedKey;
+      } while (exclusiveStartKey);
+    }
+    return counts;
+  }
+
   async getSeverityStatusCounts(): Promise<SeverityStatusCounts> {
     const counts = Object.fromEntries(
       SEVERITIES.map((severity) => [severity, { open: 0, suppressed: 0, resolved: 0 }])

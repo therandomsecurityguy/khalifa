@@ -16,6 +16,7 @@ describe('API route registration', () => {
       ['/resources/values', '/resources/:arn(*)'],
       ['/resources/graph', '/resources/:arn(*)'],
       ['/secrets/reader-counts', '/secrets/:arn(*)'],
+      ['/rules/quality', '/rules/:id'],
       [
         '/identity/least-privilege/summary',
         '/identity/least-privilege/:accountId/:principalArn(*)',

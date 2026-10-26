@@ -47,7 +47,7 @@ import {
 import { getTrend, listTrendMetrics } from './routes/trends';
 import { getIntegrationsStatus, suppressIssue, reopenIssue } from './routes/integrations';
 import { getSession } from './routes/session';
-import { getRule, listRules } from './routes/rules';
+import { getRule, getRuleQuality, listRules } from './routes/rules';
 import { getPublishableRequirements } from './routes/trust-center';
 import { getSecret, listSecretReaderCounts, listSecrets } from './routes/secrets';
 
@@ -113,6 +113,7 @@ app.use(validateGremlinSelectors);
 
 app.get('/session', requireViewer, getSession);
 app.get('/rules', requireViewer, listRules);
+app.get('/rules/quality', requireViewer, getRuleQuality);
 app.get('/rules/:id', requireViewer, getRule);
 app.get('/issues', requireViewer, listIssues);
 app.get('/issues/counts', requireViewer, getIssueCounts);
