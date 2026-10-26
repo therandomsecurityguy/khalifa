@@ -2,6 +2,16 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Shift-left plan analysis (P5)
+
+### Added
+
+- **Pre-deploy Terraform plan analysis**: `npm run risk:plan -- plan.json` (a `terraform show -json` document; `scripts/risk-plan`) predicts which catalogue rules a plan's creations and updates would feed and prints each finding's detail and the path shape the live graph would draw: RULE-002 for world-open ingress covering SSH/RDP (inline, `aws_security_group_rule`, and `aws_vpc_security_group_ingress_rule` shapes; other ports are flagged without inventing a rule id), RULE-006 for account-root and `Principal: *` trusts, RULE-007 for public bucket ACLs / disabled public-access blocks / anyone bucket policies, RULE-008 for `publicly_accessible` RDS, RULE-019 for world-open EKS endpoints, RULE-009 for `authorization_type = "NONE"` function URLs, RULE-010 for anyone or foreign-root secret policies, and RULE-024 for instances without enforced IMDSv2. It exits 1 when any finding reaches `--min-severity` (default high), supports `--json`, and reuses the catalogue by a local copy that a drift test pins to the engine's names and severities. CI-gate wiring is documented in `scripts/risk-plan/README.md`; no workflow is added by default.
+
+### Notes
+
+- Plan-time analysis is attribution, not simulation: a plan knows less than collection (data classification, which accounts are collected, the real topology), and findings say what collection would add. Deviation × blast-radius scoring and probe plans against the live graph remain with the later phases.
+
 ## [Unreleased] - Behavioral baselines (P4)
 
 ### Changed

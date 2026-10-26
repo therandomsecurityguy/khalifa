@@ -195,6 +195,20 @@ more missing days. The Trends page renders the projection beside the series.
 Publishing projections to the trust center is deferred until the publishable
 discipline covers them.
 
+## Pre-deploy plan analysis
+
+`scripts/risk-plan` (`npm run risk:plan -- plan.json`) reads a `terraform
+show -json` document and predicts, before anything is deployed, which catalogue
+rules the planned creations and updates would feed — world-open security-group
+ingress, account-root and `Principal: *` trusts, public bucket ACLs or
+policies, public RDS, world-open EKS endpoints, unauthenticated function URLs,
+anyone secret policies, and instances left on IMDSv1 — printing each finding's
+detail and the path shape the live graph would draw, and exiting non-zero at a
+configurable severity. It is attribution, not simulation: a plan knows less
+than collection (data classification, which accounts are collected, the real
+topology), so findings state what collection would add, and ports no catalogue
+rule covers yet are marked as such rather than given an invented rule id.
+
 ## Compliance reconciliation and the trust center
 
 The compliance job evaluates the CIS AWS Foundations v3.0.0 and Khalifa

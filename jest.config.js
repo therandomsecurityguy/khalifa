@@ -113,6 +113,13 @@ module.exports = {
       testMatch: ['<rootDir>/*.test.ts'],
     },
     {
+      displayName: 'risk-plan',
+      rootDir: '<rootDir>/scripts/risk-plan',
+      preset: 'ts-jest',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/*.test.ts'],
+    },
+    {
       displayName: 'trust-center-sync',
       rootDir: '<rootDir>/scripts/trust-center-sync',
       preset: 'ts-jest',
