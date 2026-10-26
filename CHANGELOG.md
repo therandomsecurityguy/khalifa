@@ -2,6 +2,17 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Rule quality and calibration (P6)
+
+### Added
+
+- **Per-rule quality report**: `GET /rules/quality` (Viewer) joins every rule's open/suppressed/resolved issue counts — read through the same bounded `StatusIndex` projections the issue summary uses — with the catalogue (name, team, severity, enabled, auto-ticket), and publishes `dismissalRate = suppressed ÷ handled` with a verdict: `reliable` under 20% over at least 10 closed issues, `noisy` at 50% or more, `mixed` between, `insufficient-data` before that. The rule runner and report keep no new state: suppression remains the recorded human judgement (reason, actor, expiry in the status history), and the report says plainly that the rate is a noise proxy, not precision. A `/rules` page under Risks renders the table with the thresholds explained, sorted noisy-first.
+- **Calibration policy**: severity, scoring-weight, and auto-ticket changes cite the quality report as evidence; `RULE_QUALITY_*` thresholds are explicit constants so a change is an edit with recorded evidence, not a judgement call (also noted in AGENTS.md §2.3).
+
+### Notes
+
+- True precision/recall waits on outcome labels (GuardDuty/Security Hub findings and incident links joined to issues), and the first live calibration change (for example enabling auto-ticketing on a rule whose measured rate supports it) waits for production data — the report and thresholds are the mechanism that makes that change evidence-based rather than guessed.
+
 ## [Unreleased] - Shift-left plan analysis (P5)
 
 ### Added

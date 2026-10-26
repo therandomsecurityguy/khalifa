@@ -195,6 +195,22 @@ more missing days. The Trends page renders the projection beside the series.
 Publishing projections to the trust center is deferred until the publishable
 discipline covers them.
 
+## Rule quality and calibration
+
+Every issue a rule raises ends open, suppressed (an analyst judged it not worth
+fixing, or accepted the risk — the reason and actor are recorded in its status
+history), or resolved on its own when the graph stopped matching. `GET
+/rules/quality` joins those counts (the same bounded `StatusIndex` reads the
+issue summary uses) with the catalogue and publishes per-rule
+`dismissalRate = suppressed ÷ handled` plus a verdict (`reliable` when the rate
+stays under 20% over at least 10 closed issues, `noisy` at 50% or more, `mixed`
+between, `insufficient-data` before that). It is a noise proxy, not ground
+truth: true precision needs outcome labels from GuardDuty/Security Hub and
+incidents, which remain a later phase. The thresholds are explicit constants,
+and severity, scoring-weight, or auto-ticket changes cite the report as
+evidence — per the parity port's decision, RULE-006/031–034 stay off auto-ticket
+until their measured rate supports turning it on.
+
 ## Pre-deploy plan analysis
 
 `scripts/risk-plan` (`npm run risk:plan -- plan.json`) reads a `terraform

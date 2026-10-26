@@ -52,3 +52,12 @@ export { globMatch } from './glob';
 export { extractRulePath, type RulePath } from './rule-path';
 export { pathLikelihood, type PathLikelihood, type PathLikelihoodFactors } from './likelihood';
 export { forecastSeries, type Forecast, type ForecastProjection } from './forecast';
+export {
+  buildRuleQuality,
+  RULE_QUALITY_MIN_HANDLED,
+  RULE_QUALITY_RELIABLE_DISMISSAL_RATE,
+  RULE_QUALITY_NOISY_DISMISSAL_RATE,
+  type RuleQuality,
+  type RuleQualityVerdict,
+  type RuleStatusCounts,
+} from './rule-quality';
