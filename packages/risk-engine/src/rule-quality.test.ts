@@ -59,3 +59,21 @@ describe('buildRuleQuality', () => {
     expect(RULE_QUALITY_MIN_HANDLED).toBeGreaterThan(1);
   });
 });
+
+describe('corroboration rate', () => {
+  it('publishes corroborated / labeled once the sample is big enough', () => {
+    const [quality] = buildRuleQuality({
+      'RULE-002': { open: 0, suppressed: 1, resolved: 9, corroborated: 6, labeled: 10 },
+    });
+    expect(quality.corroborationRate).toBe(0.6);
+  });
+
+  it('stays null below the minimum label volume or without labels', () => {
+    const [small] = buildRuleQuality({
+      'RULE-002': { open: 0, suppressed: 0, resolved: 3, corroborated: 3, labeled: 4 },
+    });
+    expect(small.corroborationRate).toBeNull();
+    const [unlabeled] = buildRuleQuality({ 'RULE-002': { open: 2, suppressed: 0, resolved: 0 } });
+    expect(unlabeled.corroborationRate).toBeNull();
+  });
+});

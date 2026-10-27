@@ -11,6 +11,7 @@ import {
   type ScenarioStepResult,
 } from '@khalifa/risk-engine';
 import { getApiNeptuneClient } from '../services/api-dependencies';
+import { graphCoverage } from '../services/coverage';
 import type { AttackScenarioDetail, AttackScenarioRunResponse } from '../types';
 
 const neptuneClient = getApiNeptuneClient();
@@ -104,6 +105,7 @@ export async function runAttackScenario(req: Request, res: Response): Promise<vo
     matchedSteps: steps.filter((step) => step.matchedPaths > 0).length,
     totalSteps: steps.length,
     steps,
+    coverage: await graphCoverage(neptuneClient),
   };
   res.json(body);
 }

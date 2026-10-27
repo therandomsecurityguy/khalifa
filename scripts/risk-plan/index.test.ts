@@ -34,6 +34,7 @@ describe('runRiskPlan', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.output).toContain('RULE-002 Security Groups Open to the Internet on SSH/RDP');
+    expect(result.output).toContain('Coverage: Evaluated from the plan');
     expect(result.output).toContain(
       'RULE-006 Cross-Account IAM Trust with Wildcard Resource Access'
     );
@@ -66,6 +67,7 @@ describe('runRiskPlan', () => {
     expect(body.summary).toEqual({ total: 1, failing: 1 });
     expect(body.findings[0]).toMatchObject({ ruleId: 'RULE-002' });
     expect(body.minSeverity).toBe('high');
+    expect(body.coverage).toMatchObject({ level: 'plan-time' });
   });
 });
 

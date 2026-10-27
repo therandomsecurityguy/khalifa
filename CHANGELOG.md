@@ -2,6 +2,18 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Outcome labels and coverage statements
+
+### Added
+
+- **Independent-detector corroboration**: once per run the rule runner resolves the resources Security Hub / GuardDuty findings point at (`DETECTS_ON`, one bounded read capped at 5000, truncation-aware and failure-tolerant) and records `metadata.independentFinding` on created and refreshed issues — true when one of the issue's resources was flagged too, false when the complete set missed it, absent when the set was unreadable, truncated, or the rule is those detectors themselves (RULE-018/029, where corroboration would be circular). A refresh clears the label when it can no longer be determined.
+- **Real corroboration metric**: `GET /rules/quality` reads the label through the same bounded `StatusIndex` projections and publishes `corroborated`, `labeled`, and `corroborationRate = corroborated ÷ labeled` (null below five labelled issues) beside the dismissal rate; the Rules page gains a "Corroborated" column and explains that it does not change the verdict, which stays dismissal-based until the published data and a calibration decision support moving it. Auto-ticketing remains off per the P6 policy.
+- **Coverage statements**: a shared helper grades the newest SUCCEEDED `resource-inventory` collection (`fresh` ≤ 8h, `aging` ≤ 72h, `stale` beyond, `unknown` when unreadable, failure-tolerant) and `/attack-paths/simulate` and `/attack-scenarios/:id` now return it with their counts; the issue fix panel and scenario results show it, and `risk:plan` states `plan-time` coverage with the same caveat its findings carry. The predictive surfaces no longer report counts without saying how fresh the graph they read is.
+
+### Notes
+
+- Still open from the re-review (`~/Documents/Testing/plans/2026-10-27-predictive-completion.md`): event-triggered recompute (G10), freshness tempering inside scores (G9), observed-reachability v2 (remote endpoints, per-hop citation), shift-left v2 (IAM diff/Helm, CI wiring), and the long tail (UEBA breadth, EPSS/KEV, trust-center projections, per-issue risk window/SLO).
+
 ## [Unreleased] - ATT&CK mapping and adversary scenarios (P7b-2)
 
 ### Added

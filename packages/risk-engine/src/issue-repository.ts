@@ -484,7 +484,10 @@ export class DynamoDBIssueRepository {
 
   // Reads only `severity` through the status index, one partition per status.
   // Per-rule open/suppressed/resolved counts from the same bounded StatusIndex
-  // reads the severity summary uses, projecting ruleId instead of severity.
+  // reads the severity summary uses, projecting ruleId instead of severity —
+  // plus the independent-detector label the runner records on each issue
+  // (metadata.independentFinding), so the quality report can publish
+  // corroboration beside the dismissal rate.
   async getRuleStatusCounts(): Promise<Record<string, RuleStatusCounts>> {
     const counts: Record<string, RuleStatusCounts> = {};
     for (const status of ISSUE_STATUSES) {
@@ -495,8 +498,13 @@ export class DynamoDBIssueRepository {
             TableName: this.tableName,
             IndexName: 'StatusIndex',
             KeyConditionExpression: '#status = :status',
-            ProjectionExpression: '#rule_id',
-            ExpressionAttributeNames: { '#status': 'status', '#rule_id': 'ruleId' },
+            ProjectionExpression: '#rule_id, #meta.#ind',
+            ExpressionAttributeNames: {
+              '#status': 'status',
+              '#rule_id': 'ruleId',
+              '#meta': 'metadata',
+              '#ind': 'independentFinding',
+            },
             ExpressionAttributeValues: { ':status': status },
             ExclusiveStartKey: exclusiveStartKey,
           })
@@ -504,8 +512,16 @@ export class DynamoDBIssueRepository {
         for (const item of result.Items || []) {
           const ruleId = item.ruleId as string;
           if (!ruleId) continue;
-          counts[ruleId] ??= { open: 0, suppressed: 0, resolved: 0 };
+          counts[ruleId] ??= { open: 0, suppressed: 0, resolved: 0, corroborated: 0, labeled: 0 };
           counts[ruleId][status] += 1;
+          const label = (item.metadata as { independentFinding?: unknown } | undefined)
+            ?.independentFinding;
+          if (label === true) {
+            counts[ruleId].corroborated = (counts[ruleId].corroborated ?? 0) + 1;
+            counts[ruleId].labeled = (counts[ruleId].labeled ?? 0) + 1;
+          } else if (label === false) {
+            counts[ruleId].labeled = (counts[ruleId].labeled ?? 0) + 1;
+          }
         }
         exclusiveStartKey = result.LastEvaluatedKey;
       } while (exclusiveStartKey);
