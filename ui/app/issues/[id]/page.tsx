@@ -201,6 +201,38 @@ function FixSimulation({ ruleId }: { ruleId: string }) {
   );
 }
 
+// The curated ATT&CK techniques this rule's findings are a step of.
+function AttackTechniquesCard({ detail }: { detail: IssueDetail }) {
+  const raw = detail.metadata?.attackTechniques;
+  const techniques = Array.isArray(raw)
+    ? (raw as Array<{ id?: unknown; name?: unknown; tactic?: unknown }>).filter(
+        (technique): technique is { id: string; name?: unknown; tactic?: unknown } =>
+          !!technique && typeof technique.id === 'string'
+      )
+    : [];
+  if (techniques.length === 0) return null;
+  return (
+    <Card
+      title="ATT&CK techniques"
+      description="What this finding can be a step of, per the curated rule mapping."
+    >
+      <ul className="space-y-2 text-sm">
+        {techniques.map((technique) => (
+          <li key={technique.id} className="flex flex-wrap items-baseline justify-between gap-3">
+            <span className="font-medium text-gray-900">
+              {technique.id}
+              {typeof technique.name === 'string' ? ` · ${technique.name}` : ''}
+            </span>
+            {typeof technique.tactic === 'string' && (
+              <span className="text-xs text-gray-500">{technique.tactic}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 // Customer threat-intel matches recorded on the issue (anomaly source IPs and
 // trusted external accounts on the customer's own lists).
 function ThreatIntelMatches({ detail }: { detail: IssueDetail }) {
@@ -620,6 +652,7 @@ export default function IssueDetailPage() {
             <StatusDetails issue={detail} />
 
             <ThreatIntelMatches detail={detail} />
+            <AttackTechniquesCard detail={detail} />
 
             {detail.metadata?.scoringFactors != null && (
               <Card title="Scoring factors">

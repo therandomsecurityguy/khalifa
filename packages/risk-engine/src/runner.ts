@@ -17,6 +17,7 @@ import type {
 import { extractRulePath, type RulePath } from './rule-path';
 import { pathLikelihood } from './likelihood';
 import { pathIndicators, ThreatIndicatorStore, type ThreatIndicator } from './threat-intel';
+import { techniquesForRule } from './attack-techniques';
 
 // Neptune Serverless rejects every path query with MemoryLimitExceededException
 // for a minute or two after a burst of heavy ones (measured 2026-09-19: the same
@@ -394,6 +395,7 @@ export class RiskRuleRunner {
         environment: riskInput.environment,
         matchCount,
         ...(threatIntel.length > 0 ? { threatIntelMatches: threatIntel } : {}),
+        attackTechniques: techniquesForRule(rule.id),
       },
     };
   }
@@ -446,6 +448,7 @@ export class RiskRuleRunner {
           environment: riskInput.environment,
           matchCount,
           lastRefreshedAt: updatedAt,
+          attackTechniques: techniquesForRule(rule.id),
         },
         threatIntel
       ),

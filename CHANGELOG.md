@@ -2,6 +2,17 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - ATT&CK mapping and adversary scenarios (P7b-2)
+
+### Added
+
+- **Curated MITRE ATT&CK mapping for the rule catalogue**: `attack-techniques.ts` (risk-engine) pins a reviewed technique set (ids, names, tactics) to every rule — the framework-citations pattern, with a test that every rule is mapped, every technique is known, and ids are well-formed, so drift fails CI. Techniques ride on `GET /rules`/`/rules/:id`, on each issue's metadata (`attackTechniques`), and as an "ATT&CK techniques" card on the issue page.
+- **Graph-only adversary scenarios**: three curated chains of existing rules (`leaked-credential-to-data`, `internet-to-admin`, `cicd-to-cloud-takeover`) whose steps name the rule that would be that step's evidence. `GET /attack-scenarios` lists them with resolved technique objects and rule names; `GET /attack-scenarios/:id` (Viewer + expensive-query limiter) re-runs each step's rule query against the live graph — deduped, capped at 200 paths per step with `truncated` flagged — and reports the matched path count and first resources per step, the matched-step total, and per-step errors while the remaining steps still run (only an all-steps failure is a 500). Nothing is executed and no AWS call is made; the "Adversary scenarios" page under Inventory runs one on demand and says so.
+
+### Notes
+
+- P7b is now complete. Executing scenarios against real AWS (red-team tooling) is explicitly out of scope for this repository — it is read-only detection, and live execution would need sandbox accounts and blast-radius approvals; scenario results are attribution over collected evidence, labelled as such.
+
 ## [Unreleased] - Threat-intelligence matching (P7b-1)
 
 ### Added

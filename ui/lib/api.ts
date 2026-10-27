@@ -18,6 +18,8 @@ import type {
   ResourceGraph,
   ResourceSearchResponse,
   AttackPathSimulationResponse,
+  AttackScenarioDetail,
+  AttackScenarioRunResponse,
   RuleQualityResponse,
   SecretDetail,
   SecretInventory,
@@ -330,6 +332,19 @@ export function getSecretReaderCounts(options: RequestOptions = {}): Promise<Sec
 
 export function getSecret(arn: string, options: RequestOptions = {}): Promise<SecretDetail> {
   return request(`/secrets/${encodeURIComponent(arn)}`, options);
+}
+
+export function listAttackScenarios(
+  options: RequestOptions = {}
+): Promise<{ scenarios: AttackScenarioDetail[] }> {
+  return request('/attack-scenarios', options);
+}
+
+export function runAttackScenario(
+  id: string,
+  options: RequestOptions = {}
+): Promise<AttackScenarioRunResponse> {
+  return request(`/attack-scenarios/${encodeURIComponent(id)}`, options);
 }
 
 export function getRuleQuality(options: RequestOptions = {}): Promise<RuleQualityResponse> {

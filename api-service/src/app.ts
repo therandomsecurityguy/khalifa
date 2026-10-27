@@ -9,6 +9,7 @@ import {
   getIssueSchedule,
 } from './routes/issues';
 import { listAccounts, searchAttackPaths, simulateAttackPaths } from './routes/attack-paths';
+import { listAttackScenarios, runAttackScenario } from './routes/attack-scenarios';
 import { getDataSources } from './routes/data-sources';
 import {
   getResource,
@@ -124,6 +125,8 @@ app.get('/issues/:id', requireViewer, getIssue);
 
 app.get('/attack-paths/search', requireViewer, expensiveRateLimiter, searchAttackPaths);
 app.get('/attack-paths/simulate', requireViewer, expensiveRateLimiter, simulateAttackPaths);
+app.get('/attack-scenarios', requireViewer, listAttackScenarios);
+app.get('/attack-scenarios/:id', requireViewer, expensiveRateLimiter, runAttackScenario);
 app.get('/accounts', requireViewer, listAccounts);
 app.get('/data-sources', requireViewer, expensiveRateLimiter, getDataSources);
 app.get('/secrets', requireViewer, expensiveRateLimiter, listSecrets);

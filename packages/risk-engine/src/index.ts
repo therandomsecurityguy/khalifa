@@ -64,6 +64,24 @@ export {
   type ThreatIndicatorType,
 } from './threat-intel';
 export {
+  ATTACK_TECHNIQUES,
+  RULE_TECHNIQUES,
+  techniquesForRule,
+  type AttackTechnique,
+} from './attack-techniques';
+export {
+  ATTACK_SCENARIOS,
+  getAttackScenario,
+  scenarioTechniques,
+  stepResources,
+  SCENARIO_MATCH_CAP,
+  SCENARIO_RESOURCE_CAP,
+  type AttackScenario,
+  type ScenarioRun,
+  type ScenarioStep,
+  type ScenarioStepResult,
+} from './attack-scenarios';
+export {
   buildRuleQuality,
   RULE_QUALITY_MIN_HANDLED,
   RULE_QUALITY_RELIABLE_DISMISSAL_RATE,
