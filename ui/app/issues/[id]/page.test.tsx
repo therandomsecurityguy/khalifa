@@ -221,6 +221,10 @@ describe('IssuePage fix simulation', () => {
       ruleName: 'IAM User with Active Access Key Older Than 90 Days',
       totalPaths: 3,
       truncated: false,
+      coverage: {
+        level: 'aging',
+        note: 'Newest complete collection 30h ago; treat the counts as aging evidence.',
+      },
       edges: [
         {
           id: 'e1',
@@ -255,6 +259,20 @@ describe('IssuePage fix simulation', () => {
       within(card).getByText(/clears 1 of 3 matched paths · worst likelihood 20%/)
     ).toBeInTheDocument();
     expect(within(card).getAllByRole('listitem')[0]).toHaveTextContent('HAS_ACCESS_KEY');
+    expect(within(card).getByText(/treat the counts as aging evidence/)).toBeInTheDocument();
+  });
+
+  it('labels the graph coverage when the issue was scored', async () => {
+    mockedIssue.mockResolvedValue({
+      ...detail(),
+      metadata: { ...detail().metadata, coverageLevel: 'stale' },
+    });
+
+    render(<IssuePage />);
+
+    expect(await screen.findByTestId('coverage-level')).toHaveTextContent(
+      'Graph coverage when scored: stale — the path likelihood is tempered down.'
+    );
   });
 
   it('says when no single edge clears a matched path', async () => {

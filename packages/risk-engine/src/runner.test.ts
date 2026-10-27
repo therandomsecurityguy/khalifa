@@ -882,3 +882,73 @@ describe('RiskRuleRunner one issue per problem', () => {
     });
   });
 });
+
+describe('graph coverage tempering', () => {
+  function element(id: string, label: string) {
+    const { t } = Gremlin.process;
+    return new Map<unknown, unknown>([
+      [t.id, id],
+      [t.label, label],
+    ]);
+  }
+
+  it('grades the newest completed collection into a level', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const now = new Date('2026-10-27T12:00:00Z');
+    const neptune = (runner as any).neptuneClient;
+
+    neptune.executeQuery = jest
+      .fn()
+      .mockResolvedValue(['2026-10-27T11:00:00Z', '2026-10-20T00:00:00Z']);
+    await expect((runner as any).loadCoverageLevel(now)).resolves.toBe('fresh');
+
+    neptune.executeQuery = jest.fn().mockResolvedValue(['2026-10-20T00:00:00Z']);
+    await expect((runner as any).loadCoverageLevel(now)).resolves.toBe('stale');
+
+    neptune.executeQuery = jest.fn().mockResolvedValue([]);
+    await expect((runner as any).loadCoverageLevel(now)).resolves.toBe('unknown');
+  });
+
+  it('stays tolerant when the coverage read fails', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    (runner as any).neptuneClient.executeQuery = jest.fn().mockRejectedValue(new Error('down'));
+
+    await expect((runner as any).loadCoverageLevel()).resolves.toBe('unknown');
+    warn.mockRestore();
+  });
+
+  it("tempers a stale run's likelihood and stamps the level on issue metadata", async () => {
+    const { Path } = Gremlin.structure;
+    const instanceArn = 'arn:aws:ec2:us-west-2:111122223333:instance/i-stale';
+    const runner = new RiskRuleRunner('localhost:8182');
+    (runner as any).coverageLevel = 'stale';
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest
+      .fn()
+      .mockResolvedValue([new Path(['i'], [element(instanceArn, 'Ec2Instance')])]);
+    store.getIssueByRuleAndResources = jest.fn().mockResolvedValue(null);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+    let created: Issue | undefined;
+    store.createIssue = jest.fn().mockImplementation(async (issue: Issue) => {
+      created = issue;
+      return true;
+    });
+
+    await runner.runRule({
+      id: 'RULE-001',
+      name: 'Coverage host rule',
+      description: 'test',
+      severityHint: 'critical',
+      riskFactors: [],
+      gremlinQueryTemplate: 'g.V()',
+      ownerTeam: 'cloud-security',
+      enabled: true,
+      autoTicketConfig: { enabled: false },
+    });
+
+    expect(created?.metadata.likelihoodFactors).toMatchObject({ coverage: 0.5 });
+    expect(created?.metadata.coverageLevel).toBe('stale');
+  });
+});

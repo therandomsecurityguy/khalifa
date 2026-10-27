@@ -3,9 +3,10 @@ import type { GraphVertex } from '../types';
 
 const searchAttackPaths = jest.fn();
 const getTrustedPrincipals = jest.fn();
+const listCollectionCoverage = jest.fn();
 
 jest.mock('../services/api-dependencies', () => ({
-  getApiNeptuneClient: () => ({ searchAttackPaths, getTrustedPrincipals }),
+  getApiNeptuneClient: () => ({ searchAttackPaths, getTrustedPrincipals, listCollectionCoverage }),
 }));
 
 let route: typeof import('../routes/attack-paths');
@@ -31,6 +32,7 @@ describe('GET /attack-paths/search', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getTrustedPrincipals.mockResolvedValue([]);
+    listCollectionCoverage.mockResolvedValue([]);
   });
 
   it('accepts only the preset starts and targets and a 12-digit account', async () => {
@@ -225,6 +227,28 @@ describe('GET /attack-paths/search', () => {
       privilege: 0.5,
       exploitability: 0.5,
       reachability: 1,
+      coverage: 1,
     });
+    // No coverage recorded is labelled, not discounted.
+    expect(res.body.coverage).toMatchObject({ level: 'unknown' });
+  });
+
+  it('tempers every path when the newest collection is stale, and says so', async () => {
+    const ec2 = v('i', 'Ec2Instance', { is_internet_exposed: true });
+    searchAttackPaths.mockResolvedValue([{ nodes: [ec2], edges: [] }]);
+    listCollectionCoverage.mockResolvedValue([
+      v('coverage', 'CollectionCoverage', {
+        service: 'resource-inventory',
+        status: 'SUCCEEDED',
+        completed_at: new Date(Date.now() - 100 * 3_600_000).toISOString(),
+      }),
+    ]);
+
+    const res = await call({ from: 'internet', to: 'crown' });
+
+    // 0.25 over a fresh graph, halved by a stale one.
+    expect(res.body.paths[0].likelihood).toBe(0.125);
+    expect(res.body.paths[0].likelihoodFactors.coverage).toBe(0.5);
+    expect(res.body.coverage.level).toBe('stale');
   });
 });

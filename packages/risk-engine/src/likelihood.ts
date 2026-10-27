@@ -1,3 +1,4 @@
+import { coverageFactor, type CoverageLevel } from './coverage';
 import type { RiskScoreInput } from './types';
 
 // Explainable v1 path likelihood: the product of four independent 0..1
@@ -18,6 +19,13 @@ export interface PathLikelihoodFactors {
    * vertex says exposure or state could not be read.
    */
   reachability: number;
+  /**
+   * 1 when the graph is fresh (or no level was provided), 0.8 when aging,
+   * 0.5 when stale: a prediction over evidence older than the collector
+   * cadence should not read as confident. `unknown` coverage is labelled on
+   * the surface rather than discounted — see coverage.ts.
+   */
+  coverage: number;
 }
 
 export interface PathLikelihood {
@@ -44,7 +52,10 @@ const PRIVILEGE: Record<NonNullable<RiskScoreInput['identityBlastRadius']>['type
 // with a known exploit and more likely than a scoped one.
 const UNKNOWN = 0.5;
 
-export function pathLikelihood(input: RiskScoreInput): PathLikelihood {
+export function pathLikelihood(
+  input: RiskScoreInput,
+  coverageLevel?: CoverageLevel
+): PathLikelihood {
   const exposure = EXPOSURE[input.exposureLevel];
   const privilege = input.identityBlastRadius ? PRIVILEGE[input.identityBlastRadius.type] : UNKNOWN;
 
@@ -61,8 +72,13 @@ export function pathLikelihood(input: RiskScoreInput): PathLikelihood {
   // confidence becomes observed AND configured, and observation wins.
   const reachability = input.reachabilityObserved ? 1 : input.reachabilityRestricted ? UNKNOWN : 1;
 
+  // Freshness tempering: the same path over a stale graph is less plausible
+  // evidence, so the level scales the product and rides along in the factors.
+  const coverage = coverageFactor(coverageLevel);
+
   return {
-    value: Math.round(exposure * privilege * exploitability * reachability * 10000) / 10000,
-    factors: { exposure, privilege, exploitability, reachability },
+    value:
+      Math.round(exposure * privilege * exploitability * reachability * coverage * 10000) / 10000,
+    factors: { exposure, privilege, exploitability, reachability, coverage },
   };
 }

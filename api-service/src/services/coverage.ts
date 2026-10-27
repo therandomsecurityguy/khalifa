@@ -1,11 +1,17 @@
+import {
+  COVERAGE_AGING_HOURS,
+  COVERAGE_FRESH_HOURS,
+  coverageLevelForAge,
+  type CoverageLevel,
+} from '@khalifa/risk-engine';
 import type { GraphVertex } from '../types';
 
 // Every predictive surface states how fresh the graph it read is, so a
 // count computed from a days-old collection cannot look confident. The
-// thresholds follow the collector cadence: fresh is one collection window
-// (two runs' worth, matching the compliance engine's COLLECTION_MAX_AGE_MS),
-// aging is three days, stale is beyond that.
-export type CoverageLevel = 'fresh' | 'aging' | 'stale' | 'unknown';
+// thresholds and levels are shared with the likelihood they temper
+// (@khalifa/risk-engine coverage.ts) so grading never drifts.
+export type { CoverageLevel };
+export { COVERAGE_AGING_HOURS, COVERAGE_FRESH_HOURS };
 
 export interface CoverageStatement {
   level: CoverageLevel;
@@ -13,9 +19,6 @@ export interface CoverageStatement {
   ageHours?: number;
   note: string;
 }
-
-export const COVERAGE_FRESH_HOURS = 8;
-export const COVERAGE_AGING_HOURS = 72;
 
 export function coverageFromVertices(
   coverage: GraphVertex[],
@@ -40,12 +43,7 @@ export function coverageFromVertices(
 
   const latest = new Date(Math.max(...completions));
   const ageHours = Math.round(((now.getTime() - latest.getTime()) / 3_600_000) * 10) / 10;
-  const level: CoverageLevel =
-    ageHours <= COVERAGE_FRESH_HOURS
-      ? 'fresh'
-      : ageHours <= COVERAGE_AGING_HOURS
-        ? 'aging'
-        : 'stale';
+  const level = coverageLevelForAge(Math.max(0, ageHours));
   const note =
     level === 'fresh'
       ? `Newest complete collection ${ageHours}h ago.`

@@ -41,6 +41,7 @@ describe('AttackScenariosPage', () => {
       name: 'Internet exposure to admin',
       matchedSteps: 1,
       totalSteps: 2,
+      coverage: { level: 'fresh', note: 'Newest complete collection 1.2h ago.' },
       steps: [
         {
           ruleId: 'RULE-002',
@@ -76,5 +77,6 @@ describe('AttackScenariosPage', () => {
     expect(within(card).getByText(/3 matched paths/)).toBeInTheDocument();
     expect(within(card).getByText('no matches')).toBeInTheDocument();
     expect(within(card).getByText(/Graph-only/)).toBeInTheDocument();
+    expect(within(card).getByText(/Newest complete collection 1.2h ago/)).toBeInTheDocument();
   });
 });

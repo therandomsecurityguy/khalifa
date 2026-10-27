@@ -116,6 +116,9 @@ export async function searchAttackPaths(req: Request, res: Response): Promise<vo
       return true;
     });
     let truncated = failures.length > 0 || results.some((result) => result.length >= limit);
+    // A stale graph tempers the likelihood of every path it yielded, and the
+    // statement travels with the results (same as simulate and scenarios).
+    const coverage = await graphCoverage(neptuneClient);
     // Same scoring as the rule runner, so the explorer and Issues agree on
     // severity and on the path likelihood.
     const paths = found
@@ -123,7 +126,7 @@ export async function searchAttackPaths(req: Request, res: Response): Promise<vo
       .map((path) => {
         const riskInput = riskInputFromPath(path.nodes);
         const { score, severity } = computeRiskScore(riskInput);
-        const likelihood = pathLikelihood(riskInput);
+        const likelihood = pathLikelihood(riskInput, coverage.level);
         return {
           ...path,
           score,
@@ -164,7 +167,7 @@ export async function searchAttackPaths(req: Request, res: Response): Promise<vo
       })
     );
 
-    res.json({ from, to, maxPathLength: maxLen, paths, entries, truncated });
+    res.json({ from, to, maxPathLength: maxLen, paths, entries, truncated, coverage });
   } catch (error) {
     if (
       error instanceof Error &&
@@ -209,6 +212,7 @@ export async function simulateAttackPaths(req: Request, res: Response): Promise<
       });
     const truncated = paths.length > MAX_SIMULATION_PATHS;
     const bounded = paths.slice(0, MAX_SIMULATION_PATHS);
+    const coverage = await graphCoverage(neptuneClient);
 
     const byEdge = new Map<
       string,
@@ -222,7 +226,7 @@ export async function simulateAttackPaths(req: Request, res: Response): Promise<
       }
     >();
     for (const path of bounded) {
-      const likelihood = pathLikelihood(riskInputFromPath(path.vertices)).value;
+      const likelihood = pathLikelihood(riskInputFromPath(path.vertices), coverage.level).value;
       const edgeCount = Math.min(path.edges.length, path.vertices.length - 1);
       for (let index = 0; index < edgeCount; index++) {
         const edge = path.edges[index];
@@ -248,7 +252,7 @@ export async function simulateAttackPaths(req: Request, res: Response): Promise<
       ruleName: rule.name,
       totalPaths: bounded.length,
       truncated,
-      coverage: await graphCoverage(neptuneClient),
+      coverage,
       edges: [...byEdge.values()]
         .sort((a, b) => b.pathsUsing - a.pathsUsing || b.worstLikelihood - a.worstLikelihood)
         .slice(0, MAX_SIMULATION_EDGES)

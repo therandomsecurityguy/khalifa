@@ -169,12 +169,26 @@ A scheduled Lambda (`lambdas/least-privilege-sweep`) runs daily (03:00 UTC, afte
 ## Path likelihood and fix simulation
 
 Beyond severity, every matched path carries an explainable **likelihood**: the
-product of four visible factors — exposure, privilege (identity blast radius),
-exploitability (Amazon Inspector CVSS/exploit data) and reachability (halved
-when a vertex says its exposure or state could not be read). Unknown detail is
-a mid-value, not zero, and the factors are persisted with the value (issue
+product of five visible factors — exposure, privilege (identity blast radius),
+exploitability (Amazon Inspector CVSS/exploit data), reachability (halved
+when a vertex says its exposure or state could not be read) and **coverage**,
+the freshness of the graph the path was read from. Unknown detail is a
+mid-value, not zero, and the factors are persisted with the value (issue
 metadata, attack-path search results) so a ranking can be argued with; it is a
 v1 heuristic, calibrated against outcomes only in a later phase.
+
+Freshness tempering is deterministic and shared: the collector cadence grades
+coverage (`fresh` ≤ 8h, `aging` ≤ 72h, `stale` beyond — the levels and
+thresholds live in `packages/risk-engine/src/coverage.ts`, one source of truth
+for the API statements, the runner and the plan report) and the level scales
+the likelihood — `aging` × 0.8, `stale` × 0.5. `unknown` (no collection
+recorded, or a failed read) is deliberately **not** discounted: the surfaces
+label it in words instead, so a fresh install is not punished, while a graph
+that is provably old can never look confident. The rule runner resolves the
+level once per run (newest `CollectionCoverage` SUCCEEDED completion, bounded
+and failure-tolerant) and stamps `metadata.coverageLevel` on every issue it
+creates or refreshes; the explorer, the fix panel and the scenario runner each
+attach the statement — and show its note — beside their results.
 
 `GET /attack-paths/simulate?ruleId=…` re-runs one rule against the live graph
 (bounded at 200 paths / 10 edges) and counts, per edge on the matched paths,
@@ -211,7 +225,7 @@ corroboration**: once per run it resolves the resources Security Hub /
 GuardDuty findings point at (`DETECTS_ON`, one bounded read, truncation-aware,
 failure-tolerant) and records `metadata.independentFinding` — true when one of
 the issue's resources was flagged too, false when the complete set missed it,
-absent when the set was unreadable, truncated, or the rule *is* those detectors
+absent when the set was unreadable, truncated, or the rule _is_ those detectors
 (RULE-018/029). `/rules/quality` publishes `corroborationRate =
 corroborated ÷ labeled` once at least five issues are labelled, and the verdict
 deliberately stays dismissal-based until that data and a calibration decision
@@ -408,7 +422,7 @@ the gate.
 | `ConfigRule`                | Config              | `arn`                                                                                                                                                              |
 | `GuardDutyDetector`         | GuardDuty           | `arn`, `status`                                                                                                                                                    |
 | `AccessAnalyzer`            | IAM Access Analyzer | `arn`                                                                                                                                                              |
-| `LambdaFunction`            | Lambda              | `arn`, `runtime`, `role`, `is_in_vpc`, `has_internet_access`, `function_url_auth_type`, `function_url_public`, `public_invoke_policy`                             |
+| `LambdaFunction`            | Lambda              | `arn`, `runtime`, `role`, `is_in_vpc`, `has_internet_access`, `function_url_auth_type`, `function_url_public`, `public_invoke_policy`                              |
 | `LambdaAlias`               | Lambda              | `arn`                                                                                                                                                              |
 | `ApiGateway`                | API Gateway         | `arn`, `endpoint_type`                                                                                                                                             |
 | `ApiGatewayStage`           | API Gateway         | `arn`                                                                                                                                                              |
@@ -424,68 +438,68 @@ the gate.
 | `BackupPlan`                | AWS Backup          | `arn`                                                                                                                                                              |
 | `HostedZone`                | Route53             | `arn`                                                                                                                                                              |
 | `DataClassificationFinding` | DSPM Scanner        | `arn`, `pii_types`, `secret_count`, `skipped_kms`, `data_classification`, `data_class_source`, `confidence`, `classifier`                                          |
-| `Vulnerability`             | Amazon Inspector    | `cve_id`, `severity`, `cvss_base_score`, `exploit_available`, `fixed_versions`, `inspector_score`, `first_observed_at`, `last_observed_at`                        |
+| `Vulnerability`             | Amazon Inspector    | `cve_id`, `severity`, `cvss_base_score`, `exploit_available`, `fixed_versions`, `inspector_score`, `first_observed_at`, `last_observed_at`                         |
 | `EffectivePermission`       | Policy Evaluator    | `principal_arn`, `allowed_actions`, `denied_actions`, `is_admin`, `blast_radius`                                                                                   |
 | `EscalationPath`            | Policy Evaluator    | `source_arn`, `target_arn`, `risk_level`, `escalation_type`                                                                                                        |
 
 ### Edge Labels
 
-| Edge                           | Meaning                                                         |
-| ------------------------------ | --------------------------------------------------------------- |
-| `EXPOSES`                      | Internet → IGW/LB/ExternalAccount                               |
-| `CONTAINS`                     | VPC → Subnet/Instance; Account → Resource; Policy → Statement   |
-| `ATTACHED_TO`                  | ENI → Instance; IGW → VPC; IAMPrincipal → Policy                |
-| `PROTECTS`                     | SecurityGroup → NetworkInterface                                |
-| `PART_OF`                      | SecurityGroupRule → SecurityGroup                               |
-| `HAS_IAM_ROLE`                 | EC2/Lambda → IAMRole                                            |
-| `GRANTS`                       | IamPolicyStatement → Resource (non-wildcard)                    |
-| `TRUSTS`                       | IAMRole → ExternalAccount/Principal                             |
-| `OWNS`                         | Account root → Resource                                         |
-| `HAS_FINDING`                  | Account → SecurityHub/AccessAnalyzer finding                    |
-| `HAS_ACCESS_KEY`               | IamUser → AccessKey                                             |
-| `HAS_RESOURCE_POLICY`          | Secret → IamPolicyDocument                                      |
-| `DETECTS_ON`                   | SecurityHubFinding → collected resource                         |
-| `HAS_STATUS`                   | CloudTrail → CloudTrailStatus                                   |
-| `IN_SUBNET`                    | LB/NatGW → Subnet                                               |
-| `HAS_ENDPOINT`                 | VPC → VPC Endpoint                                              |
-| `HAS_NACL` / `HAS_ROUTE_TABLE` | VPC → NACL/RouteTable                                           |
-| `MEMBER_OF`                    | IamUser → IamGroup                                              |
+| Edge                           | Meaning                                                             |
+| ------------------------------ | ------------------------------------------------------------------- |
+| `EXPOSES`                      | Internet → IGW/LB/ExternalAccount                                   |
+| `CONTAINS`                     | VPC → Subnet/Instance; Account → Resource; Policy → Statement       |
+| `ATTACHED_TO`                  | ENI → Instance; IGW → VPC; IAMPrincipal → Policy                    |
+| `PROTECTS`                     | SecurityGroup → NetworkInterface                                    |
+| `PART_OF`                      | SecurityGroupRule → SecurityGroup                                   |
+| `HAS_IAM_ROLE`                 | EC2/Lambda → IAMRole                                                |
+| `GRANTS`                       | IamPolicyStatement → Resource (non-wildcard)                        |
+| `TRUSTS`                       | IAMRole → ExternalAccount/Principal                                 |
+| `OWNS`                         | Account root → Resource                                             |
+| `HAS_FINDING`                  | Account → SecurityHub/AccessAnalyzer finding                        |
+| `HAS_ACCESS_KEY`               | IamUser → AccessKey                                                 |
+| `HAS_RESOURCE_POLICY`          | Secret → IamPolicyDocument                                          |
+| `DETECTS_ON`                   | SecurityHubFinding → collected resource                             |
+| `HAS_STATUS`                   | CloudTrail → CloudTrailStatus                                       |
+| `IN_SUBNET`                    | LB/NatGW → Subnet                                                   |
+| `HAS_ENDPOINT`                 | VPC → VPC Endpoint                                                  |
+| `HAS_NACL` / `HAS_ROUTE_TABLE` | VPC → NACL/RouteTable                                               |
+| `MEMBER_OF`                    | IamUser → IamGroup                                                  |
 | `CAN_ESCALATE_TO`              | IAMPrincipal → IAMRole (assume hops, or a `pass_role` compute link) |
-| `SHARES_WITH`                  | IamPolicyStatement → AwsAccount (cross-account share)           |
-| `BELONGS_TO`                   | ContainerImage → EcrRepository                                  |
-| `RUNS_ON`                      | ContainerImage → workload (not yet created)                     |
-| `HAS_CVE`                      | Instance/Lambda/ContainerImage → Vulnerability (Inspector)      |
-| `HAS_ALIAS` / `HAS_STAGE`      | Function → Alias/Stage                                          |
-| `CLASSIFIES`                   | DataClassificationFinding → S3Bucket/RdsInstance/LambdaFunction |
+| `SHARES_WITH`                  | IamPolicyStatement → AwsAccount (cross-account share)               |
+| `BELONGS_TO`                   | ContainerImage → EcrRepository                                      |
+| `RUNS_ON`                      | ContainerImage → workload (not yet created)                         |
+| `HAS_CVE`                      | Instance/Lambda/ContainerImage → Vulnerability (Inspector)          |
+| `HAS_ALIAS` / `HAS_STAGE`      | Function → Alias/Stage                                              |
+| `CLASSIFIES`                   | DataClassificationFinding → S3Bucket/RdsInstance/LambdaFunction     |
 
 ### Risk Rule Properties (queried by Gremlin rules)
 
-| Property                                         | Type             | Source                              |
-| ------------------------------------------------ | ---------------- | ----------------------------------- |
-| `is_internet_exposed`                            | boolean          | Collector exposure derivation       |
-| `is_publicly_accessible`                         | boolean          | S3/RDS direct fetch                 |
-| `is_in_vpc`                                      | boolean          | Lambda VPC config                   |
-| `has_internet_access`                            | boolean          | Lambda VPC config (inverse)         |
-| `crown_jewel`                                    | boolean          | `crown_jewel` tag                   |
-| `data_classification`                            | string           | `data_classification` tag           |
-| `env`                                            | string           | `env` or `environment` tag          |
-| `has_cross_account_trust`                        | boolean          | IAM trust analysis                  |
-| `has_wildcard_resource`                          | boolean          | IAM policy statement analysis       |
-| `has_wildcard_action`                            | boolean          | IAM policy statement analysis       |
-| `grants_secret_read` / `secret_grant_scope`      | boolean / string | IAM policy statement analysis       |
-| `mfa_enabled` / `password_enabled`               | boolean          | IAM MFA devices and login profiles  |
-| `key_age_days` / `last_used_days_ago`            | number           | IAM access key collection           |
-| `endpoint_public_access` / `endpoint_world_open` | boolean          | EKS `resourcesVpcConfig`            |
-| `function_url_public` / `public_invoke_policy`   | boolean          | Lambda function URLs and invoke policies |
-| `cvss_base_score` / `exploit_available`          | number / boolean | Amazon Inspector finding (RULE-003, risk scoring) |
-| `lambda_exposure_restricted`                     | boolean          | Lambda reads the collector role cannot make  |
-| `principal_is_anyone` / `principal_account_count` | boolean / number | IAM policy statement principal analysis |
-| `principal_org_restricted`                       | boolean          | `aws:PrincipalOrgID` condition on a statement |
-| `is_prod`                                        | boolean          | `PROD_ACCOUNT_IDS` account marking  |
-| `traffic_observed` / `traffic_observed_at`       | boolean / string | Flow-log analyzer observation, read by the collector |
-| `anomaly_type`                                   | string           | CloudTrail analyzer anomaly queries |
-| `port_from` / `port_to`                          | number           | Security group rule                 |
-| `flow_logs_enabled`                              | boolean          | EC2 DescribeFlowLogs                |
+| Property                                          | Type             | Source                                               |
+| ------------------------------------------------- | ---------------- | ---------------------------------------------------- |
+| `is_internet_exposed`                             | boolean          | Collector exposure derivation                        |
+| `is_publicly_accessible`                          | boolean          | S3/RDS direct fetch                                  |
+| `is_in_vpc`                                       | boolean          | Lambda VPC config                                    |
+| `has_internet_access`                             | boolean          | Lambda VPC config (inverse)                          |
+| `crown_jewel`                                     | boolean          | `crown_jewel` tag                                    |
+| `data_classification`                             | string           | `data_classification` tag                            |
+| `env`                                             | string           | `env` or `environment` tag                           |
+| `has_cross_account_trust`                         | boolean          | IAM trust analysis                                   |
+| `has_wildcard_resource`                           | boolean          | IAM policy statement analysis                        |
+| `has_wildcard_action`                             | boolean          | IAM policy statement analysis                        |
+| `grants_secret_read` / `secret_grant_scope`       | boolean / string | IAM policy statement analysis                        |
+| `mfa_enabled` / `password_enabled`                | boolean          | IAM MFA devices and login profiles                   |
+| `key_age_days` / `last_used_days_ago`             | number           | IAM access key collection                            |
+| `endpoint_public_access` / `endpoint_world_open`  | boolean          | EKS `resourcesVpcConfig`                             |
+| `function_url_public` / `public_invoke_policy`    | boolean          | Lambda function URLs and invoke policies             |
+| `cvss_base_score` / `exploit_available`           | number / boolean | Amazon Inspector finding (RULE-003, risk scoring)    |
+| `lambda_exposure_restricted`                      | boolean          | Lambda reads the collector role cannot make          |
+| `principal_is_anyone` / `principal_account_count` | boolean / number | IAM policy statement principal analysis              |
+| `principal_org_restricted`                        | boolean          | `aws:PrincipalOrgID` condition on a statement        |
+| `is_prod`                                         | boolean          | `PROD_ACCOUNT_IDS` account marking                   |
+| `traffic_observed` / `traffic_observed_at`        | boolean / string | Flow-log analyzer observation, read by the collector |
+| `anomaly_type`                                    | string           | CloudTrail analyzer anomaly queries                  |
+| `port_from` / `port_to`                           | number           | Security group rule                                  |
+| `flow_logs_enabled`                               | boolean          | EC2 DescribeFlowLogs                                 |
 
 ## Authentication
 

@@ -15,6 +15,7 @@ import type {
   Severity,
 } from './types';
 import { extractRulePath, type RulePath } from './rule-path';
+import { coverageLevelForAge, type CoverageLevel } from './coverage';
 import { pathLikelihood } from './likelihood';
 import { pathIndicators, ThreatIndicatorStore, type ThreatIndicator } from './threat-intel';
 import { techniquesForRule } from './attack-techniques';
@@ -30,6 +31,7 @@ export const RULE_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 60_000];
 // Security Hub / GuardDuty findings point at. Beyond the cap the set is
 // incomplete and issues get no label (absent, not false).
 const INDEPENDENT_FINDING_CAP = 5000;
+const COVERAGE_RECORD_CAP = 5000;
 
 // Resources listed on one issue; matchCount keeps the full number.
 const MAX_ISSUE_RESOURCES = 200;
@@ -56,6 +58,11 @@ export class RiskRuleRunner {
   // Set by runAllRules for the duration of one run; absent when runRule is
   // driven directly (tests) or the label read failed.
   private independentFindingLabels?: { resources: Set<string>; complete: boolean };
+
+  // Set by runAllRules for the duration of one run; absent when runRule is
+  // driven directly (tests). A stale or aging graph tempers every issue's
+  // path likelihood and the level is stamped on the issue metadata.
+  private coverageLevel?: CoverageLevel;
 
   async initialize(): Promise<void> {
     await this.neptuneClient.connect();
@@ -187,6 +194,7 @@ export class RiskRuleRunner {
     const results: RuleExecutionResult[] = [];
     // Resolved once per run so every issue labelled below read the same set.
     this.independentFindingLabels = await this.loadIndependentFindingLabels();
+    this.coverageLevel = await this.loadCoverageLevel();
 
     for (const rule of rules) {
       const result = await this.runRule(rule);
@@ -194,6 +202,7 @@ export class RiskRuleRunner {
     }
 
     this.independentFindingLabels = undefined;
+    this.coverageLevel = undefined;
     await this.snapshotTrends(results);
 
     return results;
@@ -218,6 +227,29 @@ export class RiskRuleRunner {
         `Independent-finding labels unavailable (${error instanceof Error ? error.message : String(error)})`
       );
       return { resources: new Set<string>(), complete: false };
+    }
+  }
+
+  // Freshness of the graph the run just read, from the collector's newest
+  // SUCCEEDED resource-inventory completion. Failure-tolerant: an unreadable
+  // or empty coverage set is 'unknown' (the surfaces label it) — never a
+  // failed run, and never silently confident.
+  private async loadCoverageLevel(now: Date = new Date()): Promise<CoverageLevel> {
+    try {
+      const rows = await this.neptuneClient.executeQuery(
+        `g.V().hasLabel('CollectionCoverage').has('service', 'resource-inventory').has('status', 'SUCCEEDED').limit(${COVERAGE_RECORD_CAP}).values('completed_at')`
+      );
+      const completions = rows
+        .map((row) => Date.parse(String(row)))
+        .filter((time) => Number.isFinite(time));
+      if (completions.length === 0) return 'unknown';
+      const ageHours = (now.getTime() - Math.max(...completions)) / 3_600_000;
+      return coverageLevelForAge(Math.max(0, ageHours));
+    } catch (error) {
+      console.warn(
+        `Collection coverage unavailable (${error instanceof Error ? error.message : String(error)})`
+      );
+      return 'unknown';
     }
   }
 
@@ -419,7 +451,7 @@ export class RiskRuleRunner {
     const now = new Date().toISOString();
     const riskInput = this.riskInputWithThreatIntel(path, threatIntel);
     const scoreResult = computeRiskScore(riskInput);
-    const likelihood = pathLikelihood(riskInput);
+    const likelihood = pathLikelihood(riskInput, this.coverageLevel);
     const independentFinding = this.independentFindingFor(rule, resources);
 
     return {
@@ -444,6 +476,7 @@ export class RiskRuleRunner {
         matchCount,
         ...(threatIntel.length > 0 ? { threatIntelMatches: threatIntel } : {}),
         ...(independentFinding !== undefined ? { independentFinding } : {}),
+        ...(this.coverageLevel ? { coverageLevel: this.coverageLevel } : {}),
         attackTechniques: techniquesForRule(rule.id),
       },
     };
@@ -475,7 +508,7 @@ export class RiskRuleRunner {
   ): Promise<Issue> {
     const riskInput = this.riskInputWithThreatIntel(path, threatIntel);
     const scoreResult = computeRiskScore(riskInput);
-    const likelihood = pathLikelihood(riskInput);
+    const likelihood = pathLikelihood(riskInput, this.coverageLevel);
     const updatedAt = new Date().toISOString();
 
     const refreshed: Issue = {
@@ -497,6 +530,7 @@ export class RiskRuleRunner {
           environment: riskInput.environment,
           matchCount,
           lastRefreshedAt: updatedAt,
+          ...(this.coverageLevel ? { coverageLevel: this.coverageLevel } : {}),
           attackTechniques: techniquesForRule(rule.id),
         },
         threatIntel,

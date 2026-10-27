@@ -1,3 +1,4 @@
+import { coverageLevelForAge } from './coverage';
 import { pathLikelihood } from './likelihood';
 import type { RiskScoreInput } from './types';
 
@@ -9,7 +10,7 @@ const base: RiskScoreInput = {
 };
 
 describe('pathLikelihood', () => {
-  it('multiplies the four factors', () => {
+  it('multiplies the five factors', () => {
     const result = pathLikelihood({
       ...base,
       exposureLevel: 'internet',
@@ -18,6 +19,7 @@ describe('pathLikelihood', () => {
     });
     expect(result.factors).toEqual({
       exposure: 1,
+      coverage: 1,
       privilege: 1,
       exploitability: 1,
       reachability: 1,
@@ -89,5 +91,58 @@ describe('pathLikelihood observed reachability', () => {
     expect(restricted.factors.reachability).toBe(0.5);
     expect(observed.factors.reachability).toBe(1);
     expect(observed.value).toBeGreaterThan(restricted.value);
+  });
+});
+
+describe('coverage tempering', () => {
+  const input: RiskScoreInput = {
+    ...base,
+    exposureLevel: 'internet',
+    identityBlastRadius: { type: 'admin', scope: 1 },
+  };
+
+  it('discounts aging and stale graphs deterministically', () => {
+    const fresh = pathLikelihood(input, 'fresh');
+    const aging = pathLikelihood(input, 'aging');
+    const stale = pathLikelihood(input, 'stale');
+
+    expect(fresh.factors.coverage).toBe(1);
+    expect(aging.factors.coverage).toBe(0.8);
+    expect(stale.factors.coverage).toBe(0.5);
+    expect(aging.value).toBeLessThan(fresh.value);
+    expect(stale.value).toBeLessThan(aging.value);
+  });
+
+  it('labels unknown coverage without discounting it, and defaults to no tempering', () => {
+    const unknown = pathLikelihood(input, 'unknown');
+    const omitted = pathLikelihood(input);
+
+    expect(unknown.factors.coverage).toBe(1);
+    expect(omitted.factors.coverage).toBe(1);
+    expect(unknown.value).toBe(omitted.value);
+  });
+
+  it('multiplies the tempered product with the other factors', () => {
+    const result = pathLikelihood(
+      { ...input, exploitability: { cvssBaseScore: 10, exploitAvailable: true } },
+      'stale'
+    );
+    expect(result.value).toBe(0.5);
+    expect(result.factors).toMatchObject({
+      exposure: 1,
+      privilege: 1,
+      exploitability: 1,
+      coverage: 0.5,
+    });
+  });
+});
+
+describe('coverageLevelForAge', () => {
+  it('grades at the collector cadence boundaries', () => {
+    expect(coverageLevelForAge(0)).toBe('fresh');
+    expect(coverageLevelForAge(8)).toBe('fresh');
+    expect(coverageLevelForAge(8.1)).toBe('aging');
+    expect(coverageLevelForAge(72)).toBe('aging');
+    expect(coverageLevelForAge(72.1)).toBe('stale');
   });
 });

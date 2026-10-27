@@ -2,6 +2,18 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Freshness tempering across risk
+
+### Changed
+
+- **Likelihood is now five factors**: exposure, privilege, exploitability, reachability and **coverage** — the freshness of the graph the path was read from. The level and thresholds move to `packages/risk-engine/src/coverage.ts` as the single source of truth (the API's coverage statements grade with the same function), and the level scales the product deterministically: `aging` × 0.8, `stale` × 0.5. `unknown` (nothing collected yet, or a failed read) is deliberately not discounted — surfaces label it in words — so a fresh install is not punished while a provably old graph can never look confident.
+- **The rule runner resolves coverage once per run** (newest SUCCEEDED `resource-inventory` `CollectionCoverage` completion, bounded at 5000 and failure-tolerant) and passes it to every path likelihood; each issue created or refreshed carries `metadata.coverageLevel`. The attack-path explorer and fix simulation temper their likelihoods the same way, and the explorer response now includes the coverage statement beside `truncated`.
+- **The UI states coverage where results appear**: the explorer shows the statement note under its results, the fix panel under the edge ranking, the scenario card after a run, and the issue page labels the graph coverage the issue was scored against ("— the path likelihood is tempered down" for aging/stale).
+
+### Notes
+
+- Still open from the re-review (`~/Documents/Testing/plans/2026-10-27-predictive-completion.md`): observed-reachability v2 (remote endpoints, per-hop citation), shift-left v2 (IAM diff/Helm, CI wiring), and the long tail (UEBA breadth, EPSS/KEV, trust-center projections, per-issue risk window/SLO).
+
 ## [Unreleased] - Event-triggered recompute
 
 ### Added
@@ -83,7 +95,7 @@ All notable changes to Khalifa.
 
 ### Changed
 
-- **AccessDenied spikes are deviations from each principal's own baseline, not a fixed count**: the analyzer now pulls per-principal-per-IP-per-*day* counts for the evaluation window plus a 30-day baseline and decides in code (testable against historical windows): a day flags when it reaches mean + 3 standard deviations of that pair's daily counts, with 10% of the mean as a floor on the spread (a perfectly steady principal is not flagged by +1) and an absolute floor of 10 events. A steady 25-denieds-per-day principal is no longer flagged at 26 (the old fixed threshold's false-positive class), and a quiet principal jumping to 12 — which the old threshold of 20 missed — is flagged. When fewer than 7 baseline days exist the previous fixed threshold applies (cold start). Each spike records `baseline_mean`, `baseline_stddev`, `baseline_days`, `basis` and `deviation`, and the principal's blast radius ranks it in scoring as before.
+- **AccessDenied spikes are deviations from each principal's own baseline, not a fixed count**: the analyzer now pulls per-principal-per-IP-per-_day_ counts for the evaluation window plus a 30-day baseline and decides in code (testable against historical windows): a day flags when it reaches mean + 3 standard deviations of that pair's daily counts, with 10% of the mean as a floor on the spread (a perfectly steady principal is not flagged by +1) and an absolute floor of 10 events. A steady 25-denieds-per-day principal is no longer flagged at 26 (the old fixed threshold's false-positive class), and a quiet principal jumping to 12 — which the old threshold of 20 missed — is flagged. When fewer than 7 baseline days exist the previous fixed threshold applies (cold start). Each spike records `baseline_mean`, `baseline_stddev`, `baseline_days`, `basis` and `deviation`, and the principal's blast radius ranks it in scoring as before.
 - **Secret-read "new source IP" is a true IP baseline**: the query joins the evaluation window's secret reads against the DISTINCT source IPs the principal used in the 30 days before it, left-joined, instead of the principal-first-seen proxy — an IP dormant for the whole baseline window and used again now counts as new, and the principal-age requirement is gone.
 
 ### Notes
@@ -412,7 +424,6 @@ All notable changes to Khalifa.
 
 - **Deletion protection for the Terraform DynamoDB tables (closes the gap left by D2 part 1)**: all six tables now set `deletion_protection_enabled`. The module previously had no deletion protection, and the plan's note that "Terraform already does this" was not accurate, so the earlier D2 change only hardened the CDK tables, which production does not use. The module test now asserts deletion protection and point-in-time recovery on every table.
 - Note: the module already declares `point_in_time_recovery { enabled = true }`, but the deployed `khalifa-*` tables report PITR disabled, so an apply is still required to reconcile that drift.
-
 
 - **Data protection and DSPM read scoping (D2 of the remediation plan, part 1)**:
   - Every CDK DynamoDB table now has point-in-time recovery and deletion protection, matching the Terraform module. Previously a stack operation or a bad delete could destroy posture history
