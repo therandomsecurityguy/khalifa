@@ -282,7 +282,6 @@
           "collection": {
             "properties": {
               "homeAccountId": { "minLength": 12 },
-              "recomputeQueueUrl": { "type": "string" },
               "incrementalQueueUrl": { "minLength": 1 }
             },
             "anyOf": [
@@ -586,8 +585,11 @@
         "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
         "retryDelayMs": { "type": "integer", "minimum": 1, "maximum": 60000 },
         "graphWriterTimeoutMs": { "type": "integer", "minimum": 1, "maximum": 300000 },
-        "recomputeQueueUrl": { "type": "string" },
         "incrementalQueueUrl": {
+          "type": "string",
+          "pattern": "^$|^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/[0-9]{12}/[A-Za-z0-9_.-]+$"
+        },
+        "recomputeQueueUrl": {
           "type": "string",
           "pattern": "^$|^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/[0-9]{12}/[A-Za-z0-9_.-]+$"
         },
