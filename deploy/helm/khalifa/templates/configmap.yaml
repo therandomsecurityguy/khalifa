@@ -75,5 +75,6 @@ data:
   GRAPH_WRITER_TIMEOUT_MS: {{ .Values.collection.graphWriterTimeoutMs | quote }}
   GRAPH_WRITER_URL: {{ printf "http://%s-graph-writer:%v" (include "khalifa.fullname" .) .Values.graphWriter.service.port | quote }}
   SQS_QUEUE_URL: {{ .Values.collection.incrementalQueueUrl | quote }}
+  RECOMPUTE_QUEUE_URL: {{ .Values.collection.recomputeQueueUrl | quote }}
   GUARDDUTY_ADMINISTRATOR_ACCOUNT_ID: {{ .Values.collection.guardDutyAdministratorAccountId | default "" | quote }}
   GUARDDUTY_FINDING_REGIONS: {{ join "," (.Values.collection.guardDutyFindingRegions | default list) | quote }}

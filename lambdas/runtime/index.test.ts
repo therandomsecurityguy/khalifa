@@ -28,6 +28,12 @@ const analyzerEnvironment = {
   ACCESS_ANALYZER_TABLE: 'AccessAnalyzerCache',
 };
 
+const recomputeEnvironment = {
+  AWS_REGION: 'us-west-2',
+  NEPTUNE_ENDPOINT: 'cluster:8182',
+  RECOMPUTE_QUEUE_URL: 'https://sqs.us-west-2.amazonaws.com/111122223333/khalifa-recompute.fifo',
+};
+
 const threatIntelEnvironment = {
   AWS_REGION: 'us-west-2',
   THREAT_INDICATORS_TABLE: 'khalifa-threat-indicators',
@@ -86,6 +92,16 @@ describe('Kubernetes runtime', () => {
     ).toThrow('GRAPH_WRITER_TOKEN is required');
     expect(() => validateRuntime('flow-log-analyzer', flowLogEnvironment)).not.toThrow();
     expect(() => validateRuntime('threat-intel-import', threatIntelEnvironment)).not.toThrow();
+    expect(() => validateRuntime('recompute-worker', recomputeEnvironment)).not.toThrow();
+    expect(() =>
+      validateRuntime('recompute-worker', { AWS_REGION: 'us-west-2', NEPTUNE_ENDPOINT: 'x' })
+    ).toThrow('RECOMPUTE_QUEUE_URL is required');
+    expect(() =>
+      validateRuntime('recompute-worker', {
+        ...recomputeEnvironment,
+        RECOMPUTE_MIN_INTERVAL_SECONDS: 'nope',
+      })
+    ).toThrow('RECOMPUTE_MIN_INTERVAL_SECONDS must be an integer between 0 and 86400');
     expect(() =>
       validateRuntime('threat-intel-import', {
         AWS_REGION: 'us-west-2',
@@ -205,6 +221,23 @@ describe('Kubernetes runtime', () => {
         importThreatIntel: failing,
       })
     ).rejects.toThrow('NoSuchKey');
+  });
+
+  it('starts the recompute worker with the signal and reports its summary', async () => {
+    const worker = jest.fn().mockResolvedValue({ messages: 2, evaluations: 1, skipped: 1 });
+    await expect(
+      runCommand('recompute-worker', recomputeEnvironment, new AbortController().signal, {
+        runRecomputeWorker: worker,
+      })
+    ).resolves.toBeUndefined();
+    expect(worker).toHaveBeenCalledWith(recomputeEnvironment, { signal: expect.any(AbortSignal) });
+
+    const failing = jest.fn().mockRejectedValue(new Error('boom'));
+    await expect(
+      runCommand('recompute-worker', recomputeEnvironment, new AbortController().signal, {
+        runRecomputeWorker: failing,
+      })
+    ).rejects.toThrow('boom');
   });
 
   it('runs the DSPM scanner once with the HTTP graph writer', async () => {

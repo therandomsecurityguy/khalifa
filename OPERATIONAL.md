@@ -14,9 +14,10 @@
 8. **cloudtrail-analyzer** - CloudTrail usage CronJob (Athena → AccessAnalyzerCache; optional anomaly nodes via graph-writer)
 9. **flow-log-analyzer** - VPC flow-log CronJob (Athena → TrafficObservations; **suspended by default**, reuses the cloudtrail-analyzer IRSA role)
 10. **threat-intel-import** - CronJob: imports customer threat-intel lists from S3 into ThreatIndicators (**suspended by default**, runs as the rule-runner service account)
-11. **dspm-scanner** - CronJob: secret scanning of S3 objects and Lambda environment variables (Macie primary, regex fallback; findings written via graph-writer)
-12. **policy-evaluator / least-privilege-sweep** - Lambdas: effective permissions, escalation paths, rightsizing
-13. **IRSA roles** - IAM roles for pod authentication to Neptune/DynamoDB/SQS
+11. **recompute-worker** - Deployment (rendered only when the recompute queue is wired): drains IAM-change signals and re-runs the policy evaluator, at most once per `RECOMPUTE_MIN_INTERVAL_SECONDS`; uses the policy-evaluator IRSA role
+12. **dspm-scanner** - CronJob: secret scanning of S3 objects and Lambda environment variables (Macie primary, regex fallback; findings written via graph-writer)
+13. **policy-evaluator / least-privilege-sweep** - Lambdas: effective permissions, escalation paths, rightsizing
+14. **IRSA roles** - IAM roles for pod authentication to Neptune/DynamoDB/SQS
 
 ### Network Flow
 
@@ -224,6 +225,21 @@ kubectl create job --from=cronjob/khalifa-rule-runner rule-runner-manual -n secu
    reputation lists need no import (GuardDuty applies them; RULE-018/RULE-029
    already consume the findings). Auto-ticketing stays off for matched issues
    until `/rules/quality` shows measured precision.
+
+### Runbook: Event-triggered recompute
+
+The recompute worker is rendered only when `collection.recomputeQueueUrl` is set
+(the complete example/Terraform wires it). It is always-on by design:
+- Producer: the incremental collector sends one message per five-minute window
+  when a batch touched IAM. Watch `Queued an event-triggered recompute` in the
+  incremental collector logs.
+- Worker: watch `Event-triggered policy evaluation complete` and
+  `Recompute skipped inside the minimum interval` in the recompute-worker pod.
+  Tune `recomputeWorker.minIntervalSeconds` (default 900) if the evaluator runs
+  too often for the graph's size.
+- Failures: an evaluation error leaves messages for SQS redelivery; three
+  receives land them in the recompute DLQ. The scheduled evaluator CronJob
+  remains the backstop if the worker is down.
 
 ## I. Graph Query Profiling
 

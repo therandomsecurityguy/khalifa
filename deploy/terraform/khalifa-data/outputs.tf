@@ -120,6 +120,7 @@ output "helm_values" {
       parentIds           = var.collection_parent_ids
       regions             = var.collection_regions
       incrementalQueueUrl = aws_sqs_queue.incremental.url
+      recomputeQueueUrl   = aws_sqs_queue.recompute.url
     }
     networkPolicies = {
       enabled = true

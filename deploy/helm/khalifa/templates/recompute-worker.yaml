@@ -1,0 +1,63 @@
+{{- if .Values.collection.recomputeQueueUrl }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "khalifa.fullname" . }}-recompute-worker
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: recompute-worker
+spec:
+  replicas: {{ .Values.recomputeWorker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "khalifa.selectorLabels" (dict "root" . "component" "recompute-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "khalifa.selectorLabels" (dict "root" . "component" "recompute-worker") | nindent 8 }}
+        {{- with .Values.recomputeWorker.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.recomputeWorker.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      # Reuses the policy-evaluator IRSA role: the worker only runs that
+      # evaluation, and the role gains receive/delete rights on the queue.
+      serviceAccountName: {{ include "khalifa.serviceAccountName" (dict "root" . "key" "policyEvaluator" "suffix" "policy-evaluator") }}
+      automountServiceAccountToken: {{ .Values.serviceAccounts.policyEvaluator.automountServiceAccountToken }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "khalifa.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- include "khalifa.topologySpreadConstraints" (dict "root" . "component" "recompute-worker") | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: recompute-worker
+          image: {{ required "recomputeWorker.image must be an immutable repository@sha256 digest" .Values.recomputeWorker.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args: ["recompute-worker"]
+          securityContext:
+            {{- include "khalifa.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: RECOMPUTE_MIN_INTERVAL_SECONDS
+              value: {{ .Values.recomputeWorker.minIntervalSeconds | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "khalifa.fullname" . }}-config
+            - configMapRef:
+                name: {{ include "khalifa.fullname" . }}-collection
+          resources:
+            {{- toYaml .Values.recomputeWorker.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}
