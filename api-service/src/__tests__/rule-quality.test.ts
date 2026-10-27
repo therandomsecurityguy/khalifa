@@ -24,7 +24,7 @@ describe('GET /rules/quality', () => {
 
   it('joins the lifecycle counts with the catalogue and ranks noisy rules first', async () => {
     getRuleStatusCounts.mockResolvedValue({
-      'RULE-006': { open: 40, suppressed: 12, resolved: 8 },
+      'RULE-006': { open: 40, suppressed: 12, resolved: 8, corroborated: 6, labeled: 10 },
       'RULE-002': { open: 3, suppressed: 1, resolved: 19 },
     });
 
@@ -45,6 +45,9 @@ describe('GET /rules/quality', () => {
       inCatalogue: true,
       handled: 20,
       dismissalRate: 0.6,
+      corroborated: 6,
+      labeled: 10,
+      corroborationRate: 0.6,
     });
     expect(res.body.thresholds).toEqual({
       minHandled: 10,

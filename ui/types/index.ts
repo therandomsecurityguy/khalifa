@@ -382,6 +382,9 @@ export interface RuleQualityItem {
   resolved: number;
   handled: number;
   dismissalRate: number | null;
+  corroborated?: number;
+  labeled?: number;
+  corroborationRate: number | null;
   verdict: 'insufficient-data' | 'reliable' | 'mixed' | 'noisy';
 }
 

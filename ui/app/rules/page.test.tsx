@@ -28,6 +28,9 @@ describe('RulesPage', () => {
           resolved: 8,
           handled: 20,
           dismissalRate: 0.6,
+          corroborated: 7,
+          labeled: 10,
+          corroborationRate: 0.7,
           verdict: 'noisy',
         },
         {
@@ -43,6 +46,9 @@ describe('RulesPage', () => {
           resolved: 19,
           handled: 20,
           dismissalRate: 0.05,
+          corroborated: 2,
+          labeled: 2,
+          corroborationRate: null,
           verdict: 'reliable',
         },
       ],
@@ -64,11 +70,13 @@ describe('RulesPage', () => {
     ).toBeInTheDocument();
     expect(within(noisy).getByText('RULE-006')).toBeInTheDocument();
     expect(within(noisy).getByText('60%')).toBeInTheDocument();
+    expect(within(noisy).getByText('70% of 10')).toBeInTheDocument();
     expect(within(noisy).getByText('Noisy')).toBeInTheDocument();
     expect(within(noisy).getByText('off')).toBeInTheDocument();
 
     const reliable = rows[1];
     expect(within(reliable).getByText('5%')).toBeInTheDocument();
+    expect(within(reliable).getAllByText('—').length).toBeGreaterThan(0);
     expect(within(reliable).getByText('Reliable')).toBeInTheDocument();
     expect(within(reliable).getByText('on')).toBeInTheDocument();
   });
@@ -78,6 +86,7 @@ describe('RulesPage', () => {
 
     const description = await screen.findByText(/noise proxy, not ground truth/);
     expect(description).toHaveTextContent('at least 10 closed issues');
+    expect(description).toHaveTextContent('independent detector');
   });
 
   it('shows the empty state before anything has closed', async () => {

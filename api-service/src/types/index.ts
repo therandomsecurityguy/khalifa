@@ -109,6 +109,7 @@ export interface AttackPathSimulationResponse {
   totalPaths: number;
   truncated: boolean;
   edges: AttackPathSimulationEdge[];
+  coverage: CoverageStatement;
 }
 
 // Metadata only: the API never returns a secret's description, tags, key ARN
@@ -230,6 +231,16 @@ export interface AttackScenarioRunResponse {
   matchedSteps: number;
   totalSteps: number;
   steps: ScenarioStepRunResult[];
+  coverage: CoverageStatement;
+}
+
+export type CoverageLevel = 'fresh' | 'aging' | 'stale' | 'unknown';
+
+export interface CoverageStatement {
+  level: CoverageLevel;
+  latestSuccessAt?: string;
+  ageHours?: number;
+  note: string;
 }
 
 export interface RuleQualityItem {
@@ -245,6 +256,11 @@ export interface RuleQualityItem {
   resolved: number;
   handled: number;
   dismissalRate: number | null;
+  /** Issues an independent detector (Security Hub / GuardDuty) corroborated. */
+  corroborated?: number;
+  /** Issues the runner could label at all. */
+  labeled?: number;
+  corroborationRate: number | null;
   verdict: 'insufficient-data' | 'reliable' | 'mixed' | 'noisy';
 }
 

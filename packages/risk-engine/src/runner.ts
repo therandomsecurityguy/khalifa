@@ -26,6 +26,11 @@ import { techniquesForRule } from './attack-techniques';
 // outlast that, so a rule waits these long before trying again.
 export const RULE_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 60_000];
 
+// Independent-detector labels: one bounded read per run of the resources
+// Security Hub / GuardDuty findings point at. Beyond the cap the set is
+// incomplete and issues get no label (absent, not false).
+const INDEPENDENT_FINDING_CAP = 5000;
+
 // Resources listed on one issue; matchCount keeps the full number.
 const MAX_ISSUE_RESOURCES = 200;
 
@@ -47,6 +52,10 @@ export class RiskRuleRunner {
       new Promise((resolve) => setTimeout(resolve, ms)),
     private readonly threatStore: ThreatIndicatorStore = new ThreatIndicatorStore()
   ) {}
+
+  // Set by runAllRules for the duration of one run; absent when runRule is
+  // driven directly (tests) or the label read failed.
+  private independentFindingLabels?: { resources: Set<string>; complete: boolean };
 
   async initialize(): Promise<void> {
     await this.neptuneClient.connect();
@@ -176,15 +185,53 @@ export class RiskRuleRunner {
   async runAllRules(): Promise<RuleExecutionResult[]> {
     const rules = getEnabledRules();
     const results: RuleExecutionResult[] = [];
+    // Resolved once per run so every issue labelled below read the same set.
+    this.independentFindingLabels = await this.loadIndependentFindingLabels();
 
     for (const rule of rules) {
       const result = await this.runRule(rule);
       results.push(result);
     }
 
+    this.independentFindingLabels = undefined;
     await this.snapshotTrends(results);
 
     return results;
+  }
+
+  // The resources an independent detector flagged (Security Hub / GuardDuty
+  // findings' DETECTS_ON targets). Failure-tolerant: an unreadable or
+  // incomplete set means no labels, never a failed run.
+  private async loadIndependentFindingLabels(): Promise<{
+    resources: Set<string>;
+    complete: boolean;
+  }> {
+    try {
+      const rows = await this.neptuneClient.executeQuery(
+        `g.V().hasLabel('SecurityHubFinding', 'GuardDutyFinding').out('DETECTS_ON').id().dedup().limit(${INDEPENDENT_FINDING_CAP + 1})`
+      );
+      const ids = rows.map((row) => String(row));
+      const complete = ids.length <= INDEPENDENT_FINDING_CAP;
+      return { resources: new Set(ids.slice(0, INDEPENDENT_FINDING_CAP)), complete };
+    } catch (error) {
+      console.warn(
+        `Independent-finding labels unavailable (${error instanceof Error ? error.message : String(error)})`
+      );
+      return { resources: new Set<string>(), complete: false };
+    }
+  }
+
+  // Whether an independent detector corroborated at least one resource of the
+  // finding. Rules that are themselves detectors stay unlabelled: corroborating
+  // RULE-018/RULE-029 with their own source is circular.
+  private independentFindingFor(
+    rule: RiskRule,
+    resources: Issue['resourcesInvolved']
+  ): boolean | undefined {
+    const labels = this.independentFindingLabels;
+    if (!labels?.complete) return undefined;
+    if (rule.id === 'RULE-018' || rule.id === 'RULE-029') return undefined;
+    return resources.some((resource) => labels.resources.has(resource.resourceId));
   }
 
   private async snapshotTrends(results: RuleExecutionResult[]): Promise<void> {
@@ -373,6 +420,7 @@ export class RiskRuleRunner {
     const riskInput = this.riskInputWithThreatIntel(path, threatIntel);
     const scoreResult = computeRiskScore(riskInput);
     const likelihood = pathLikelihood(riskInput);
+    const independentFinding = this.independentFindingFor(rule, resources);
 
     return {
       id: this.issueStore.generateIssueId(rule.id, identity),
@@ -395,6 +443,7 @@ export class RiskRuleRunner {
         environment: riskInput.environment,
         matchCount,
         ...(threatIntel.length > 0 ? { threatIntelMatches: threatIntel } : {}),
+        ...(independentFinding !== undefined ? { independentFinding } : {}),
         attackTechniques: techniquesForRule(rule.id),
       },
     };
@@ -437,7 +486,7 @@ export class RiskRuleRunner {
       severity: cappedSeverity(rule, scoreResult.severity),
       remediationHint: getRemediationHint(rule.id, {}),
       updatedAt,
-      metadata: metadataWithThreatIntel(
+      metadata: metadataWithLabels(
         {
           ...existing.metadata,
           scoringFactors: scoreResult.factors,
@@ -450,7 +499,8 @@ export class RiskRuleRunner {
           lastRefreshedAt: updatedAt,
           attackTechniques: techniquesForRule(rule.id),
         },
-        threatIntel
+        threatIntel,
+        this.independentFindingFor(rule, resources)
       ),
     };
 
@@ -530,16 +580,24 @@ export class RiskRuleRunner {
   }
 }
 
-// A refresh clears yesterday's matches when the indicator is gone: metadata
-// spread alone would keep a stale match forever.
-function metadataWithThreatIntel(
+// A refresh clears yesterday's labels when they no longer apply: metadata
+// spread alone would keep a stale match or corroboration forever. An
+// undeterminable label (label read failed or truncated) clears too rather
+// than pretending.
+function metadataWithLabels(
   metadata: Record<string, unknown>,
-  threatIntel: ThreatIndicator[]
+  threatIntel: ThreatIndicator[],
+  independentFinding: boolean | undefined
 ): Record<string, unknown> {
   if (threatIntel.length > 0) {
     metadata.threatIntelMatches = threatIntel;
   } else {
     delete metadata.threatIntelMatches;
+  }
+  if (independentFinding !== undefined) {
+    metadata.independentFinding = independentFinding;
+  } else {
+    delete metadata.independentFinding;
   }
   return metadata;
 }

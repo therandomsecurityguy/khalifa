@@ -8,6 +8,10 @@ export interface RuleStatusCounts {
   open: number;
   suppressed: number;
   resolved: number;
+  /** Issues an independent detector (Security Hub / GuardDuty) corroborated. */
+  corroborated?: number;
+  /** Issues the runner could label at all (corroborated + not corroborated). */
+  labeled?: number;
 }
 
 export type RuleQualityVerdict = 'insufficient-data' | 'reliable' | 'mixed' | 'noisy';
@@ -18,6 +22,14 @@ export interface RuleQuality extends RuleStatusCounts {
   handled: number;
   /** suppressed / handled, rounded to 3 decimals; null until something closed. */
   dismissalRate: number | null;
+  /**
+   * corroborated / labeled — the share of this rule's labelled issues whose
+   * resources an independent detector flagged too. A corroboration proxy, not
+   * ground-truth precision; published beside the dismissal rate, and the
+   * verdict deliberately stays dismissal-based until the label volume and a
+   * calibration decision support moving it.
+   */
+  corroborationRate: number | null;
   verdict: RuleQualityVerdict;
 }
 
@@ -27,6 +39,9 @@ export interface RuleQuality extends RuleStatusCounts {
 export const RULE_QUALITY_MIN_HANDLED = 10;
 export const RULE_QUALITY_RELIABLE_DISMISSAL_RATE = 0.2;
 export const RULE_QUALITY_NOISY_DISMISSAL_RATE = 0.5;
+// Below this many labelled issues a corroboration rate is noise, so none is
+// published (null) rather than a tiny-sample percentage.
+export const CORROBORATION_MIN_LABELED = 5;
 
 const VERDICT_ORDER: Record<RuleQualityVerdict, number> = {
   noisy: 0,
@@ -47,7 +62,12 @@ export function buildRuleQuality(counts: Record<string, RuleStatusCounts>): Rule
         else if (dismissalRate >= RULE_QUALITY_NOISY_DISMISSAL_RATE) verdict = 'noisy';
         else verdict = 'mixed';
       }
-      return { ruleId, ...status, handled, dismissalRate, verdict };
+      const labeled = status.labeled ?? 0;
+      const corroborationRate =
+        labeled >= CORROBORATION_MIN_LABELED
+          ? Math.round(((status.corroborated ?? 0) / labeled) * 1000) / 1000
+          : null;
+      return { ruleId, ...status, handled, dismissalRate, corroborationRate, verdict };
     })
     .sort(
       (a, b) =>

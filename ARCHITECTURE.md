@@ -206,8 +206,16 @@ issue summary uses) with the catalogue and publishes per-rule
 `dismissalRate = suppressed ÷ handled` plus a verdict (`reliable` when the rate
 stays under 20% over at least 10 closed issues, `noisy` at 50% or more, `mixed`
 between, `insufficient-data` before that). It is a noise proxy, not ground
-truth: true precision needs outcome labels from GuardDuty/Security Hub and
-incidents, which remain a later phase. The thresholds are explicit constants,
+truth. Beside it the runner labels every issue with **independent-detector
+corroboration**: once per run it resolves the resources Security Hub /
+GuardDuty findings point at (`DETECTS_ON`, one bounded read, truncation-aware,
+failure-tolerant) and records `metadata.independentFinding` — true when one of
+the issue's resources was flagged too, false when the complete set missed it,
+absent when the set was unreadable, truncated, or the rule *is* those detectors
+(RULE-018/029). `/rules/quality` publishes `corroborationRate =
+corroborated ÷ labeled` once at least five issues are labelled, and the verdict
+deliberately stays dismissal-based until that data and a calibration decision
+support moving it. The thresholds are explicit constants,
 and severity, scoring-weight, or auto-ticket changes cite the report as
 evidence — per the parity port's decision, RULE-006/031–034 stay off auto-ticket
 until their measured rate supports turning it on.
@@ -278,6 +286,17 @@ rest continue — and reports how many of the chain's steps the current findings
 already match, with the resources on the matched paths. Nothing is executed
 and no AWS call is made: it is attribution over what the collectors see, and
 `GET /attack-scenarios/:id` says exactly that.
+
+## Coverage statements on predictive surfaces
+
+Every surface that predicts over the collected graph states how fresh it is:
+`/attack-paths/simulate` and `/attack-scenarios/:id` attach a shared coverage
+statement computed from `CollectionCoverage` — the newest SUCCEEDED
+`resource-inventory` completion, graded `fresh` (≤ 8h, one collection window),
+`aging` (≤ 72h) or `stale`, and `unknown` when unreadable — so a count from a
+days-old graph cannot look confident. `risk:plan` states `plan-time` coverage
+with its own caveat: it reads the plan, not the graph. Failures degrade the
+statement, never the prediction.
 
 ## Compliance reconciliation and the trust center
 

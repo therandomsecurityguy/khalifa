@@ -789,4 +789,96 @@ describe('RiskRuleRunner one issue per problem', () => {
       expect.objectContaining({ reason: 'New SecurityHubFinding matched while suppressed' })
     );
   });
+
+  describe('independent-detector labels', () => {
+    const instanceArn = 'arn:aws:ec2:us-west-2:111122223333:instance/i-1';
+
+    function element(id: string, label: string) {
+      const { t } = Gremlin.process;
+      return new Map<unknown, unknown>([
+        [t.id, id],
+        [t.label, label],
+      ]);
+    }
+
+    async function runWithLabels(
+      labelResources: string[] | undefined,
+      ruleOverride: Partial<RiskRule> = {}
+    ): Promise<Issue | undefined> {
+      const { Path } = Gremlin.structure;
+      const runner = new RiskRuleRunner('localhost:8182');
+      if (labelResources) {
+        (runner as any).independentFindingLabels = {
+          resources: new Set(labelResources),
+          complete: true,
+        };
+      }
+      const store = (runner as any).issueStore;
+      const neptune = (runner as any).neptuneClient;
+      neptune.executeQuery = jest
+        .fn()
+        .mockResolvedValue([new Path(['i'], [element(instanceArn, 'Ec2Instance')])]);
+      store.getIssueByRuleAndResources = jest.fn().mockResolvedValue(null);
+      store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+      let created: Issue | undefined;
+      store.createIssue = jest.fn().mockImplementation(async (issue: Issue) => {
+        created = issue;
+        return true;
+      });
+      const baseRule: RiskRule = {
+        id: 'RULE-001',
+        name: 'Independent-detector label host',
+        description: 'test',
+        severityHint: 'high',
+        riskFactors: [],
+        gremlinQueryTemplate: 'g.V()',
+        ownerTeam: 'cloud-security',
+        enabled: true,
+        autoTicketConfig: { enabled: false },
+      };
+      await runner.runRule({ ...baseRule, ...ruleOverride });
+      return created;
+    }
+
+    it('marks an issue corroborated when an independent detector flagged a resource', async () => {
+      const created = await runWithLabels([instanceArn, 'arn:aws:s3:::other']);
+      expect(created?.metadata.independentFinding).toBe(true);
+    });
+
+    it('marks an issue uncorroborated when the (complete) set misses it', async () => {
+      const created = await runWithLabels(['arn:aws:s3:::other']);
+      expect(created?.metadata.independentFinding).toBe(false);
+    });
+
+    it('leaves the label off without a complete label set, and for the detectors themselves', async () => {
+      expect((await runWithLabels(undefined))?.metadata.independentFinding).toBeUndefined();
+      expect(
+        (await runWithLabels([], { id: 'RULE-018' }))?.metadata.independentFinding
+      ).toBeUndefined();
+    });
+
+    it('loads the label set once per run, tolerating truncation and failures', async () => {
+      const runner = new RiskRuleRunner('localhost:8182');
+      const neptune = (runner as any).neptuneClient;
+      neptune.executeQuery = jest.fn().mockResolvedValue(['arn:aws:s3:::a']);
+      await expect((runner as any).loadIndependentFindingLabels()).resolves.toMatchObject({
+        complete: true,
+      });
+      expect(neptune.executeQuery.mock.calls[0][0]).toContain(
+        "hasLabel('SecurityHubFinding', 'GuardDutyFinding')"
+      );
+
+      neptune.executeQuery = jest.fn().mockResolvedValue(Array(5001).fill('arn:aws:s3:::a'));
+      await expect((runner as any).loadIndependentFindingLabels()).resolves.toMatchObject({
+        complete: false,
+      });
+
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      neptune.executeQuery = jest.fn().mockRejectedValue(new Error('denied'));
+      await expect((runner as any).loadIndependentFindingLabels()).resolves.toMatchObject({
+        complete: false,
+      });
+      warn.mockRestore();
+    });
+  });
 });

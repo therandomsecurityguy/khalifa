@@ -9,6 +9,7 @@ import {
   riskInputFromPath,
 } from '@khalifa/risk-engine';
 import { getApiNeptuneClient } from '../services/api-dependencies';
+import { graphCoverage } from '../services/coverage';
 import type { AttackPathStart, AttackPathTarget } from '../services/neptune-client';
 import type { AttackPathEntry, AttackPathSimulationResponse, GraphVertex } from '../types';
 
@@ -247,6 +248,7 @@ export async function simulateAttackPaths(req: Request, res: Response): Promise<
       ruleName: rule.name,
       totalPaths: bounded.length,
       truncated,
+      coverage: await graphCoverage(neptuneClient),
       edges: [...byEdge.values()]
         .sort((a, b) => b.pathsUsing - a.pathsUsing || b.worstLikelihood - a.worstLikelihood)
         .slice(0, MAX_SIMULATION_EDGES)

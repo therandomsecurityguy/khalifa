@@ -24,6 +24,11 @@ function dismissal(item: RuleQualityItem): string {
   return item.dismissalRate === null ? '—' : `${Math.round(item.dismissalRate * 100)}%`;
 }
 
+function corroboration(item: RuleQualityItem): string {
+  if (item.corroborationRate === null) return '—';
+  return `${Math.round(item.corroborationRate * 100)}% of ${item.labeled ?? 0}`;
+}
+
 export default function RulesPage() {
   const quality = useRequest((signal) => getRuleQuality({ signal }), []);
 
@@ -48,7 +53,7 @@ export default function RulesPage() {
         ) : (
           <Card
             title="Rules"
-            description={`Suppressed means an analyst judged the issue not worth fixing (or accepted the risk); resolved means the graph stopped matching. Dismissal rate = suppressed ÷ closed — a noise proxy, not ground truth. A verdict needs at least ${quality.data.thresholds.minHandled} closed issues.`}
+            description={`Suppressed means an analyst judged the issue not worth fixing (or accepted the risk); resolved means the graph stopped matching. Dismissal rate = suppressed ÷ closed — a noise proxy, not ground truth. Corroborated is the share of labelled issues whose resources an independent detector (Security Hub / GuardDuty) flagged too; it is published beside the dismissal rate and does not change the verdict. A verdict needs at least ${quality.data.thresholds.minHandled} closed issues.`}
           >
             <Table caption="Rule quality" className="min-w-[64rem]">
               <thead>
@@ -61,6 +66,7 @@ export default function RulesPage() {
                   <Th className="text-right">Suppressed</Th>
                   <Th className="text-right">Resolved</Th>
                   <Th className="text-right">Dismissal</Th>
+                  <Th className="text-right">Corroborated</Th>
                   <Th>Verdict</Th>
                 </tr>
               </thead>
@@ -92,6 +98,7 @@ export default function RulesPage() {
                     <Td className="text-right tabular-nums">{rule.suppressed}</Td>
                     <Td className="text-right tabular-nums">{rule.resolved}</Td>
                     <Td className="text-right tabular-nums">{dismissal(rule)}</Td>
+                    <Td className="text-right tabular-nums">{corroboration(rule)}</Td>
                     <Td>
                       <Badge tone={VERDICT_TONES[rule.verdict]}>
                         {VERDICT_LABELS[rule.verdict]}

@@ -634,3 +634,37 @@ describe('DynamoDBIssueRepository', () => {
     });
   });
 });
+
+describe('getRuleStatusCounts', () => {
+  it('counts per rule per status and reads the independent-detector label', async () => {
+    const { repository, send } = repositoryWith(async (raw) => {
+      const command = raw as { input: { ExpressionAttributeValues: Record<string, unknown> } };
+      const status = command.input.ExpressionAttributeValues[':status'];
+      if (status === 'open') {
+        return {
+          Items: [
+            { ruleId: 'RULE-002', metadata: { independentFinding: true } },
+            { ruleId: 'RULE-002' },
+          ],
+        };
+      }
+      if (status === 'resolved') {
+        return { Items: [{ ruleId: 'RULE-002', metadata: { independentFinding: false } }] };
+      }
+      return { Items: [{ ruleId: 'RULE-006' }] };
+    });
+
+    const counts = await repository.getRuleStatusCounts();
+
+    expect(counts['RULE-002']).toEqual({
+      open: 2,
+      suppressed: 0,
+      resolved: 1,
+      corroborated: 1,
+      labeled: 2,
+    });
+    expect(counts['RULE-006']).toMatchObject({ open: 0, suppressed: 1, resolved: 0, labeled: 0 });
+    expect(send.mock.calls[0][0].input.ProjectionExpression).toContain('#meta.#ind');
+    expect(send.mock.calls[0][0].input.IndexName).toBe('StatusIndex');
+  });
+});
