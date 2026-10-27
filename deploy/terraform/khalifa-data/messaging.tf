@@ -52,6 +52,36 @@ resource "aws_sqs_queue_policy" "incremental" {
   })
 }
 
+# Event-triggered recompute. No queue policy: only this account's workload
+# roles send (incremental collector) and receive (recompute worker).
+resource "aws_sqs_queue" "recompute_dlq" {
+  name                        = "${local.name}-recompute-dlq.fifo"
+  fifo_queue                  = true
+  content_based_deduplication = true
+  kms_master_key_id           = aws_kms_key.this.arn
+
+  tags = merge(var.tags, { Name = "${local.name}-recompute-dlq" })
+}
+
+resource "aws_sqs_queue" "recompute" {
+  name       = "${local.name}-recompute.fifo"
+  fifo_queue = true
+  # The producer sets an explicit deduplication id (one per five-minute
+  # window), so bursts collapse to a single message.
+  content_based_deduplication = false
+  kms_master_key_id           = aws_kms_key.this.arn
+  # A policy evaluation can run for minutes; keep messages invisible for it.
+  visibility_timeout_seconds = 900
+  message_retention_seconds  = 14400
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.recompute_dlq.arn
+    maxReceiveCount     = 3
+  })
+
+  tags = merge(var.tags, { Name = "${local.name}-recompute" })
+}
+
 resource "aws_sns_topic" "issues" {
   name              = "${local.name}-issues"
   kms_master_key_id = aws_kms_key.this.arn

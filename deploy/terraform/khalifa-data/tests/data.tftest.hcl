@@ -141,8 +141,14 @@ run "data_plane" {
   }
 
   assert {
-    condition     = aws_sqs_queue.incremental.fifo_queue && aws_sqs_queue.incremental_dlq.fifo_queue
-    error_message = "Incremental collection must use a FIFO queue and DLQ."
+    condition = (
+      aws_sqs_queue.incremental.fifo_queue &&
+      aws_sqs_queue.incremental_dlq.fifo_queue &&
+      aws_sqs_queue.recompute.fifo_queue &&
+      aws_sqs_queue.recompute_dlq.fifo_queue &&
+      !aws_sqs_queue.recompute.content_based_deduplication
+    )
+    error_message = "Incremental collection and event-triggered recompute must use FIFO queues with DLQs; recompute dedups on the producer's five-minute window id."
   }
 
   assert {
@@ -232,6 +238,8 @@ run "data_plane" {
   }
 
   assert {
+    # The recompute worker reuses this role, so the pin covers the queue it
+    # drains as well as the Neptune access the evaluation needs.
     condition = toset(flatten([
       for statement in jsondecode(aws_iam_role_policy.policy_evaluator.policy).Statement :
       flatten([statement.Action])
@@ -240,8 +248,13 @@ run "data_plane" {
       "neptune-db:WriteDataViaQuery",
       "neptune-db:DeleteDataViaQuery",
       "neptune-db:GetEngineStatus",
+      "sqs:ChangeMessageVisibility",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:GetQueueUrl",
+      "sqs:ReceiveMessage",
     ])
-    error_message = "The policy evaluator policy must contain exactly the Neptune read/write/delete actions and nothing else."
+    error_message = "The policy evaluator policy must contain exactly the Neptune read/write/delete actions, the recompute queue drain rights, and nothing else."
   }
 
   assert {
@@ -342,6 +355,8 @@ run "data_plane" {
     condition = alltrue([
       aws_sqs_queue.incremental.kms_master_key_id == aws_kms_key.this.arn,
       aws_sqs_queue.incremental_dlq.kms_master_key_id == aws_kms_key.this.arn,
+      aws_sqs_queue.recompute.kms_master_key_id == aws_kms_key.this.arn,
+      aws_sqs_queue.recompute_dlq.kms_master_key_id == aws_kms_key.this.arn,
       aws_sns_topic.issues.kms_master_key_id == aws_kms_key.this.arn,
     ])
     error_message = "SQS queues and the issues SNS topic must use the Khalifa CMK."

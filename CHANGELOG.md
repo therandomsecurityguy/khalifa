@@ -2,6 +2,16 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Event-triggered recompute
+
+### Added
+
+- **Event-triggered policy evaluation**: the incremental collector now signals when a batch could have moved an escalation — any IAM node (`IamRole`, `IamUser`, `IamGroup`, `IamPolicy*`, `AccessKey`) or IAM edge (`TRUSTS`, `HAS_IAM_ROLE`, `ATTACHED_TO`, `MEMBER_OF`, `HAS_ACCESS_KEY`) marks the batch recompute-worthy — sending one best-effort message to a new `recompute` FIFO queue (`RECOMPUTE_QUEUE_URL`); a missing queue or a send failure never fails collection. The `recompute-worker` runtime command runs as a Deployment (rendered only when the queue is wired; policy-evaluator IRSA role plus receive/delete on the queue) that long-polls it and re-runs **the policy evaluator**, so escalation paths refresh within one incremental cycle instead of at the evaluator's scheduled hour; the hourly rule run still raises the corresponding issues. Two bounds keep the heavy job in check: the producer's FIFO deduplication id collapses a five-minute burst to one message, and the worker refuses to evaluate more often than `RECOMPUTE_MIN_INTERVAL_SECONDS` (default 900, chart `recomputeWorker.minIntervalSeconds`), deleting covered messages. A failed evaluation leaves messages for SQS redelivery and the queue's DLQ; the scheduled evaluator remains the backstop. Terraform creates the queue + DLQ, grants the incremental collector `SendMessage` and the policy-evaluator role receive/delete, and flows `recomputeQueueUrl` into the chart. The CDK path is not wired (documented).
+
+### Notes
+
+- Still open from the re-review (`~/Documents/Testing/plans/2026-10-27-predictive-completion.md`): freshness tempering inside scores (G9), observed-reachability v2 (remote endpoints, per-hop citation), shift-left v2 (IAM diff/Helm, CI wiring), and the long tail (UEBA breadth, EPSS/KEV, trust-center projections, per-issue risk window/SLO).
+
 ## [Unreleased] - Outcome labels and coverage statements
 
 ### Added

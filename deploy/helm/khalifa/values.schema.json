@@ -16,6 +16,7 @@
     "graphWriter",
     "compliance",
     "reconciliation",
+    "recomputeWorker",
     "threatIntelImport",
     "flowLogAnalyzer",
     "cloudtrailAnalyzer",
@@ -198,6 +199,7 @@
         "trustCenterSyncClientId": { "type": "string", "pattern": "^(|[0-9a-f]{32}\\.access)$" }
       }
     },
+    "recomputeWorker": { "$ref": "#/definitions/recomputeWorker" },
     "threatIntelImport": { "$ref": "#/definitions/cronJob" },
     "flowLogAnalyzer": { "$ref": "#/definitions/cronJob" },
     "cloudtrailAnalyzer": { "$ref": "#/definitions/cronJob" },
@@ -519,6 +521,26 @@
         "days": { "type": "integer", "minimum": 1, "maximum": 31 }
       }
     },
+    "recomputeWorker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image",
+        "minIntervalSeconds",
+        "replicas",
+        "podAnnotations",
+        "podLabels",
+        "resources"
+      ],
+      "properties": {
+        "image": { "$ref": "#/definitions/image" },
+        "minIntervalSeconds": { "type": "integer", "minimum": 0, "maximum": 86400 },
+        "replicas": { "type": "integer", "minimum": 1 },
+        "podAnnotations": { "$ref": "#/definitions/stringMap" },
+        "podLabels": { "$ref": "#/definitions/stringMap" },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
     "collection": {
       "type": "object",
       "additionalProperties": false,
@@ -531,7 +553,8 @@
         "maxAttempts",
         "retryDelayMs",
         "graphWriterTimeoutMs",
-        "incrementalQueueUrl"
+        "incrementalQueueUrl",
+        "recomputeQueueUrl"
       ],
       "properties": {
         "homeAccountId": { "type": "string", "pattern": "^$|^[0-9]{12}$" },
@@ -563,6 +586,10 @@
         "retryDelayMs": { "type": "integer", "minimum": 1, "maximum": 60000 },
         "graphWriterTimeoutMs": { "type": "integer", "minimum": 1, "maximum": 300000 },
         "incrementalQueueUrl": {
+          "type": "string",
+          "pattern": "^$|^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/[0-9]{12}/[A-Za-z0-9_.-]+$"
+        },
+        "recomputeQueueUrl": {
           "type": "string",
           "pattern": "^$|^https://sqs\\.[a-z0-9-]+\\.amazonaws\\.com/[0-9]{12}/[A-Za-z0-9_.-]+$"
         },
@@ -807,6 +834,7 @@
                     "cloudtrail-analyzer",
                     "flow-log-analyzer",
                     "threat-intel-import",
+                    "recompute-worker",
                     "dspm-scanner",
                     "policy-evaluator",
                     "least-privilege-sweep"

@@ -687,6 +687,14 @@ resource "aws_iam_role_policy" "incremental_collector" {
           ]
           Resource = [aws_sqs_queue.incremental.arn]
         },
+        {
+          # Event-triggered recompute: an IAM-sensitive batch signals the
+          # worker that the policy evaluation is stale.
+          Sid      = "RecomputeQueueSend"
+          Effect   = "Allow"
+          Action   = ["sqs:GetQueueUrl", "sqs:SendMessage"]
+          Resource = [aws_sqs_queue.recompute.arn]
+        },
       ],
       local.home_collection_statements
     )
@@ -715,6 +723,19 @@ resource "aws_iam_role_policy" "policy_evaluator" {
           "neptune-db:GetEngineStatus",
         ]
         Resource = [local.neptune_resource_arn]
+      },
+      {
+        # The recompute worker runs as this role and drains the queue.
+        Sid    = "RecomputeQueue"
+        Effect = "Allow"
+        Action = [
+          "sqs:ChangeMessageVisibility",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl",
+          "sqs:ReceiveMessage",
+        ]
+        Resource = [aws_sqs_queue.recompute.arn]
       },
     ]
   })

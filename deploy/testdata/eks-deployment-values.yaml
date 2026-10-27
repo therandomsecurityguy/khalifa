@@ -65,6 +65,7 @@ collection:
   regions:
     - us-west-2
   incrementalQueueUrl: https://sqs.us-west-2.amazonaws.com/111122223333/validation-khalifa-incremental.fifo
+  recomputeQueueUrl: https://sqs.us-west-2.amazonaws.com/111122223333/validation-khalifa-recompute.fifo
 
 api:
   image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-api@sha256:1111111111111111111111111111111111111111111111111111111111111111
@@ -132,6 +133,9 @@ threatIntelImport:
   image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
   schedule: '0 5 * * *'
   timeZone: America/Los_Angeles
+
+recomputeWorker:
+  image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
 
 dspmScanner:
   image: 111122223333.dkr.ecr.us-west-2.amazonaws.com/khalifa-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444

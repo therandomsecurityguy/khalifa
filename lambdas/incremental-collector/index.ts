@@ -1,4 +1,9 @@
-import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
+import {
+  SQSClient,
+  ReceiveMessageCommand,
+  DeleteMessageCommand,
+  SendMessageCommand,
+} from '@aws-sdk/client-sqs';
 import { EC2Client, DescribeSecurityGroupsCommand } from '@aws-sdk/client-ec2';
 import { IAMClient, GetUserCommand } from '@aws-sdk/client-iam';
 import { OrganizationsClient } from '@aws-sdk/client-organizations';
@@ -12,6 +17,7 @@ import type { GraphNode, GraphEdge } from '../shared/types';
 import { Logger } from '../shared/types';
 import { invokeGraphWriter } from '../shared/graph-writer-client';
 import { getTargetCredentials } from '../shared/aws-credentials';
+import { recomputeDeduplicationId, recomputeReasons } from '../shared/recompute';
 
 const logger = new Logger('incremental-processor');
 interface CollectionScope {
@@ -116,6 +122,7 @@ export async function processBatch(
           edges,
           observedAt: event.detail?.eventTime || event.time || new Date().toISOString(),
         });
+        await signalRecompute(sqsClient, environment, nodes, edges);
       }
 
       await sqsClient.send(
@@ -136,6 +143,40 @@ export async function processBatch(
 }
 
 export const handler = () => processBatch();
+
+// Event-triggered recompute: an IAM grant, role, key or trust written by this
+// batch can create an escalation the policy evaluator would otherwise only see
+// on its schedule, so enqueue a bounded recompute signal. FIFO dedup (one id
+// per five-minute window) collapses bursts; the worker's own minimum interval
+// bounds the runs. Best-effort by design: a missing queue or a send failure
+// never fails collection.
+export async function signalRecompute(
+  sqsClient: SQSClient,
+  environment: NodeJS.ProcessEnv,
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  now: Date = new Date()
+): Promise<boolean> {
+  const queueUrl = environment.RECOMPUTE_QUEUE_URL?.trim();
+  if (!queueUrl) return false;
+  const reasons = recomputeReasons(nodes, edges);
+  if (reasons.length === 0) return false;
+  try {
+    await sqsClient.send(
+      new SendMessageCommand({
+        QueueUrl: queueUrl,
+        MessageBody: JSON.stringify({ reasons, requestedAt: now.toISOString() }),
+        MessageGroupId: 'recompute',
+        MessageDeduplicationId: recomputeDeduplicationId(now.getTime()),
+      })
+    );
+    logger.info('Queued an event-triggered recompute', { reasons });
+    return true;
+  } catch (error) {
+    logger.warn(`Recompute signal failed; the scheduled run still covers it: ${error}`);
+    return false;
+  }
+}
 
 async function processEvent(
   event: any,

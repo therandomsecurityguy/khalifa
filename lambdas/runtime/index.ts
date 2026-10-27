@@ -29,6 +29,7 @@ import {
 } from '../flow-log-analyzer';
 import { validateObservationDays } from '../flow-log-analyzer/src/queries';
 import { importThreatIntel, parseS3Uri, validateTtlDays } from '../threat-intel-import';
+import { recomputeMinIntervalSeconds, runRecomputeWorker } from '../recompute-worker';
 
 export { createHttpGraphWriter } from '../shared/graph-writer-client';
 
@@ -41,6 +42,7 @@ export type RuntimeCommand =
   | 'cloudtrail-analyzer'
   | 'flow-log-analyzer'
   | 'threat-intel-import'
+  | 'recompute-worker'
   | 'dspm-scanner'
   | 'policy-evaluator'
   | 'least-privilege-sweep';
@@ -55,6 +57,7 @@ interface RuntimeDependencies {
   analyzeCloudTrail?: typeof analyzeCloudTrail;
   analyzeFlowLogs?: typeof analyzeFlowLogs;
   importThreatIntel?: typeof importThreatIntel;
+  runRecomputeWorker?: typeof runRecomputeWorker;
   runDspm?: typeof runDspmScan;
   runPolicyEvaluation?: typeof runPolicyEvaluation;
   runLeastPrivilegeSweep?: typeof runLeastPrivilegeSweep;
@@ -73,6 +76,7 @@ const commands = new Set<RuntimeCommand>([
   'cloudtrail-analyzer',
   'flow-log-analyzer',
   'threat-intel-import',
+  'recompute-worker',
   'dspm-scanner',
   'policy-evaluator',
   'least-privilege-sweep',
@@ -89,6 +93,7 @@ Commands:
   cloudtrail-analyzer      Query org CloudTrail usage into AccessAnalyzerCache
   flow-log-analyzer        Aggregate VPC flow logs into TrafficObservations
   threat-intel-import      Import customer threat-intel lists into ThreatIndicators
+  recompute-worker         Drain the recompute queue and re-run policy evaluation
   dspm-scanner             Scan S3 objects and Lambda env vars for secrets
   policy-evaluator         Resolve effective permissions and escalation paths once
   least-privilege-sweep     Rightsize over-permissioned principals once`;
@@ -212,6 +217,13 @@ export function validateRuntime(command: RuntimeCommand, environment: NodeJS.Pro
     normalizeFlowLogResultsLocation(environment.ATHENA_RESULTS_S3_LOCATION);
     required(environment, 'TRAFFIC_OBSERVATIONS_TABLE');
     validateObservationDays(environment.FLOW_LOG_DAYS ?? '7', 'FLOW_LOG_DAYS');
+    return;
+  }
+  if (command === 'recompute-worker') {
+    required(environment, 'AWS_REGION');
+    required(environment, 'RECOMPUTE_QUEUE_URL');
+    required(environment, 'NEPTUNE_ENDPOINT');
+    recomputeMinIntervalSeconds(environment);
     return;
   }
   if (command === 'threat-intel-import') {
@@ -680,6 +692,11 @@ export async function runCommand(
       environment
     );
     logger.info('Threat-intel import complete', summary);
+  } else if (command === 'recompute-worker') {
+    const summary = await (dependencies.runRecomputeWorker || runRecomputeWorker)(environment, {
+      signal,
+    });
+    logger.info('Recompute worker stopped', summary);
   } else if (command === 'dspm-scanner') {
     const summary = await (dependencies.runDspm || runDspmScan)({}, {}, environment);
     logger.info('DSPM scan complete', summary);

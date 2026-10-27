@@ -97,6 +97,14 @@ module.exports = {
       modulePathIgnorePatterns: ['<rootDir>/dist/', '<rootDir>/node_modules/'],
     },
     {
+      displayName: 'recompute-worker',
+      rootDir: '<rootDir>/lambdas/recompute-worker',
+      preset: 'ts-jest',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/**/*.test.ts'],
+      modulePathIgnorePatterns: ['<rootDir>/dist/', '<rootDir>/node_modules/'],
+    },
+    {
       displayName: 'runtime',
       rootDir: '<rootDir>/lambdas/runtime',
       preset: 'ts-jest',

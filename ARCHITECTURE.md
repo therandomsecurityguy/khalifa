@@ -298,6 +298,27 @@ days-old graph cannot look confident. `risk:plan` states `plan-time` coverage
 with its own caveat: it reads the plan, not the graph. Failures degrade the
 statement, never the prediction.
 
+## Event-triggered recompute
+
+Escalations used to appear only on the policy evaluator's schedule, so a new
+admin grant or trust could sit unevaluated for hours. The incremental
+collector now signals when a batch could have moved one: any IAM node
+(`IamRole`, `IamUser`, `IamGroup`, `IamPolicy*`, `AccessKey`) or IAM edge
+(`TRUSTS`, `HAS_IAM_ROLE`, `ATTACHED_TO`, `MEMBER_OF`, `HAS_ACCESS_KEY`) makes
+the batch recompute-worthy, and the collector sends one message to the
+`recompute` FIFO queue (`RECOMPUTE_QUEUE_URL`; best-effort — a missing queue or
+send failure never fails collection). Two bounds keep the heaviest job in the
+system from running constantly: the producer's FIFO deduplication id collapses
+a five-minute burst to one message, and the recompute worker — a Deployment
+that long-polls the queue — refuses to evaluate more often than
+`RECOMPUTE_MIN_INTERVAL_SECONDS` (default 900), deleting messages that arrive
+inside the interval as covered by the run that just happened. It runs the
+**policy evaluator** only, so escalation paths (and the likelihood on any path
+through them) refresh within one incremental cycle; the hourly rule run is what
+raises the corresponding issues. A failed evaluation leaves its messages for
+SQS redelivery and the queue's DLQ rather than deleting them. The CDK path is
+not wired (the scheduled evaluator still covers it).
+
 ## Compliance reconciliation and the trust center
 
 The compliance job evaluates the CIS AWS Foundations v3.0.0 and Khalifa

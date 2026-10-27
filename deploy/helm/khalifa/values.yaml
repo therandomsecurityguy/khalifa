@@ -120,6 +120,7 @@ collection:
   retryDelayMs: 1000
   graphWriterTimeoutMs: 30000
   incrementalQueueUrl: ''
+  recomputeQueueUrl: ''
   # GuardDuty findings are read from the delegated administrator's detectors
   # after each organization sweep. Empty leaves it off; its member role needs
   # guardduty:ListFindings and GetFindings first.
@@ -300,6 +301,22 @@ compliance:
   activeDeadlineSeconds: 1800
   ttlSecondsAfterFinished: 86400
   backoffLimit: 1
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+recomputeWorker:
+  image: ''
+  # Minimum seconds between event-triggered policy evaluations; messages that
+  # arrive sooner are deleted as covered by the run that just happened.
+  minIntervalSeconds: 900
+  replicas: 1
   podAnnotations: {}
   podLabels: {}
   resources:
