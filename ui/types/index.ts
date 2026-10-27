@@ -332,6 +332,43 @@ export interface TrendPoint {
   bySeverity?: Record<'critical' | 'high' | 'medium' | 'low', number>;
 }
 
+export interface AttackTechnique {
+  id: string;
+  name: string;
+  tactic: string;
+}
+
+export interface AttackScenarioStep {
+  ruleId: string;
+  ruleName: string;
+  description: string;
+}
+
+export interface AttackScenarioDetail {
+  id: string;
+  name: string;
+  description: string;
+  techniques: AttackTechnique[];
+  steps: AttackScenarioStep[];
+}
+
+export interface ScenarioStepRunResult {
+  ruleId: string;
+  description: string;
+  matchedPaths: number;
+  resources: string[];
+  truncated: boolean;
+  error?: string;
+}
+
+export interface AttackScenarioRunResponse {
+  scenarioId: string;
+  name: string;
+  matchedSteps: number;
+  totalSteps: number;
+  steps: ScenarioStepRunResult[];
+}
+
 export interface RuleQualityItem {
   ruleId: string;
   name: string;

@@ -297,4 +297,29 @@ describe('IssuePage fix simulation', () => {
     expect(await screen.findByText('Involved resources')).toBeInTheDocument();
     expect(screen.queryByText('Threat intelligence')).not.toBeInTheDocument();
   });
+
+  it('lists the curated ATT&CK techniques for the rule', async () => {
+    mockedIssue.mockResolvedValue(
+      detail({
+        metadata: {
+          ...detail().metadata,
+          attackTechniques: [
+            {
+              id: 'T1078.004',
+              name: 'Valid Accounts: Cloud Accounts',
+              tactic: 'Privilege Escalation',
+            },
+          ],
+        },
+      })
+    );
+
+    render(<IssuePage />);
+
+    const card = (await screen.findByText('ATT&CK techniques')).closest('section')!;
+    expect(
+      within(card).getByText(/T1078\.004 · Valid Accounts: Cloud Accounts/)
+    ).toBeInTheDocument();
+    expect(within(card).getByText('Privilege Escalation')).toBeInTheDocument();
+  });
 });

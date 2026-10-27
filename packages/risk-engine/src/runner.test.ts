@@ -233,6 +233,38 @@ describe('RiskRuleRunner stale-issue fix', () => {
     expect(created?.metadata.scoringFactors).toMatchObject({ threatIntelContribution: 10 });
   });
 
+  test("runRule records the rule's ATT&CK techniques on the issue", async () => {
+    const { Path } = Gremlin.structure;
+    const { t } = Gremlin.process;
+    const element = (id: string, label: string) =>
+      new Map<unknown, unknown>([
+        [t.id, id],
+        [t.label, label],
+      ]);
+    const path = new Path(['ec2'], [element('ec2-1', 'Ec2Instance')]);
+    const runner = new RiskRuleRunner('localhost:8182', undefined, undefined, undefined, {
+      find: jest.fn().mockResolvedValue([]),
+    } as never);
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest.fn().mockResolvedValue([path]);
+    store.getIssueByRuleAndResources = jest.fn().mockResolvedValue(null);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+    let created: Issue | undefined;
+    store.createIssue = jest.fn().mockImplementation(async (issue: Issue) => {
+      created = issue;
+      return true;
+    });
+
+    await runner.runRule(rule);
+
+    expect(created?.metadata.attackTechniques).toEqual([
+      expect.objectContaining({ id: 'T1190' }),
+      expect.objectContaining({ id: 'T1078.004' }),
+      expect.objectContaining({ id: 'T1530' }),
+    ]);
+  });
+
   test('runRule keeps running when the threat-intel store is unreadable', async () => {
     const { Path } = Gremlin.structure;
     const { t } = Gremlin.process;

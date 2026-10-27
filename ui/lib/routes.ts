@@ -21,6 +21,7 @@ export const APP_SECTIONS: ReadonlyArray<{ label: string; routes: readonly AppRo
     routes: [
       { href: '/resources', label: 'Resources' },
       { href: '/attack-paths', label: 'Attack paths' },
+      { href: '/attack-scenarios', label: 'Scenarios' },
       { href: '/identity', label: 'Identity', includes: ['/least-privilege'] },
       { href: '/secrets', label: 'Secrets' },
     ],

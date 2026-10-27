@@ -263,6 +263,22 @@ measured precision P6 requires; the local
 `scripts/risk-plan` gate is unaffected (it has no store to read, so it never
 claims a match).
 
+## ATT&CK mapping and adversary scenarios
+
+Every rule carries a curated, reviewed MITRE ATT&CK mapping
+(`attack-techniques.ts`, pinned to the catalogue by a test like the compliance
+citations): the technique ids, names, and tactics a finding can be a step of.
+They ride on the rule catalog endpoint, on each issue's metadata, and as an
+"ATT&CK techniques" card on the issue page. `attack-scenarios.ts` curates
+chains of existing rules ("Internet exposure to admin", "Leaked credential to
+data access", "CI/CD to cloud takeover"); running one is **graph-only
+emulation**: each step re-runs that rule's query against the live graph —
+deduped and capped like the fix simulation, per-step errors recorded while the
+rest continue — and reports how many of the chain's steps the current findings
+already match, with the resources on the matched paths. Nothing is executed
+and no AWS call is made: it is attribution over what the collectors see, and
+`GET /attack-scenarios/:id` says exactly that.
+
 ## Compliance reconciliation and the trust center
 
 The compliance job evaluates the CIS AWS Foundations v3.0.0 and Khalifa
