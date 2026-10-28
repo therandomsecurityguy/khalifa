@@ -1,3 +1,4 @@
+import { exploitabilityValue } from './exploitability';
 import type {
   DataClassification,
   Environment,
@@ -98,11 +99,8 @@ export function computeRiskScore(input: RiskScoreInput): RiskScoreOutput {
 
   let exploitabilityContribution = 0;
   if (input.exploitability) {
-    const cvss = input.exploitability.cvssBaseScore;
-    let value = typeof cvss === 'number' && Number.isFinite(cvss) ? cvss / 10 : 0.5;
-    if (input.exploitability.exploitAvailable) value += 0.2;
-    value = Math.min(1, Math.max(0, value));
-    exploitabilityContribution = value * 100 * EXPLOITABILITY_WEIGHT;
+    exploitabilityContribution =
+      exploitabilityValue(input.exploitability) * 100 * EXPLOITABILITY_WEIGHT;
   }
 
   const totalScore = Math.min(
@@ -222,6 +220,10 @@ export function getRemediationHint(ruleId: string, _context: Record<string, any>
       'Confirm who used root and why. If it was not approved break-glass use, rotate the root password, check root MFA, delete any root access keys and review the session in CloudTrail.',
     'RULE-021':
       "Confirm the new source IP belongs to the principal's expected infrastructure. If not, rotate the secrets it read and the principal's credentials, and review its CloudTrail activity.",
+    'RULE-035':
+      'Review the new API calls on the anomaly. If they are administrative (user, policy, key or role changes), treat the identity as compromised until proven otherwise: rotate its credentials and check what the calls changed.',
+    'RULE-036':
+      'Confirm whether the identity is a human who changed timezone or automation that legitimately runs then. If neither, rotate its credentials and review the activity in the flagged hours.',
     'RULE-022':
       "Review the principal's denied calls: a broken deployment or probing with stolen credentials. Disable the credentials if the activity is not expected.",
     'RULE-023':

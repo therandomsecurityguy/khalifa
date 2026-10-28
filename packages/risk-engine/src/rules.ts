@@ -608,6 +608,44 @@ export const riskRules: RiskRule[] = [
     },
   },
   {
+    id: 'RULE-035',
+    name: 'Principal Used an API It Never Used Before',
+    description:
+      'Detects a principal calling an API in the last seven days that it had not called in the thirty before (the analyzer records the new calls on the anomaly). First use of identity-, policy- or key-admin APIs is how a compromised identity persists; first use of benign APIs is common, so this is a lead and auto-ticketing stays off',
+    severityHint: 'medium',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('CloudTrailAnomaly')
+        .has('anomaly_type', 'NEW_API_FOR_PRINCIPAL')
+        .as('anomaly')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'detection-response',
+    enabled: true,
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
+  {
+    id: 'RULE-036',
+    name: 'Principal Active at an Unusual Hour',
+    description:
+      'Detects an identity acting in UTC hours it never used during the thirty-day baseline (the analyzer records the hours on the anomaly). Night-time activity from a daytime-only identity suggests automation with stolen credentials; humans moving timezones trip it too, so this is informational',
+    severityHint: 'low',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('CloudTrailAnomaly')
+        .has('anomaly_type', 'UNUSUAL_HOUR_ACTIVITY')
+        .as('anomaly')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'detection-response',
+    enabled: true,
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
+  {
     id: 'RULE-024',
     name: 'EC2 Instance with IMDSv1 and an IAM Role',
     description:

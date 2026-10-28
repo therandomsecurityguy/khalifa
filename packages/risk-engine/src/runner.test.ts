@@ -233,6 +233,52 @@ describe('RiskRuleRunner stale-issue fix', () => {
     expect(created?.metadata.scoringFactors).toMatchObject({ threatIntelContribution: 10 });
   });
 
+  test('runRule threads KEV and EPSS matches into exploitability', async () => {
+    const { Path } = Gremlin.structure;
+    const { t } = Gremlin.process;
+    const element = (id: string, label: string, props: Record<string, unknown[]> = {}) =>
+      new Map<unknown, unknown>([[t.id, id], [t.label, label], ...Object.entries(props)]);
+    const path = new Path(
+      ['i', 'cve'],
+      [
+        element('i-1', 'Ec2Instance'),
+        element('cve-1', 'Vulnerability', { cve_id: ['CVE-2024-1234'] }),
+      ]
+    );
+    const threatStore = {
+      find: jest.fn().mockResolvedValue([
+        { type: 'cve', value: 'CVE-2024-1234', source: 'kev.txt' },
+        { type: 'epss', value: 'CVE-2024-1234', source: 'epss.csv', score: 0.9 },
+      ]),
+    };
+    const runner = new RiskRuleRunner(
+      'localhost:8182',
+      undefined,
+      undefined,
+      undefined,
+      threatStore as never
+    );
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest.fn().mockResolvedValue([path]);
+    store.getIssueByRuleAndResources = jest.fn().mockResolvedValue(null);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([]);
+    let created: Issue | undefined;
+    store.createIssue = jest.fn().mockImplementation(async (issue: Issue) => {
+      created = issue;
+      return true;
+    });
+
+    await runner.runRule(rule);
+
+    // EPSS 0.9 + 0.2 for known-exploited membership, clamped at 1.
+    expect(created?.metadata.likelihoodFactors).toMatchObject({ exploitability: 1 });
+    expect(created?.metadata.threatIntelMatches).toEqual([
+      { type: 'cve', value: 'CVE-2024-1234', source: 'kev.txt' },
+      { type: 'epss', value: 'CVE-2024-1234', source: 'epss.csv', score: 0.9 },
+    ]);
+  });
+
   test("runRule records the rule's ATT&CK techniques on the issue", async () => {
     const { Path } = Gremlin.structure;
     const { t } = Gremlin.process;

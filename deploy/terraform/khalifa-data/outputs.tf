@@ -96,6 +96,8 @@ output "helm_values" {
       accessAnalyzerTable         = aws_dynamodb_table.access_analyzer.name
       trafficObservationsTable    = aws_dynamodb_table.traffic_observations.name
       threatIndicatorsTable       = aws_dynamodb_table.threat_indicators.name
+      threatIntelCveListS3Uri     = var.threat_intel_cve_list_s3_uri
+      threatIntelEpssListS3Uri    = var.threat_intel_epss_list_s3_uri
       threatIntelIpListS3Uri      = var.threat_intel_ip_list_s3_uri
       threatIntelAccountListS3Uri = var.threat_intel_account_list_s3_uri
       threatIntelTtlDays          = var.threat_intel_ttl_days

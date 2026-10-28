@@ -194,6 +194,18 @@ variable "threat_intel_list_bucket" {
   default     = ""
 }
 
+variable "threat_intel_cve_list_s3_uri" {
+  description = "S3 URI of a plain CVE list (known-exploited membership, e.g. a CISA KEV export); empty disables it"
+  type        = string
+  default     = ""
+}
+
+variable "threat_intel_epss_list_s3_uri" {
+  description = "S3 URI of an EPSS score list (lines of CVE-YYYY-NNNN,score); empty disables it"
+  type        = string
+  default     = ""
+}
+
 variable "threat_intel_ip_list_s3_uri" {
   description = "s3://bucket/key of the newline-separated IP indicator list. Empty disables that list."
   type        = string

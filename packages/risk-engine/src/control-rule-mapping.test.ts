@@ -107,6 +107,14 @@ const REVIEWED_MAPPING: Record<string, { controls: string[]; why: string }> = {
     why: 'unresolved AccessDenied spike; not 4.1, which asks for an alarm',
   },
   'RULE-023': { controls: ['KH-DET-2'], why: 'a canary credential has been used' },
+  'RULE-035': {
+    controls: ['KH-DET-1'],
+    why: 'unresolved first-use API activity; a lead, so auto-ticketing stays off',
+  },
+  'RULE-036': {
+    controls: ['KH-DET-1'],
+    why: 'unresolved unusual-hour activity; informational, never auto-ticketed',
+  },
   'RULE-024': { controls: ['5.6'], why: 'IMDSv1 instances, those holding a role' },
   'RULE-025': { controls: ['1.20'], why: 'Access Analyzer not ACTIVE, including missing' },
   'RULE-026': { controls: ['3.6'], why: 'customer CMK without rotation' },

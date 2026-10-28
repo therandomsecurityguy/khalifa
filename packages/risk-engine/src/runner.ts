@@ -489,8 +489,18 @@ export class RiskRuleRunner {
   private riskInputWithThreatIntel(path: RulePath, threatIntel: ThreatIndicator[]): RiskScoreInput {
     const riskInput = this.buildRiskInput(path.vertices);
     if (threatIntel.length === 0) return riskInput;
+    const knownExploited = threatIntel.some((indicator) => indicator.type === 'cve');
+    const epss = threatIntel
+      .filter((indicator) => indicator.type === 'epss' && typeof indicator.score === 'number')
+      .reduce((max, indicator) => Math.max(max, indicator.score as number), 0);
+    const exploitability = {
+      ...riskInput.exploitability,
+      ...(knownExploited ? { exploitAvailable: true } : {}),
+      ...(epss > 0 ? { epss } : {}),
+    };
     return {
       ...riskInput,
+      ...(Object.keys(exploitability).length > 0 ? { exploitability } : {}),
       threatIntel: {
         indicators: threatIntel.map((indicator) => `${indicator.type}:${indicator.value}`),
       },

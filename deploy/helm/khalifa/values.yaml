@@ -82,6 +82,8 @@ config:
   accessAnalyzerTable: ''
   trafficObservationsTable: ''
   threatIndicatorsTable: ''
+  threatIntelCveListS3Uri: ''
+  threatIntelEpssListS3Uri: ''
   threatIntelIpListS3Uri: ''
   threatIntelAccountListS3Uri: ''
   threatIntelTtlDays: 90

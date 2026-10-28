@@ -10,7 +10,12 @@ import {
 export { ACCESS_DENIED_SPIKE_THRESHOLD };
 
 export type AnomalyType =
-  'ROOT_USAGE' | 'SECRET_READ_NEW_SOURCE_IP' | 'ACCESS_DENIED_SPIKE' | 'CANARY_USED';
+  | 'ROOT_USAGE'
+  | 'SECRET_READ_NEW_SOURCE_IP'
+  | 'ACCESS_DENIED_SPIKE'
+  | 'CANARY_USED'
+  | 'NEW_API_FOR_PRINCIPAL'
+  | 'UNUSUAL_HOUR_ACTIVITY';
 
 export interface AnomalyRecord {
   type: AnomalyType;
@@ -26,6 +31,12 @@ export interface AnomalyRecord {
   basis?: 'baseline' | 'cold-start';
   /** How many baseline standard deviations above the mean the spike is. */
   deviation?: number;
+  /**
+   * The behaviour that made the record new, for the query types that carry it
+   * (NEW_API_FOR_PRINCIPAL: the API calls absent from the baseline;
+   * UNUSUAL_HOUR_ACTIVITY: the UTC hours the principal never used before).
+   */
+  detail?: string;
 }
 
 export interface AnomalyQuery {
@@ -37,6 +48,15 @@ const EXCLUDED_EVENT_SOURCES = `'elasticloadbalancing.amazonaws.com', 'monitorin
 
 export const SECRET_READ_NEW_IP_WINDOW_DAYS = 7;
 export const SECRET_READ_BASELINE_MARGIN_DAYS = 30;
+// The behavioural-breadth queries (API mix, hour-of-day) share one window:
+// seven days evaluated against the thirty before them.
+export const UEBA_WINDOW_DAYS = 7;
+export const UEBA_BASELINE_DAYS = 30;
+export const MAX_ANOMALY_DETAIL = 200;
+const QUERY_TYPES_WITH_DETAIL = new Set<AnomalyType>([
+  'NEW_API_FOR_PRINCIPAL',
+  'UNUSUAL_HOUR_ACTIVITY',
+]);
 const MAX_QUERY_DAYS = 365;
 
 export function assertAthenaDatabase(value: string): string {
@@ -151,6 +171,97 @@ export function buildAnomalyQueries(
   `,
     },
     {
+      type: 'NEW_API_FOR_PRINCIPAL',
+      // API mix: calls this principal made in the evaluation window that it
+      // never made in the baseline window. A service the principal never
+      // touched shows through its API calls (all of them are new).
+      sql: `
+    WITH baseline_events AS (
+      SELECT DISTINCT
+        useridentity.arn AS principal_arn,
+        eventname
+      FROM ${database}.cloudtrail_logs
+      WHERE ${partitionWindow(UEBA_WINDOW_DAYS + UEBA_BASELINE_DAYS)}
+        AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${UEBA_WINDOW_DAYS + UEBA_BASELINE_DAYS}' day
+        AND from_iso8601_timestamp(eventtime) < current_timestamp - interval '${UEBA_WINDOW_DAYS}' day
+        AND useridentity.arn IS NOT NULL
+        AND useridentity.arn != ''
+    )
+    SELECT
+      reads.principal_arn,
+      reads.source_ip,
+      COUNT(*) AS event_count,
+      from_iso8601_timestamp(MIN(reads.eventtime)) AS first_seen,
+      from_iso8601_timestamp(MAX(reads.eventtime)) AS last_seen,
+      array_join(array_agg(DISTINCT reads.eventname), ', ') AS detail
+    FROM (
+      SELECT
+        useridentity.arn AS principal_arn,
+        sourceipaddress AS source_ip,
+        eventname,
+        eventtime
+      FROM ${database}.cloudtrail_logs
+      WHERE ${partitionWindow(UEBA_WINDOW_DAYS)}
+        AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${UEBA_WINDOW_DAYS}' day
+        AND useridentity.arn IS NOT NULL
+        AND useridentity.arn != ''
+        AND sourceipaddress IS NOT NULL
+        AND eventsource NOT IN (${EXCLUDED_EVENT_SOURCES})
+    ) reads
+    LEFT JOIN baseline_events
+      ON reads.principal_arn = baseline_events.principal_arn
+      AND reads.eventname = baseline_events.eventname
+    WHERE baseline_events.principal_arn IS NULL
+    GROUP BY reads.principal_arn, reads.source_ip
+  `,
+    },
+    {
+      type: 'UNUSUAL_HOUR_ACTIVITY',
+      // Time of day: UTC hours in which the principal acted during the
+      // evaluation window but never during the baseline window. A principal
+      // running at 03:00 for the first time is either a human in a new
+      // timezone or automation that is not the principal's own.
+      sql: `
+    WITH baseline_hours AS (
+      SELECT DISTINCT
+        useridentity.arn AS principal_arn,
+        hour(from_iso8601_timestamp(eventtime)) AS activity_hour
+      FROM ${database}.cloudtrail_logs
+      WHERE ${partitionWindow(UEBA_WINDOW_DAYS + UEBA_BASELINE_DAYS)}
+        AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${UEBA_WINDOW_DAYS + UEBA_BASELINE_DAYS}' day
+        AND from_iso8601_timestamp(eventtime) < current_timestamp - interval '${UEBA_WINDOW_DAYS}' day
+        AND useridentity.arn IS NOT NULL
+        AND useridentity.arn != ''
+    )
+    SELECT
+      reads.principal_arn,
+      reads.source_ip,
+      COUNT(*) AS event_count,
+      from_iso8601_timestamp(MIN(reads.eventtime)) AS first_seen,
+      from_iso8601_timestamp(MAX(reads.eventtime)) AS last_seen,
+      array_join(array_agg(DISTINCT CAST(reads.activity_hour AS varchar)), ', ') AS detail
+    FROM (
+      SELECT
+        useridentity.arn AS principal_arn,
+        sourceipaddress AS source_ip,
+        eventtime,
+        hour(from_iso8601_timestamp(eventtime)) AS activity_hour
+      FROM ${database}.cloudtrail_logs
+      WHERE ${partitionWindow(UEBA_WINDOW_DAYS)}
+        AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${UEBA_WINDOW_DAYS}' day
+        AND useridentity.arn IS NOT NULL
+        AND useridentity.arn != ''
+        AND sourceipaddress IS NOT NULL
+        AND eventsource NOT IN (${EXCLUDED_EVENT_SOURCES})
+    ) reads
+    LEFT JOIN baseline_hours
+      ON reads.principal_arn = baseline_hours.principal_arn
+      AND reads.activity_hour = baseline_hours.activity_hour
+    WHERE baseline_hours.principal_arn IS NULL
+    GROUP BY reads.principal_arn, reads.source_ip
+  `,
+    },
+    {
       type: 'ACCESS_DENIED_SPIKE',
       // Per-principal-per-IP-per-DAY counts over the evaluation window plus the
       // baseline. The deviation decision lives in baseline.ts (mean + 3
@@ -210,8 +321,9 @@ export function parseAnomalyRow(
   data: { VarCharValue?: string }[],
   rowNumber: number
 ): AnomalyRecord {
-  if (!data || data.length !== 5) {
-    throw new Error(`Invalid Athena anomaly row ${rowNumber}: expected 5 columns`);
+  const expectedColumns = QUERY_TYPES_WITH_DETAIL.has(type) ? 6 : 5;
+  if (!data || data.length !== expectedColumns) {
+    throw new Error(`Invalid Athena anomaly row ${rowNumber}: expected ${expectedColumns} columns`);
   }
 
   const principalArn = requiredColumn(data[0].VarCharValue, 'principal_arn', rowNumber);
@@ -236,7 +348,24 @@ export function parseAnomalyRow(
     }
   }
 
-  return { type, principalArn, sourceIp, eventCount, firstSeen, lastSeen };
+  let detail: string | undefined;
+  if (QUERY_TYPES_WITH_DETAIL.has(type)) {
+    const rawDetail = requiredColumn(data[5].VarCharValue, 'detail', rowNumber);
+    detail =
+      rawDetail.length > MAX_ANOMALY_DETAIL
+        ? `${rawDetail.slice(0, MAX_ANOMALY_DETAIL - 1)}…`
+        : rawDetail;
+  }
+
+  return {
+    type,
+    principalArn,
+    sourceIp,
+    eventCount,
+    firstSeen,
+    lastSeen,
+    ...(detail ? { detail } : {}),
+  };
 }
 
 export function anomalyAccountId(principalArn: string): string {
@@ -275,6 +404,7 @@ export function buildAnomalyNodes(
         ...(record.baselineDays !== undefined ? { baseline_days: record.baselineDays } : {}),
         ...(record.basis !== undefined ? { basis: record.basis } : {}),
         ...(record.deviation !== undefined ? { deviation: record.deviation } : {}),
+        ...(record.detail !== undefined ? { detail: record.detail } : {}),
         collection_scope: 'cloudtrail-anomalies',
         collection_run_id: runId,
         active: true,

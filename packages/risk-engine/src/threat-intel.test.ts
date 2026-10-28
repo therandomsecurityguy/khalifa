@@ -84,3 +84,64 @@ describe('pathIndicators', () => {
     expect(indicatorKey('ip', '203.0.113.7')).toBe('ip#203.0.113.7');
   });
 });
+
+describe('CVE and EPSS indicators', () => {
+  it('accepts CVE ids (either case) for known-exploited and EPSS lists', () => {
+    expect(isValidIndicator('cve', 'CVE-2024-1234')).toBe(true);
+    expect(isValidIndicator('cve', 'cve-2024-12345')).toBe(true);
+    expect(isValidIndicator('epss', 'CVE-2021-44228')).toBe(true);
+    expect(isValidIndicator('cve', 'RHSA-2024:1234')).toBe(false);
+    expect(isValidIndicator('epss', 'CVE-24-1')).toBe(false);
+  });
+
+  it('parses EPSS lines as "cve,score" and uppercases ids', () => {
+    const parsed = parseIndicatorList(
+      [
+        'cve-2024-1234,0.97',
+        'CVE-2021-44228, 0.5  # a comment',
+        'CVE-2020-0001 # no score: unusable',
+        'CVE-2019-0001,1.4 # out of range',
+        '',
+      ].join('\n'),
+      'epss',
+      's3://lists.example.com/epss.csv'
+    );
+
+    expect(parsed.indicators).toEqual([
+      {
+        type: 'epss',
+        value: 'CVE-2024-1234',
+        source: 's3://lists.example.com/epss.csv',
+        score: 0.97,
+      },
+      {
+        type: 'epss',
+        value: 'CVE-2021-44228',
+        source: 's3://lists.example.com/epss.csv',
+        score: 0.5,
+      },
+    ]);
+    expect(parsed.invalid).toBe(2);
+  });
+
+  it('parses a plain known-exploited CVE list', () => {
+    const parsed = parseIndicatorList('CVE-2023-1111\nCVE-2023-1111\njunk\n', 'cve', 'kev.txt');
+    expect(parsed.indicators).toEqual([{ type: 'cve', value: 'CVE-2023-1111', source: 'kev.txt' }]);
+    expect(parsed.invalid).toBe(1);
+  });
+
+  it('candidates a vulnerability CVE for both the KEV and EPSS lookups', () => {
+    const candidates = pathIndicators({
+      vertices: [
+        {
+          label: 'Vulnerability',
+          properties: { cve_id: 'cve-2024-9999' },
+        },
+      ],
+    });
+    expect(candidates).toEqual([
+      { type: 'cve', value: 'CVE-2024-9999' },
+      { type: 'epss', value: 'CVE-2024-9999' },
+    ]);
+  });
+});

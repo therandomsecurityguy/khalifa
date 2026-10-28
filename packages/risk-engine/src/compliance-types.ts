@@ -1368,14 +1368,14 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
     id: 'KH-DET-1',
     framework: 'KHALIFA_BASELINE',
     section: 'Detection',
-    title: 'Ensure there are no unresolved credential-use anomalies',
+    title: 'Ensure there are no unresolved identity anomalies',
     description:
-      'Reworded from "credential-use anomalies are detected", which its rules could not measure: they fire when an anomaly occurs, so zero was the healthy state and a finding read as a control failure. Stated as an outcome, each finding is a violation.',
+      'Reworded from "credential-use anomalies are detected", which its rules could not measure: they fire when an anomaly occurs, so zero was the healthy state and a finding read as a control failure. Stated as an outcome, each finding is a violation. Identity anomalies cover credential use (secret reads, AccessDenied spikes) and behavioural drift (first-use APIs, unusual hours).',
     severity: 'critical',
     automated: true,
-    relatedRules: ['RULE-021', 'RULE-022'],
+    relatedRules: ['RULE-021', 'RULE-022', 'RULE-035', 'RULE-036'],
     evidenceRequirements: [
-      'Open CloudTrailAnomaly findings of type SECRET_READ_NEW_SOURCE_IP (RULE-021) or ACCESS_DENIED_SPIKE (RULE-022).',
+      'Open CloudTrailAnomaly findings of type SECRET_READ_NEW_SOURCE_IP (RULE-021), ACCESS_DENIED_SPIKE (RULE-022), NEW_API_FOR_PRINCIPAL (RULE-035) or UNUSUAL_HOUR_ACTIVITY (RULE-036).',
     ],
     remediationGuidance:
       'Investigate the principal and source IP; rotate the secret if the access was not expected.',

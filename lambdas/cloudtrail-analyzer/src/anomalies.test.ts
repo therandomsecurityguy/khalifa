@@ -51,12 +51,14 @@ describe('buildAnomalyQueries input guards', () => {
 });
 
 describe('buildAnomalyQueries', () => {
-  it('builds the three detection queries with the database and window bound in', () => {
+  it('builds the five detection queries with the database and window bound in', () => {
     const queries = buildAnomalyQueries(DATABASE, 90);
 
     expect(queries.map((q) => q.type)).toEqual([
       'ROOT_USAGE',
       'SECRET_READ_NEW_SOURCE_IP',
+      'NEW_API_FOR_PRINCIPAL',
+      'UNUSUAL_HOUR_ACTIVITY',
       'ACCESS_DENIED_SPIKE',
     ]);
 
@@ -82,11 +84,74 @@ describe('buildAnomalyQueries', () => {
 
     // Denied spikes: daily counts for the baseline evaluator, no fixed
     // threshold in SQL.
-    expect(queries[2].sql).toContain("errorcode = 'AccessDenied'");
-    expect(queries[2].sql).toContain('AS day');
-    expect(queries[2].sql).toContain("'%Y-%m-%d'");
-    expect(queries[2].sql).not.toContain('HAVING');
-    expect(queries[2].sql).not.toContain(`>= ${ACCESS_DENIED_SPIKE_THRESHOLD}`);
+    expect(queries[4].sql).toContain("errorcode = 'AccessDenied'");
+    expect(queries[4].sql).toContain('AS day');
+    expect(queries[4].sql).toContain("'%Y-%m-%d'");
+    expect(queries[4].sql).not.toContain('HAVING');
+    expect(queries[4].sql).not.toContain(`>= ${ACCESS_DENIED_SPIKE_THRESHOLD}`);
+  });
+
+  it('parses a detail-bearing row and caps an oversized detail', () => {
+    const data = (values: string[]) => values.map((VarCharValue) => ({ VarCharValue }));
+    const record = parseAnomalyRow(
+      'NEW_API_FOR_PRINCIPAL',
+      data([
+        'arn:aws:iam::111122223333:user/deploy',
+        '203.0.113.9',
+        '4',
+        '2026-09-10T02:00:00Z',
+        '2026-09-10T02:30:00Z',
+        'CreateUser, AttachUserPolicy',
+      ]),
+      2
+    );
+    expect(record.detail).toBe('CreateUser, AttachUserPolicy');
+
+    const long = parseAnomalyRow(
+      'UNUSUAL_HOUR_ACTIVITY',
+      data([
+        'arn:aws:iam::111122223333:user/deploy',
+        '203.0.113.9',
+        '4',
+        '2026-09-10T02:00:00Z',
+        '2026-09-10T02:30:00Z',
+        'x'.repeat(500),
+      ]),
+      3
+    );
+    expect(long.detail).toHaveLength(200);
+    expect(long.detail?.endsWith('…')).toBe(true);
+  });
+
+  it('still requires five columns for the older query types', () => {
+    const data = (values: string[]) => values.map((VarCharValue) => ({ VarCharValue }));
+    expect(() =>
+      parseAnomalyRow(
+        'ROOT_USAGE',
+        data([
+          'arn:aws:iam::111122223333:root',
+          '203.0.113.50',
+          '5',
+          '2026-09-09T10:00:00Z',
+          '2026-09-10T10:00:00Z',
+          'unexpected',
+        ]),
+        2
+      )
+    ).toThrow('expected 5 columns');
+    expect(() =>
+      parseAnomalyRow(
+        'NEW_API_FOR_PRINCIPAL',
+        data([
+          'arn:aws:iam::111122223333:user/deploy',
+          '203.0.113.9',
+          '4',
+          '2026-09-10T02:00:00Z',
+          '2026-09-10T02:30:00Z',
+        ]),
+        2
+      )
+    ).toThrow('expected 6 columns');
   });
 
   it('adds a CANARY_USED query only when canary principals are configured', () => {
@@ -96,17 +161,40 @@ describe('buildAnomalyQueries', () => {
       'arn:aws:iam::111122223333:user/khalifa-canary-2',
     ]);
 
-    expect(queries).toHaveLength(4);
-    expect(queries[3].type).toBe('CANARY_USED');
-    expect(queries[3].sql).toContain(
+    expect(queries).toHaveLength(6);
+    expect(queries[5].type).toBe('CANARY_USED');
+    expect(queries[5].sql).toContain(
       "useridentity.arn IN ('arn:aws:iam::111122223333:user/khalifa-canary-1', 'arn:aws:iam::111122223333:user/khalifa-canary-2')"
     );
-    expect(queries[3].sql).toContain("interval '90' day");
+    expect(queries[5].sql).toContain("interval '90' day");
   });
 
   it('never emits a CANARY_USED query without canary principals', () => {
-    expect(buildAnomalyQueries(DATABASE, 90)).toHaveLength(3);
-    expect(buildAnomalyQueries(DATABASE, 90, [])).toHaveLength(3);
+    expect(buildAnomalyQueries(DATABASE, 90)).toHaveLength(5);
+    expect(buildAnomalyQueries(DATABASE, 90, [])).toHaveLength(5);
+  });
+
+  it('bounds the behavioural-breadth queries with their own baseline window', () => {
+    const queries = buildAnomalyQueries(DATABASE, 90);
+    const newApi = queries.find((query) => query.type === 'NEW_API_FOR_PRINCIPAL')!;
+    const hour = queries.find((query) => query.type === 'UNUSUAL_HOUR_ACTIVITY')!;
+
+    for (const query of [newApi, hour]) {
+      expect(query.sql).toContain('WITH baseline_');
+      expect(query.sql).toContain('SELECT DISTINCT');
+      expect(query.sql).toContain("interval '7' day");
+      expect(query.sql).toContain("interval '37' day");
+      expect(query.sql).toContain('LEFT JOIN baseline_');
+      expect(query.sql).toContain('WHERE baseline_');
+      expect(query.sql).toContain(
+        "'elasticloadbalancing.amazonaws.com', 'monitoring.amazonaws.com', 'logs.amazonaws.com'"
+      );
+    }
+    expect(newApi.sql).toContain('AND reads.eventname = baseline_events.eventname');
+    expect(hour.sql).toContain('hour(from_iso8601_timestamp(eventtime)) AS activity_hour');
+    expect(hour.sql).toContain(
+      'array_join(array_agg(DISTINCT CAST(reads.activity_hour AS varchar))'
+    );
   });
 });
 
