@@ -234,7 +234,9 @@ export interface AttackScenarioRunResponse {
   coverage: CoverageStatement;
 }
 
-export type CoverageLevel = 'fresh' | 'aging' | 'stale' | 'unknown';
+// Single source of truth lives with the likelihood it tempers.
+import type { CoverageLevel } from '@khalifa/risk-engine';
+export type { CoverageLevel };
 
 export interface CoverageStatement {
   level: CoverageLevel;

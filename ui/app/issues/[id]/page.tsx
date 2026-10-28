@@ -197,6 +197,9 @@ function FixSimulation({ ruleId }: { ruleId: string }) {
             ))}
           </ul>
         ))}
+      {result?.coverage != null && (
+        <p className="mt-2 text-xs text-gray-500">{result.coverage.note}</p>
+      )}
     </Card>
   );
 }
@@ -669,6 +672,16 @@ export default function IssueDetailPage() {
                   )}
                 </dl>
               </Card>
+            )}
+
+            {typeof detail.metadata?.coverageLevel === 'string' && (
+              <p className="text-xs text-gray-500" data-testid="coverage-level">
+                Graph coverage when scored: {detail.metadata.coverageLevel}
+                {detail.metadata.coverageLevel === 'stale' ||
+                detail.metadata.coverageLevel === 'aging'
+                  ? ' — the path likelihood is tempered down.'
+                  : ''}
+              </p>
             )}
 
             <FixSimulation ruleId={detail.ruleId} />

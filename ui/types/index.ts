@@ -181,6 +181,17 @@ export interface PathLikelihoodFactors {
   privilege: number;
   exploitability: number;
   reachability: number;
+  /** Freshness tempering (1 fresh/unknown, 0.8 aging, 0.5 stale); absent on old issues. */
+  coverage?: number;
+}
+
+export type CoverageLevel = 'fresh' | 'aging' | 'stale' | 'unknown';
+
+export interface CoverageStatement {
+  level: CoverageLevel;
+  latestSuccessAt?: string;
+  ageHours?: number;
+  note: string;
 }
 
 export interface ScoredPath {
@@ -212,12 +223,14 @@ export interface AttackPathSimulationResponse {
   totalPaths: number;
   truncated: boolean;
   edges: AttackPathSimulationEdge[];
+  coverage: CoverageStatement;
 }
 
 export interface AttackPathSearchResponse {
   from: AttackPathStart;
   to: AttackPathTarget;
   maxPathLength: number;
+  coverage: CoverageStatement;
   paths: ScoredPath[];
   entries: Record<string, AttackPathEntry>;
   truncated: boolean;
@@ -367,6 +380,7 @@ export interface AttackScenarioRunResponse {
   matchedSteps: number;
   totalSteps: number;
   steps: ScenarioStepRunResult[];
+  coverage: CoverageStatement;
 }
 
 export interface RuleQualityItem {

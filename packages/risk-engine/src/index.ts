@@ -51,6 +51,14 @@ export {
 export { globMatch } from './glob';
 export { extractRulePath, type RulePath } from './rule-path';
 export { pathLikelihood, type PathLikelihood, type PathLikelihoodFactors } from './likelihood';
+export {
+  COVERAGE_AGING_HOURS,
+  COVERAGE_FACTORS,
+  COVERAGE_FRESH_HOURS,
+  coverageFactor,
+  coverageLevelForAge,
+  type CoverageLevel,
+} from './coverage';
 export { forecastSeries, type Forecast, type ForecastProjection } from './forecast';
 export {
   indicatorKey,

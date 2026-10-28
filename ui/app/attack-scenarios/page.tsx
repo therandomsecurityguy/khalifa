@@ -65,6 +65,7 @@ function ScenarioCard({ scenario }: { scenario: AttackScenarioDetail }) {
           );
         })}
       </ol>
+      {run && <p className="mt-3 text-xs text-gray-500">{run.coverage.note}</p>}
       <div className="mt-4 flex items-center gap-3">
         <button
           type="button"

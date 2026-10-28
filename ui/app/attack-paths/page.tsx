@@ -292,6 +292,11 @@ export default function AttackPathsPage() {
                 </StatusMessage>
               )}
               {ready && results && (
+                <p className="mb-3 text-xs text-gray-500" data-testid="coverage-note">
+                  {results.coverage.note}
+                </p>
+              )}
+              {ready && results && (
                 <AttackGraph
                   paths={results.paths}
                   entries={results.entries}

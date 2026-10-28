@@ -25,6 +25,7 @@ function result(overrides: Partial<AttackPathSearchResponse> = {}): AttackPathSe
     paths: [],
     entries: {},
     truncated: false,
+    coverage: { level: 'fresh', note: 'Newest complete collection 1.2h ago.' },
     ...overrides,
   };
 }
@@ -254,5 +255,23 @@ describe('AttackPathsPage', () => {
     await pick('Reaching', 'crown');
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.queryByText(/more exist/)).not.toBeInTheDocument();
+  });
+
+  describe('explorer coverage note', () => {
+    it('states how fresh the graph behind the results is', async () => {
+      window.history.replaceState(null, '', '/attack-paths?from=any&to=restricted');
+      mockedSearch.mockResolvedValue(
+        result({
+          coverage: {
+            level: 'stale',
+            note: 'Newest complete collection 96h ago; treat the counts as stale evidence.',
+          },
+        })
+      );
+
+      render(<AttackPathsPage />);
+
+      expect(await screen.findByTestId('coverage-note')).toHaveTextContent('stale evidence');
+    });
   });
 });
