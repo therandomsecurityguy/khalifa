@@ -17,7 +17,9 @@ export type TrendMetric =
   | 'issuesResolved'
   | 'openRiskScore'
   | 'mttrHours'
-  | 'adminPrincipals';
+  | 'adminPrincipals'
+  | 'sloBurning'
+  | 'exposedByType';
 
 export interface PostureTrendPoint {
   metric: string;

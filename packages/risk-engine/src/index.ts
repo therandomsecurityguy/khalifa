@@ -52,6 +52,13 @@ export { globMatch } from './glob';
 export { extractRulePath, type RulePath } from './rule-path';
 export { pathLikelihood, type PathLikelihood, type PathLikelihoodFactors } from './likelihood';
 export {
+  issueSlo,
+  SLO_BURNING_THRESHOLD,
+  SLO_WINDOW_DAYS,
+  type IssueSlo,
+  type SloState,
+} from './slo';
+export {
   MAX_CITED_ENDPOINTS,
   observedTrafficFromPath,
   parseObservedEndpoints,

@@ -232,3 +232,36 @@ describe('escapeHtml', () => {
     expect(escapeHtml(`&<>"'`)).toBe('&amp;&lt;&gt;&quot;&#39;');
   });
 });
+
+describe('projections section', () => {
+  it('renders fixed-label projection lines when the sync published them', () => {
+    const { 'index.html': html } = renderSite(
+      config,
+      {
+        frameworks: [],
+        controls: [],
+        projections: [
+          {
+            label: 'Open backlog risk score',
+            perDay: -2.35,
+            confidence: 'medium',
+            basisDays: 30,
+            horizonDays: 30,
+            projectedValue: 830.12,
+          },
+        ],
+      },
+      null
+    );
+
+    expect(html).toContain('Where the posture is heading');
+    expect(html).toContain('Open backlog risk score');
+    expect(html).toContain('falling 2.35/day over the last 30 days (medium confidence)');
+    expect(html).toContain('about 830.12 in 30 days');
+  });
+
+  it('renders nothing without projections', () => {
+    const { 'index.html': html } = renderSite(config, { frameworks: [], controls: [] }, null);
+    expect(html).not.toContain('Where the posture is heading');
+  });
+});

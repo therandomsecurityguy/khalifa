@@ -5,6 +5,7 @@ import {
   getPublishableRequirements,
   publishableFrom,
   setReconciliationStoreForTests,
+  setTrendStoreForTests,
 } from '../routes/trust-center';
 import { requireTrustCenterSync } from '../middleware/rbac';
 
@@ -172,6 +173,75 @@ describe('GET /compliance/reconciliation/publishable', () => {
     await getPublishableRequirements({} as Request, res);
     expect(res.body.status).toBe('OK');
     expect(res.body.requirements).toHaveLength(1);
+  });
+
+  function thirtyPoints(metric: string, start: number, step: number) {
+    return Array.from({ length: 30 }, (_, index) => ({
+      metric,
+      date: new Date(Date.UTC(2026, 8, 1 + index)).toISOString().slice(0, 10),
+      value: start + step * index,
+      accountIds: [] as string[],
+      recordedAt: new Date().toISOString(),
+    }));
+  }
+
+  it('attaches projections to an OK response, via the trends forecaster', async () => {
+    const generatedAt = new Date(Date.now() - 60_000).toISOString();
+    setReconciliationStoreForTests({
+      getLatest: jest.fn().mockResolvedValue(record({ generatedAt })),
+      save: jest.fn(),
+    });
+    setTrendStoreForTests({
+      getSeries: jest
+        .fn()
+        .mockImplementation(async (metric: string) =>
+          metric === 'openRiskScore' ? thirtyPoints(metric, 900, -2) : []
+        ),
+    } as never);
+    const res = makeRes();
+    await getPublishableRequirements({} as Request, res);
+    setTrendStoreForTests(null);
+
+    expect(res.body.status).toBe('OK');
+    expect(res.body.projections).toEqual([
+      expect.objectContaining({
+        metric: 'openRiskScore',
+        perDay: -2,
+        confidence: expect.any(String),
+        basisDays: 30,
+        horizonDays: 30,
+      }),
+    ]);
+    expect(res.body.projections[0].projectedValue).toBeLessThan(900);
+  });
+
+  it('publishes no projections while the record is STALE, and survives unreadable trends', async () => {
+    setReconciliationStoreForTests({
+      getLatest: jest
+        .fn()
+        .mockResolvedValue(
+          record({ generatedAt: new Date(Date.now() - MAX_RECORD_AGE_MS - 60_000).toISOString() })
+        ),
+      save: jest.fn(),
+    });
+    setTrendStoreForTests({
+      getSeries: jest.fn().mockRejectedValue(new Error('AccessDenied')),
+    } as never);
+    const stale = makeRes();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    await getPublishableRequirements({} as Request, stale);
+    expect(stale.body.status).toBe('STALE');
+    expect(stale.body.projections).toBeUndefined();
+
+    setReconciliationStoreForTests({
+      getLatest: jest.fn().mockResolvedValue(record({ generatedAt: new Date().toISOString() })),
+      save: jest.fn(),
+    });
+    const unreadable = makeRes();
+    await getPublishableRequirements({} as Request, unreadable);
+    setTrendStoreForTests(null);
+    expect(unreadable.body.status).toBe('OK');
+    expect(unreadable.body.projections).toBeUndefined();
   });
 });
 

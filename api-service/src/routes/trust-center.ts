@@ -5,11 +5,14 @@ import {
   MAPPED_FRAMEWORKS,
   citationsByFramework,
   getControlById,
+  PostureTrendStore,
   type ComplianceControlStatus,
   type MappedFramework,
   type ReconciliationRecord,
   type ReconciliationStore,
 } from '@khalifa/risk-engine';
+import { buildForecast } from '../services/trend-forecast';
+import type { TrendPoint } from '../types';
 
 // The compliance CronJob reconciles every 4 hours. A record older than a day
 // means reconciliation has stopped, and statuses that old must not be published.
@@ -35,6 +38,21 @@ export interface PublishableMappedRequirement extends PublishableRequirement {
   framework: MappedFramework;
 }
 
+// Projections publish the direction of the posture, never its contents: a
+// fixed metric id (the sync layer owns the public wording), the fitted slope,
+// the confidence and the 30-day projection. They are attached by the route
+// only while the record is OK — STALE or MISSING publishes nothing, so a
+// stale graph cannot project either.
+export interface PublishableProjection {
+  metric: 'openIssuesBySeverity' | 'openRiskScore' | 'sloBurning';
+  perDay: number;
+  confidence: 'high' | 'medium' | 'low';
+  basisDays: number;
+  horizonDays: number;
+  projectedValue: number;
+  note?: string;
+}
+
 export interface PublishableResponse {
   // OK only when the latest record is OK and fresh. Anything else lists nothing.
   status: 'OK' | 'STALE' | 'MISSING';
@@ -43,7 +61,17 @@ export interface PublishableResponse {
   mappedFrameworks: PublishableMappedRequirement[];
   /** Hours after which a record is STALE and nothing is published. */
   maxAgeHours: number;
+  /** Only present while status is OK; absent when trends are unreadable. */
+  projections?: PublishableProjection[];
 }
+
+const PROJECTION_METRICS: PublishableProjection['metric'][] = [
+  'openIssuesBySeverity',
+  'openRiskScore',
+  'sloBurning',
+];
+const PROJECTION_WINDOW_DAYS = 30;
+const PROJECTION_HORIZON_DAYS = 30;
 
 export type BaselineStatuses = ReadonlyMap<string, ComplianceControlStatus>;
 
@@ -159,6 +187,55 @@ export function setReportStoreForTests(s: DynamoDBReportStore | null): void {
   reports = s;
 }
 
+let trends: PostureTrendStore | undefined;
+
+function trendStore(): PostureTrendStore {
+  trends ??= new PostureTrendStore();
+  return trends;
+}
+
+export function setTrendStoreForTests(s: PostureTrendStore | null): void {
+  trends = s ?? undefined;
+}
+
+// One bounded read per metric over the same window the trends page shows,
+// through the same forecast (and its staleness honesty) the trends route
+// serves. Failure-tolerant: unreadable trends mean no projections, never a
+// failed publishable response.
+export async function publishableProjections(): Promise<PublishableProjection[] | undefined> {
+  try {
+    const projections: PublishableProjection[] = [];
+    for (const metric of PROJECTION_METRICS) {
+      const points = await trendStore().getSeries(metric, PROJECTION_WINDOW_DAYS);
+      if (points.length === 0) continue;
+      const trendPoints: TrendPoint[] = points.map((point) => ({
+        metric: point.metric,
+        date: point.date,
+        value: point.value,
+        accountIds: point.accountIds,
+        recordedAt: point.recordedAt,
+      }));
+      const forecast = buildForecast(metric, trendPoints);
+      if (!forecast) continue;
+      const target = forecast.projected.find((p) => p.days === PROJECTION_HORIZON_DAYS);
+      if (!target) continue;
+      projections.push({
+        metric,
+        perDay: Math.round(forecast.slopePerDay * 100) / 100,
+        confidence: forecast.confidence,
+        basisDays: forecast.basisDays,
+        horizonDays: PROJECTION_HORIZON_DAYS,
+        projectedValue: Math.round(target.value * 10) / 10,
+        ...(forecast.note ? { note: forecast.note } : {}),
+      });
+    }
+    return projections.length > 0 ? projections : undefined;
+  } catch (error) {
+    console.error('Error reading trend forecasts for projections:', error);
+    return undefined;
+  }
+}
+
 export async function getPublishableRequirements(_req: Request, res: Response): Promise<void> {
   try {
     const record = await reconciliationStore().getLatest();
@@ -178,7 +255,14 @@ export async function getPublishableRequirements(_req: Request, res: Response): 
       baselineStatuses = undefined;
     }
 
-    res.json(publishableFrom(record, new Date(), baselineStatuses));
+    const response = publishableFrom(record, new Date(), baselineStatuses);
+    // Projections ride the same gate: nothing publishes while the record is
+    // not OK, and a projection failure never fails the response.
+    if (response.status === 'OK') {
+      const projections = await publishableProjections();
+      if (projections) response.projections = projections;
+    }
+    res.json(response);
   } catch (error) {
     console.error('Error reading the CIS reconciliation record:', error);
     res.status(500).json({

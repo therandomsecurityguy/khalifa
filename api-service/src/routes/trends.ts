@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
-import { forecastSeries, PostureTrendStore } from '@khalifa/risk-engine';
+import { PostureTrendStore } from '@khalifa/risk-engine';
 import { parseBoundedInteger } from '../middleware/gremlin-validator';
-import type { SeverityCounts, TrendForecast, TrendPoint, TrendResponse } from '../types';
+import { buildForecast } from '../services/trend-forecast';
+import type { ExposureCounts, SeverityCounts, TrendPoint, TrendResponse } from '../types';
 
 const trendStore = new PostureTrendStore();
 
@@ -15,48 +16,9 @@ const VALID_METRICS = [
   'openRiskScore',
   'mttrHours',
   'adminPrincipals',
+  'sloBurning',
+  'exposedByType',
 ];
-
-const DAY_MS = 86_400_000;
-const STALE_RUN_MS = 2 * DAY_MS;
-const MAX_SERIES_GAP_DAYS = 3;
-
-// The engine's projection plus the series' own honesty check: no runner pass
-// in two days, or three or more missing days inside the window, lowers the
-// confidence a level and says why. This is the trend-store equivalent of the
-// compliance engine's freshCoverage gate.
-function buildForecast(metric: string, points: TrendPoint[]): TrendForecast | undefined {
-  const forecast = forecastSeries(
-    points.map((point) => ({ date: point.date, value: point.value }))
-  );
-  if (!forecast) return undefined;
-
-  let confidence = forecast.confidence;
-  const notes: string[] = [];
-  const last = points[points.length - 1];
-  const recordedMs = last.recordedAt ? Date.parse(last.recordedAt) : NaN;
-  if (Number.isFinite(recordedMs) && Date.now() - recordedMs > STALE_RUN_MS) {
-    confidence = downgrade(confidence);
-    notes.push('No runner pass in the last two days');
-  }
-  const spanDays = (Date.parse(last.date) - Date.parse(points[0].date)) / DAY_MS + 1;
-  if (spanDays - points.length >= MAX_SERIES_GAP_DAYS) {
-    confidence = downgrade(confidence);
-    notes.push('gaps in the series');
-  }
-
-  return {
-    ...forecast,
-    confidence,
-    ...(notes.length > 0 ? { note: notes.join('; ') } : {}),
-  };
-}
-
-function downgrade(confidence: TrendForecast['confidence']): TrendForecast['confidence'] {
-  if (confidence === 'high') return 'medium';
-  if (confidence === 'medium') return 'low';
-  return 'low';
-}
 
 export async function getTrend(req: Request<{ metric: string }>, res: Response): Promise<void> {
   try {
@@ -82,6 +44,15 @@ export async function getTrend(req: Request<{ metric: string }>, res: Response):
     const points = await trendStore.getSeries(metric as any, days);
     const trendPoints: TrendPoint[] = points.map((p) => {
       const bySeverity = severityCounts(p.sample?.bySeverity);
+      const breached = nonNegativeInteger(p.sample?.breached);
+      const slo =
+        metric === 'sloBurning' && bySeverity && breached !== undefined
+          ? { ...bySeverity, breached }
+          : undefined;
+      const exposure =
+        metric === 'exposedByType'
+          ? exposureCounts(p.sample?.byType, p.sample?.truncated)
+          : undefined;
       return {
         metric: p.metric,
         date: p.date,
@@ -89,6 +60,8 @@ export async function getTrend(req: Request<{ metric: string }>, res: Response):
         accountIds: p.accountIds,
         recordedAt: p.recordedAt,
         ...(bySeverity ? { bySeverity } : {}),
+        ...(slo ? { slo } : {}),
+        ...(exposure ? { exposure } : {}),
       };
     });
 
@@ -111,6 +84,28 @@ export async function getTrend(req: Request<{ metric: string }>, res: Response):
       message: 'Failed to get trend data',
     });
   }
+}
+
+// `sample` is free-form in storage; only reviewed shapes reach the client. The
+// exposure map is bounded twice: at most 25 types, label-shaped keys only.
+const MAX_EXPOSURE_TYPES = 25;
+const EXPOSURE_LABEL = /^[A-Za-z][A-Za-z0-9]{0,40}$/;
+
+function nonNegativeInteger(raw: unknown): number | undefined {
+  return Number.isSafeInteger(raw) && (raw as number) >= 0 ? (raw as number) : undefined;
+}
+
+function exposureCounts(byTypeRaw: unknown, truncatedRaw: unknown): ExposureCounts | undefined {
+  if (!byTypeRaw || typeof byTypeRaw !== 'object') return undefined;
+  const entries = Object.entries(byTypeRaw as Record<string, unknown>);
+  if (entries.length === 0 || entries.length > MAX_EXPOSURE_TYPES) return undefined;
+  const byType: Record<string, number> = {};
+  for (const [label, count] of entries) {
+    const parsed = nonNegativeInteger(count);
+    if (!EXPOSURE_LABEL.test(label) || parsed === undefined) return undefined;
+    byType[label] = parsed;
+  }
+  return { byType, truncated: truncatedRaw === true };
 }
 
 // `sample` is free-form in storage; only these four counts reach the client.

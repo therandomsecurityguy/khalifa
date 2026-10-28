@@ -55,6 +55,9 @@ export function loadGenerated(dir: string): {
   if (generated.frameworks !== undefined && !Array.isArray(generated.frameworks)) {
     throw new Error(`${configPath} frameworks must be an array`);
   }
+  if (generated.projections !== undefined && !Array.isArray(generated.projections)) {
+    throw new Error(`${configPath} projections must be an array`);
+  }
   if (generated.controls !== undefined && !Array.isArray(generated.controls)) {
     throw new Error(`${configPath} controls must be an array`);
   }

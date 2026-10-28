@@ -77,6 +77,15 @@ export interface GeneratedConfig {
   }>;
   /** Posture transitions recorded by the sync tool, newest first. */
   changelog?: Array<{ date: string; title: string; description?: string }>;
+  /** Series directions published by the sync tool while the record is OK. */
+  projections?: Array<{
+    label: string;
+    perDay: number;
+    confidence: 'high' | 'medium' | 'low';
+    basisDays: number;
+    horizonDays: number;
+    projectedValue: number;
+  }>;
 }
 
 export interface BuildMeta {

@@ -40,7 +40,8 @@ npx serve trust-center/dist
 
 Everything posture-related comes from the generated files and is never
 hand-edited: `trust.config.json` (framework cards, grouped controls, posture
-changelog), `build-meta.json` (monitoring statement), `questionnaire.json`
+changelog, series projections), `build-meta.json` (monitoring statement),
+`questionnaire.json`
 (downloadable answer sheet, linked from Documents), and `posture-state.json`
 (published so the next sync can compute the changelog).
 

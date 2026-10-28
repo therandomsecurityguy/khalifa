@@ -27,6 +27,16 @@ export interface PublishableMappedRequirement extends PublishableRequirement {
   framework: Exclude<PublishedFramework, 'CIS_AWS_FOUNDATIONS'>;
 }
 
+export interface PublishableProjection {
+  metric: 'openIssuesBySeverity' | 'openRiskScore' | 'sloBurning';
+  perDay: number;
+  confidence: 'high' | 'medium' | 'low';
+  basisDays: number;
+  horizonDays: number;
+  projectedValue: number;
+  note?: string;
+}
+
 export interface PublishableResponse {
   status: 'OK' | 'STALE' | 'MISSING';
   generatedAt: string | null;
@@ -34,6 +44,8 @@ export interface PublishableResponse {
   mappedFrameworks?: PublishableMappedRequirement[];
   /** Hours after which a record is STALE; absent on older APIs. */
   maxAgeHours?: number;
+  /** Only present while status is OK; absent when trends are unreadable. */
+  projections?: PublishableProjection[];
 }
 
 export type TrustControlStatus = 'implemented' | 'partial' | 'planned';
@@ -63,6 +75,19 @@ export interface TrustConfigFragment {
   }>;
   /** Posture transitions since the previous publish, newest first. */
   changelog?: ChangelogEntry[];
+  /**
+   * Direction of the posture series, only while the record is OK. Labels are
+   * fixed strings chosen here (never taken from the API response), so the
+   * public page can only ever show reviewed wording beside plain numbers.
+   */
+  projections?: Array<{
+    label: string;
+    perDay: number;
+    confidence: 'high' | 'medium' | 'low';
+    basisDays: number;
+    horizonDays: number;
+    projectedValue: number;
+  }>;
 }
 
 export interface ChangelogEntry {

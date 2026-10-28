@@ -210,6 +210,27 @@ describe('IssuesPage', () => {
     );
   });
 
+  it('marks findings burning or past their SLA window in the list', async () => {
+    mockedIssues.mockResolvedValue({
+      items: [
+        {
+          ...issue('RULE-004-burning', 'high'),
+          slo: { windowDays: 30, ageDays: 25, burn: 0.83, state: 'burning', breachInDays: 5 },
+        },
+        {
+          ...issue('RULE-004-breached', 'critical'),
+          slo: { windowDays: 7, ageDays: 9, burn: 1.29, state: 'breached', breachInDays: 0 },
+        },
+      ],
+      totalCount: 2,
+    });
+
+    render(<IssuesPage />);
+
+    expect(await screen.findByText('SLA window 83% burnt')).toBeInTheDocument();
+    expect(screen.getByText('past SLA window')).toBeInTheDocument();
+  });
+
   it('filters by severity from the summary and removes it from its chip', async () => {
     mockedSummary.mockResolvedValue(summary({ critical: [2, 0, 1], high: [4, 1, 1] }));
     mockedIssues.mockResolvedValue(list([issue('a', 'high')]));
