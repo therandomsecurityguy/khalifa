@@ -87,11 +87,13 @@ describe('trend copy and insight', () => {
   it('only lists metrics something writes', () => {
     expect(Object.keys(TREND_METRICS).sort()).toEqual([
       'adminPrincipals',
+      'exposedByType',
       'issuesCreated',
       'issuesResolved',
       'mttrHours',
       'openIssuesBySeverity',
       'openRiskScore',
+      'sloBurning',
     ]);
   });
 });

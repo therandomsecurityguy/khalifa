@@ -574,7 +574,82 @@ describe('RiskRuleRunner stale-issue fix', () => {
       { metric: 'crossAccountTrusts', value: 2, accountIds: [] },
       { metric: 'usersWithoutMfa', value: 0, accountIds: [] },
       { metric: 'openRiskScore', value: 90, accountIds: [] },
+      {
+        metric: 'sloBurning',
+        value: 0,
+        accountIds: [],
+        sample: { bySeverity: { critical: 0, high: 0, medium: 0, low: 0 }, breached: 0 },
+      },
+      {
+        metric: 'exposedByType',
+        value: 0,
+        accountIds: [],
+        sample: { byType: {}, truncated: false },
+      },
     ]);
+  });
+
+  test('snapshotTrends counts issues burning their severity window', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    store.getOpenIssuesByRule = jest.fn().mockImplementation(async (ruleId: string) => {
+      if (ruleId === 'RULE-001')
+        return [
+          { id: 'old-critical', severity: 'critical', createdAt: daysAgo(6) },
+          { id: 'breached-high', severity: 'high', createdAt: daysAgo(31) },
+          { id: 'fresh-low', severity: 'low', createdAt: daysAgo(1) },
+        ];
+      return [];
+    });
+    store.listIssues = jest.fn().mockResolvedValue({ items: [], totalCount: 0 });
+    (runner as any).neptuneClient = { executeQuery: jest.fn().mockResolvedValue([]) };
+
+    await (runner as any).snapshotTrends([
+      { ruleId: 'RULE-001', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
+    ]);
+
+    const call = mockRecordMany.mock.calls[0][0] as Array<{
+      metric: string;
+      value: number;
+      sample?: Record<string, unknown>;
+    }>;
+    expect(call.find((point) => point.metric === 'sloBurning')).toMatchObject({
+      value: 2,
+      sample: { bySeverity: { critical: 1, high: 1, medium: 0, low: 0 }, breached: 1 },
+    });
+  });
+
+  test('snapshotTrends records exposure by type from one bounded label read', async () => {
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    store.getOpenIssuesByRule = jest.fn().mockResolvedValue([]);
+    store.listIssues = jest.fn().mockResolvedValue({ items: [], totalCount: 0 });
+    const executeQuery = jest.fn().mockImplementation(async (query: string) => {
+      if (query.includes('is_internet_exposed')) {
+        return ['Ec2Instance', 'Ec2Instance', 'LoadBalancer'];
+      }
+      return [];
+    });
+    (runner as any).neptuneClient = { executeQuery };
+
+    await (runner as any).snapshotTrends([
+      { ruleId: 'RULE-001', executionTime: 1, matches: [], issuesCreated: 0, issuesResolved: 0 },
+    ]);
+
+    expect(executeQuery).toHaveBeenCalledWith(
+      expect.stringContaining("has('is_internet_exposed', true)")
+    );
+    expect(executeQuery).toHaveBeenCalledWith(expect.stringContaining('.limit('));
+    const call = mockRecordMany.mock.calls[0][0] as Array<{
+      metric: string;
+      value: number;
+      sample?: Record<string, unknown>;
+    }>;
+    expect(call.find((point) => point.metric === 'exposedByType')).toMatchObject({
+      value: 3,
+      sample: { byType: { Ec2Instance: 2, LoadBalancer: 1 }, truncated: false },
+    });
   });
 
   test('snapshotTrends adds the run’s created and resolved totals to the day', async () => {

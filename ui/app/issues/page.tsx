@@ -94,7 +94,19 @@ function IssueRow({
         )}
       </Td>
       <Td className="whitespace-nowrap text-gray-500">{issue.owningTeam}</Td>
-      <Td className="whitespace-nowrap text-gray-500">{issue.riskScore.toFixed(1)}</Td>
+      <Td className="whitespace-nowrap text-gray-500">
+        {issue.riskScore.toFixed(1)}
+        {issue.slo && issue.slo.state !== 'ok' && (
+          <div
+            className={`mt-1 text-xs font-medium ${issue.slo.state === 'breached' ? 'text-red-700' : 'text-amber-700'}`}
+            title={`${issue.slo.ageDays} days old against a ${issue.slo.windowDays}-day window`}
+          >
+            {issue.slo.state === 'breached'
+              ? 'past SLA window'
+              : `SLA window ${Math.round(issue.slo.burn * 100)}% burnt`}
+          </div>
+        )}
+      </Td>
       <Td className="whitespace-nowrap">
         <IssueStatusBadge status={issue.status} />
         {issue.status === 'resolved' && issue.resolvedAt && (

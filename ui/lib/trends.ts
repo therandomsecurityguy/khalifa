@@ -11,6 +11,26 @@ export interface TrendMetricCopy {
 }
 
 export const TREND_METRICS: Record<string, TrendMetricCopy> = {
+  sloBurning: {
+    id: 'sloBurning',
+    label: 'Findings past 80% of their risk window',
+    unit: 'findings burning',
+    meaning:
+      'Open findings older than 80% of their severity window (critical 7 days, high 30, medium 90, low 180), derived from creation dates — the backlog’s own pace against the SLA policy.',
+    href: '/issues',
+    hrefLabel: 'Open issues',
+    lowerIsBetter: true,
+  },
+  exposedByType: {
+    id: 'exposedByType',
+    label: 'Internet-exposed resources',
+    unit: 'exposed resources',
+    meaning:
+      'Vertices the collector marked internet-exposed, grouped by resource type in each day’s sample. One bounded label read per run, capped at 2000.',
+    href: '/attack-paths',
+    hrefLabel: 'Path explorer',
+    lowerIsBetter: true,
+  },
   openIssuesBySeverity: {
     id: 'openIssuesBySeverity',
     label: 'Open issues',

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import {
   DynamoDBIssueRepository,
+  issueSlo,
   PostureTrendStore,
   type IssueListQuery,
 } from '@khalifa/risk-engine';
@@ -63,7 +64,12 @@ export async function listIssues(req: Request, res: Response): Promise<void> {
 
     const response = await issueStore.listIssues(query);
 
-    res.json(response);
+    res.json({
+      ...response,
+      items: response.items.map((issue) =>
+        issue.status === 'open' ? { ...issue, slo: issueSlo(issue) } : issue
+      ),
+    });
   } catch (error) {
     if (
       error instanceof Error &&
@@ -158,6 +164,7 @@ export async function getIssue(req: Request<{ id: string }>, res: Response): Pro
 
     const response: IssueDetailResponse = {
       ...issue,
+      ...(issue.status === 'open' ? { slo: issueSlo(issue) } : {}),
       attackPath: {
         nodes: attackPathNodes,
         edges: attackPathEdges,

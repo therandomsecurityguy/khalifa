@@ -2,6 +2,18 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Risk windows, exposure series and trust-center projections (long tail, part 2)
+
+### Added
+
+- **Per-issue risk windows**: a new engine module (`slo.ts`) sets an SLA window per severity (critical 7 days, high 30, medium 90, low 180) and derives, deterministically from `createdAt`, the age, burn (`age / window`), state (`ok` / `burning` at 80% / `breached` past the window) and days-to-breach. Open issues expose it on read (`GET /issues`, `GET /issues/:id` — no stored state), the Issues list marks burning and breached findings, and the issue page's Status card states the window.
+- **Two new trend series**: `sloBurning` (open findings past 80% of their window, split by severity plus the breached count — derived from the open issues the snapshot already reads, no extra query) and `exposedByType` (internet-exposed vertices grouped by resource type — one bounded, label-only read capped at 2000 with an explicit truncation flag; the cost objection answered by bound, not by skipping the series). Both flow through the trends route with sanitized samples and appear on the Trends page.
+- **Trust-center projections**: while the reconciliation record is `OK`, `GET /compliance/reconciliation/publishable` attaches compact series projections (metric id, per-day slope, confidence, basis/horizon days, 30-day value) for open findings, backlog risk score and SLO burn, sharing one forecaster with the trends route (extracted to `services/trend-forecast.ts`). The sync layer maps the fixed metric ids to **reviewed labels** (nothing else can reach the page), drops unknown metrics and out-of-range values, and the sanitization tripwires scan the whole fragment; the rendered page gains a "Where the posture is heading" block. STALE/MISSING publishes nothing and unreadable trends omit projections without failing the response.
+
+### Notes
+
+- This completes the predictive completion plan (`~/Documents/Testing/plans/2026-10-27-predictive-completion.md`); the one deliberate remainder is ASN attribution, deferred with its reason recorded (external dataset + licensing).
+
 ## [Unreleased] - UEBA breadth and EPSS/KEV enrichment (long tail, part 1)
 
 ### Added

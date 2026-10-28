@@ -70,6 +70,7 @@ ${renderPractices(config)}
 ${renderDocuments(config, assets)}
 ${renderSubprocessors(config)}
 ${renderChangelog(generated.changelog)}
+${renderProjections(generated.projections)}
 ${renderProvenance(generatedAt, recordAt, config.monitoring, meta?.source?.maxAgeHours)}
 ${renderFaq(config)}
 ${renderContact(config)}
@@ -169,6 +170,26 @@ ${[...domain.items]
 </div>`
   )
   .join('\n')}
+</section>`;
+}
+
+function renderProjections(projections: GeneratedConfig['projections']): string {
+  if (!projections || projections.length === 0) return '';
+  const items = projections
+    .map((projection) => {
+      const movement =
+        projection.perDay === 0
+          ? 'holding flat'
+          : projection.perDay > 0
+            ? `rising ${Math.abs(projection.perDay)}/day`
+            : `falling ${Math.abs(projection.perDay)}/day`;
+      return `<li><strong>${escapeHtml(projection.label)}</strong> is ${movement} over the last ${projection.basisDays} days (${escapeHtml(projection.confidence)} confidence), projecting to about ${projection.projectedValue} in ${projection.horizonDays} days.</li>`;
+    })
+    .join('\n');
+  return `<section class="card" aria-label="Projection">
+  <h2 class="section-title">Where the posture is heading</h2>
+  <p>Straight-line projections over the published series, with a noise band. These are predictions, not commitments, and they publish only while the underlying assessment is current.</p>
+  <ul>${items}</ul>
 </section>`;
 }
 

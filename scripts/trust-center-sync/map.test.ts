@@ -148,3 +148,85 @@ describe('buildTrustFragment', () => {
     ).toThrow('forbidden value');
   });
 });
+
+describe('projections', () => {
+  const base = {
+    status: 'OK' as const,
+    generatedAt: '2026-10-14T11:30:00.000Z',
+    requirements: [],
+    mappedFrameworks: [],
+  };
+
+  it('maps known metrics to fixed public labels with plain numbers', () => {
+    const fragment = buildTrustFragment({
+      ...base,
+      projections: [
+        {
+          metric: 'openRiskScore',
+          perDay: -2.345,
+          confidence: 'medium',
+          basisDays: 30,
+          horizonDays: 30,
+          projectedValue: 830.12,
+        },
+      ],
+    });
+
+    expect(fragment.projections).toEqual([
+      {
+        label: 'Open backlog risk score',
+        perDay: -2.35,
+        confidence: 'medium',
+        basisDays: 30,
+        horizonDays: 30,
+        projectedValue: 830.12,
+      },
+    ]);
+  });
+
+  it('drops unknown metrics, bad confidences and out-of-range windows', () => {
+    const fragment = buildTrustFragment({
+      ...base,
+      projections: [
+        {
+          metric: 'mystery' as never,
+          perDay: 1,
+          confidence: 'high',
+          basisDays: 30,
+          horizonDays: 30,
+          projectedValue: 10,
+        },
+        {
+          metric: 'sloBurning',
+          perDay: 1,
+          confidence: 'certain' as never,
+          basisDays: 30,
+          horizonDays: 30,
+          projectedValue: 10,
+        },
+        {
+          metric: 'sloBurning',
+          perDay: Number.NaN,
+          confidence: 'low',
+          basisDays: 30,
+          horizonDays: 30,
+          projectedValue: 10,
+        },
+        {
+          metric: 'openIssuesBySeverity',
+          perDay: 1,
+          confidence: 'low',
+          basisDays: 999,
+          horizonDays: 30,
+          projectedValue: 10,
+        },
+      ],
+    });
+
+    expect(fragment.projections).toBeUndefined();
+  });
+
+  it('omits projections entirely when the API sends none', () => {
+    expect(buildTrustFragment(base).projections).toBeUndefined();
+  });
+});

@@ -43,6 +43,8 @@ export interface Issue {
   resolvedReason?: string;
   suppression?: Suppression;
   statusHistory?: StatusChange[];
+  /** Open issues only: age against the severity's risk window, computed on read. */
+  slo?: IssueSlo;
 }
 
 export interface StatusChange {
@@ -187,6 +189,19 @@ export interface TrendPoint {
   accountIds?: string[];
   recordedAt: string;
   bySeverity?: SeverityCounts;
+  /** sloBurning only: how the burning/breached count splits by severity. */
+  slo?: SloCounts;
+  /** exposedByType only: exposed vertices per resource type, capped. */
+  exposure?: ExposureCounts;
+}
+
+export interface SloCounts extends SeverityCounts {
+  breached: number;
+}
+
+export interface ExposureCounts {
+  byType: Record<string, number>;
+  truncated: boolean;
 }
 
 export interface SeverityCounts {
@@ -235,7 +250,7 @@ export interface AttackScenarioRunResponse {
 }
 
 // Single source of truth lives with the likelihood it tempers.
-import type { CoverageLevel } from '@khalifa/risk-engine';
+import type { CoverageLevel, IssueSlo } from '@khalifa/risk-engine';
 export type { CoverageLevel };
 
 export interface CoverageStatement {

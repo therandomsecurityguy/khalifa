@@ -16,6 +16,7 @@ import type {
 } from './types';
 import { extractRulePath, type RulePath } from './rule-path';
 import { coverageLevelForAge, type CoverageLevel } from './coverage';
+import { issueSlo } from './slo';
 import { pathLikelihood } from './likelihood';
 import { observedTrafficFromPath } from './observedTraffic';
 import { pathIndicators, ThreatIndicatorStore, type ThreatIndicator } from './threat-intel';
@@ -33,6 +34,9 @@ export const RULE_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 60_000];
 // incomplete and issues get no label (absent, not false).
 const INDEPENDENT_FINDING_CAP = 5000;
 const COVERAGE_RECORD_CAP = 5000;
+// Exposure series: how many vertices the by-type aggregation will read; the
+// point is flagged truncated when the cap bites.
+const EXPOSED_TYPE_CAP = 2000;
 
 // Resources listed on one issue; matchCount keeps the full number.
 const MAX_ISSUE_RESOURCES = 200;
@@ -278,6 +282,12 @@ export class RiskRuleRunner {
     const byRule = new Map<string, number>();
     const bySeverity: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
 
+    // SLO burn is derived from the open issues this loop already reads — no
+    // extra query — so the series is always exactly the backlog's state.
+    const sloBySeverity: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+    let sloBreached = 0;
+    const snapshotAt = new Date();
+
     for (const result of results) {
       const openIssues = await this.issueStore.getOpenIssuesByRule(result.ruleId);
       totalOpen += openIssues.length;
@@ -286,6 +296,13 @@ export class RiskRuleRunner {
         if (issue.severity in bySeverity) bySeverity[issue.severity] += 1;
         if (typeof issue.riskScore === 'number' && Number.isFinite(issue.riskScore)) {
           openRiskScore += issue.riskScore;
+        }
+        if (issue.severity in sloBySeverity) {
+          const slo = issueSlo(issue, snapshotAt);
+          if (slo.state === 'burning' || slo.state === 'breached') {
+            sloBySeverity[issue.severity] += 1;
+            if (slo.state === 'breached') sloBreached += 1;
+          }
         }
       }
       created += result.issuesCreated;
@@ -298,6 +315,7 @@ export class RiskRuleRunner {
     // than failing the trend snapshot.
     const mttrHours = await this.meanResolutionHours();
     const adminPrincipals = await this.countAdminPrincipals();
+    const exposedByType = await this.countExposedByType();
 
     await store.recordMany([
       // The value is the total open count; the severity split rides in `sample`.
@@ -313,6 +331,25 @@ export class RiskRuleRunner {
       // Open risk score: the backlog's sum, so a few criticals weigh more than
       // many lows.
       { metric: 'openRiskScore', value: Math.round(openRiskScore * 10) / 10, accountIds: [] },
+      // Findings burning their severity window (or past it): the backlog's
+      // own pace, derived from creation dates, not a new measurement.
+      {
+        metric: 'sloBurning',
+        value:
+          sloBySeverity.critical + sloBySeverity.high + sloBySeverity.medium + sloBySeverity.low,
+        accountIds: [],
+        sample: { bySeverity: sloBySeverity, breached: sloBreached },
+      },
+      ...(exposedByType
+        ? [
+            {
+              metric: 'exposedByType' as const,
+              value: exposedByType.total,
+              accountIds: [],
+              sample: { byType: exposedByType.byType, truncated: exposedByType.truncated },
+            },
+          ]
+        : []),
       ...(mttrHours !== undefined
         ? [{ metric: 'mttrHours' as const, value: mttrHours, accountIds: [] }]
         : []),
@@ -337,6 +374,30 @@ export class RiskRuleRunner {
         .filter((hours) => Number.isFinite(hours) && hours >= 0);
       if (durations.length === 0) return undefined;
       return Math.round((durations.reduce((a, b) => a + b, 0) / durations.length) * 10) / 10;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Internet-exposed vertices grouped by label, bounded: one property-filtered
+  // read (the same predicate the rules already run), a label-only payload and
+  // a cap with an explicit truncation flag — the cost objection answered by
+  // bound, not by skipping the series. Failures skip the point.
+  private async countExposedByType(): Promise<
+    { total: number; byType: Record<string, number>; truncated: boolean } | undefined
+  > {
+    try {
+      const rows = await this.neptuneClient.executeQuery(
+        `g.V().has('is_internet_exposed', true).limit(${EXPOSED_TYPE_CAP + 1}).label()`
+      );
+      const labels = rows.map((row) => String(row)).filter((label) => label.length > 0);
+      const truncated = labels.length > EXPOSED_TYPE_CAP;
+      const byType: Record<string, number> = {};
+      for (const label of labels.slice(0, EXPOSED_TYPE_CAP)) {
+        byType[label] = (byType[label] ?? 0) + 1;
+      }
+      const total = Object.values(byType).reduce((sum, count) => sum + count, 0);
+      return { total, byType, truncated };
     } catch {
       return undefined;
     }

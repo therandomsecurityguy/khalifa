@@ -1,6 +1,7 @@
 import { MAPPED_PUBLISHED_FRAMEWORKS, PUBLISHED_FRAMEWORKS } from './types';
 import type {
   PublishableMappedRequirement,
+  PublishableProjection,
   PublishableRequirement,
   PublishableResponse,
   PublishedFramework,
@@ -122,8 +123,51 @@ export function buildTrustFragment(response: PublishableResponse): TrustConfigFr
   }
 
   const fragment: TrustConfigFragment = { frameworks, controls };
+  const projections = sanitizeProjections(response.projections);
+  if (projections.length > 0) fragment.projections = projections;
+
   assertSanitized(fragment);
   return fragment;
+}
+
+// The public wording lives here, keyed by the API's fixed metric ids — an API
+// response can choose a metric and carry numbers, nothing else. Unknown
+// metrics, non-finite numbers or out-of-range windows are dropped, never
+// rendered.
+const PROJECTION_LABELS: Record<PublishableProjection['metric'], string> = {
+  openIssuesBySeverity: 'Open findings',
+  openRiskScore: 'Open backlog risk score',
+  sloBurning: 'Findings past 80% of their risk window',
+};
+
+const PROJECTION_CONFIDENCE: PublishableProjection['confidence'][] = ['high', 'medium', 'low'];
+
+function sanitizeProjections(
+  raw: PublishableProjection[] | undefined
+): NonNullable<TrustConfigFragment['projections']> {
+  const projections: NonNullable<TrustConfigFragment['projections']> = [];
+  for (const projection of raw ?? []) {
+    const label = PROJECTION_LABELS[projection.metric];
+    if (!label || !PROJECTION_CONFIDENCE.includes(projection.confidence)) continue;
+    const numbers = [
+      projection.perDay,
+      projection.basisDays,
+      projection.horizonDays,
+      projection.projectedValue,
+    ];
+    if (!numbers.every((value) => typeof value === 'number' && Number.isFinite(value))) continue;
+    if (projection.basisDays < 1 || projection.basisDays > 365) continue;
+    if (projection.horizonDays < 1 || projection.horizonDays > 365) continue;
+    projections.push({
+      label,
+      perDay: Math.round(projection.perDay * 100) / 100,
+      confidence: projection.confidence,
+      basisDays: Math.round(projection.basisDays),
+      horizonDays: Math.round(projection.horizonDays),
+      projectedValue: Math.round(projection.projectedValue * 100) / 100,
+    });
+  }
+  return projections;
 }
 
 function frameworkEntry(

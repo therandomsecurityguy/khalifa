@@ -279,6 +279,26 @@ function StatusDetails({ issue }: { issue: IssueDetail }) {
           Current status:{' '}
           <span className={STATUS_TEXT[issue.status]}>{STATUS_LABELS[issue.status]}</span>
         </p>
+        {issue.status === 'open' && issue.slo && (
+          <Field label="Risk window">
+            <span
+              className={
+                issue.slo.state === 'breached'
+                  ? 'font-medium text-red-700'
+                  : issue.slo.state === 'burning'
+                    ? 'font-medium text-amber-700'
+                    : undefined
+              }
+            >
+              {issue.slo.ageDays} of {issue.slo.windowDays} days
+              {issue.slo.state === 'breached'
+                ? ' — past the SLA window'
+                : issue.slo.state === 'burning'
+                  ? ` — burning, breaches in ${issue.slo.breachInDays} days`
+                  : ''}
+            </span>
+          </Field>
+        )}
         {issue.status === 'resolved' &&
           (issue.resolvedAt ? (
             <>

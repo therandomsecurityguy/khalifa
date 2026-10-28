@@ -198,17 +198,32 @@ graph, and the top row is the cheapest fix for the most (or worst) paths.
 
 ## Trajectory forecasting
 
-The rule runner writes three more daily series beside the issue counts: the
-backlog's total risk score (a few criticals weigh more than many lows), mean
-time to resolution over issues resolved in the last 30 days, and the
-admin-principal count from the policy evaluator's findings. `GET
-/trends/:metric` fits an explainable least-squares line over the window and
-returns 7/30-day projections with a residual band and a confidence level
-derived from fit quality and point count — degraded a level, with the reason in
-`note`, when no runner pass recorded in two days or the window has three or
-more missing days. The Trends page renders the projection beside the series.
-Publishing projections to the trust center is deferred until the publishable
-discipline covers them.
+The rule runner writes daily series beside the issue counts: the backlog's
+total risk score (a few criticals weigh more than many lows), mean time to
+resolution over issues resolved in the last 30 days, the admin-principal count
+from the policy evaluator's findings, **SLO burn** (open findings past 80% of
+their severity window — critical 7 days, high 30, medium 90, low 180 — derived
+from creation dates the run already reads, no extra query) and
+**exposure-by-type** (a bounded label-only read of internet-exposed vertices,
+capped at 2000 with an explicit truncation flag). `GET /trends/:metric` fits
+an explainable least-squares line over the window and returns 7/30-day
+projections with a residual band and a confidence level derived from fit
+quality and point count — degraded a level, with the reason in `note`, when no
+runner pass recorded in two days or the window has three or more missing days.
+The Trends page renders the projection beside the series, and each open issue
+carries its own window state (`GET /issues` computes burn, `burning` and
+`breached` on read from the severity window).
+
+**Projections publish with the posture**: while the reconciliation record is
+`OK`, `GET /compliance/reconciliation/publishable` attaches compact
+projections (metric id, per-day slope, confidence, basis and horizon, the
+30-day projection) for open findings, backlog risk score and SLO burn — the
+same forecaster, so the page and the API never disagree. STALE or MISSING
+publishes nothing, and unreadable trends omit the projections without failing
+the response. The sync layer owns the public wording: it maps the fixed metric
+ids to reviewed labels and drops anything unknown, and the sanitization
+tripwires still scan the whole fragment, so the public page shows reviewed
+strings beside plain numbers only.
 
 ## Rule quality and calibration
 

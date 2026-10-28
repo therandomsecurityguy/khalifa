@@ -262,6 +262,18 @@ describe('IssuePage fix simulation', () => {
     expect(within(card).getByText(/treat the counts as aging evidence/)).toBeInTheDocument();
   });
 
+  it('shows the SLO risk window on an open issue', async () => {
+    mockedIssue.mockResolvedValue({
+      ...detail(),
+      slo: { windowDays: 30, ageDays: 24, burn: 0.8, state: 'burning', breachInDays: 6 },
+    });
+
+    render(<IssuePage />);
+
+    expect(await screen.findByText('Risk window')).toBeInTheDocument();
+    expect(screen.getByText(/24 of 30 days/)).toHaveTextContent('breaches in 6 days');
+  });
+
   it('labels the graph coverage when the issue was scored', async () => {
     mockedIssue.mockResolvedValue({
       ...detail(),

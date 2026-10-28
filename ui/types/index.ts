@@ -18,6 +18,16 @@ export interface Issue {
   resolvedReason?: string;
   suppression?: Suppression;
   statusHistory?: StatusChange[];
+  /** Open issues only: age against the severity's risk window, computed on read. */
+  slo?: IssueSlo;
+}
+
+export interface IssueSlo {
+  windowDays: number;
+  ageDays: number;
+  burn: number;
+  state: 'ok' | 'burning' | 'breached';
+  breachInDays: number;
 }
 
 export interface StatusChange {
