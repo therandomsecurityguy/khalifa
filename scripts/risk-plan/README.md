@@ -9,6 +9,11 @@ terraform show -json plan.out > plan.json
 npm run risk:plan -- plan.json                      # fails (exit 1) on anything >= high
 npm run risk:plan -- plan.json --min-severity critical
 npm run risk:plan -- plan.json --json               # machine-readable
+
+# IAM policy diff (outside Terraform too):
+npm run risk:plan -- --policy after.json --policy-before before.json
+# Helm values for the chart:
+npm run risk:plan -- --helm-values values.yaml
 ```
 
 Exit codes: `0` no finding at or above the minimum severity, `1` the gate
@@ -33,6 +38,15 @@ collected, the real topology), so findings say what collection would add. The
 catalogue is local (`catalogue.ts`) so the script needs no built engine at
 runtime; `catalogue.test.ts` pins it to the engine's names and severities.
 
+IAM policies are parsed with the same parser the CIEM evaluator runs
+(`lambdas/policy-evaluator/policy-parser.ts`), and with a before document
+(plan `change.before`, or `--policy-before` for standalone files) the checks
+are a diff: a grant that already existed is not newly introduced. Statement
+conditions, SCPs and permission boundaries are **not** evaluated; findings
+whose statement has conditions say so. `--helm-values` reads the chart values
+with the same YAML a `helm install` would; only ingress that decides network
+reach is judged today.
+
 Optional CI gate (a plan artifact has to come from the pipeline that runs
 `terraform plan`):
 
@@ -42,4 +56,7 @@ Optional CI gate (a plan artifact has to come from the pipeline that runs
     terraform -chdir=env plan -out plan.out
     terraform -chdir=env show -json plan.out > plan.json
     npm run risk:plan -- plan.json --min-severity high
+
+- name: Risk-check the chart values
+  run: npm run risk:plan -- --helm-values deploy/helm/khalifa/values.yaml
 ```

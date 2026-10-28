@@ -8,11 +8,14 @@ export interface PlannedResource {
   actions: string[];
   /** Known `after` values; a key is absent when the plan cannot know it. */
   after: Record<string, unknown>;
+  /** Known `before` values, for diff semantics (an unchanged grant is not new). */
+  before: Record<string, unknown>;
 }
 
 interface ChangeShape {
   actions?: unknown;
   after?: unknown;
+  before?: unknown;
   after_unknown?: unknown;
 }
 
@@ -57,6 +60,7 @@ export function parsePlan(text: string): PlannedResource[] {
       name: typeof change.name === 'string' ? change.name : change.address,
       actions,
       after: knownValues((change.change as ChangeShape | undefined)?.after),
+      before: knownValues((change.change as ChangeShape | undefined)?.before),
     });
   });
   return resources;

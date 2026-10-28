@@ -2,6 +2,18 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Observed-traffic hop citations and shift-left v2
+
+### Added
+
+- **Endpoint-level flow-log evidence**: the flow-log analyzer now runs a second, bounded aggregation alongside the per-interface totals — the top remote senders (`srcaddr`) per interface, ranked by bytes with a window function, capped at 5 per interface with a parsed-row cap and two Athena scans per run. The endpoints ride the existing `TrafficObservations` row (TTL unchanged); a failure in the endpoint query degrades to observations without citations, never a failed run. The collector deduplicates the top senders across an instance's interfaces (biggest first, capped at 5) onto `observed_endpoints`.
+- **Hops cite observations**: attack paths carry per-hop `observedTraffic` citations (the engine maps each observed vertex to the 1-based hop that arrives at it, tolerantly), the explorer response and issue metadata include them, and the graph draws an "observed traffic from <address>" chip on the hop's target — so a path shows observed traffic on a specific hop, not just configured exposure.
+- **Shift-left v2 in `risk:plan`**: IAM policy documents embedded in the plan (`aws_iam_policy` / `aws_iam_role_policy`) are parsed with the same parser the CIEM evaluator runs; a policy that newly grants `iam:PassRole` on `Resource: "*"` fails the gate as critical, and a wildcard `Action: "*"` is high. With a before-policy (plan `change.before`, or `--policy-before` with the new `--policy`) checks are a true diff — unchanged grants are not re-reported; conditions/SCPs are explicitly not evaluated. New `--helm-values values.yaml` flags an internet-facing ingress as high (plain enabled ingress: a medium note). Standalone policy files cover non-Terraform flows; the README documents the optional CI gate for all three inputs.
+
+### Notes
+
+- Still open from the re-review (`~/Documents/Testing/plans/2026-10-27-predictive-completion.md`): the long tail (UEBA breadth, EPSS/KEV enrichment, trust-center publication of projections, per-issue risk window/SLO).
+
 ## [Unreleased] - Freshness tempering across risk
 
 ### Changed

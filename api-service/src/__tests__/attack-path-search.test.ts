@@ -233,6 +233,21 @@ describe('GET /attack-paths/search', () => {
     expect(res.body.coverage).toMatchObject({ level: 'unknown' });
   });
 
+  it('cites observed traffic on the hop that arrives at a flagged workload', async () => {
+    const ec2 = v('i', 'Ec2Instance', {
+      is_internet_exposed: true,
+      traffic_observed: true,
+      observed_endpoints: JSON.stringify([{ address: '203.0.113.7', bytes: 2048, flows: 3 }]),
+    });
+    searchAttackPaths.mockResolvedValue([{ nodes: [v('internet', 'Internet'), ec2], edges: [] }]);
+
+    const res = await call({ from: 'internet', to: 'crown' });
+
+    expect(res.body.paths[0].observedTraffic).toEqual([
+      { hop: 1, vertexId: 'i', endpoints: [{ address: '203.0.113.7', bytes: 2048, flows: 3 }] },
+    ]);
+  });
+
   it('tempers every path when the newest collection is stale, and says so', async () => {
     const ec2 = v('i', 'Ec2Instance', { is_internet_exposed: true });
     searchAttackPaths.mockResolvedValue([{ nodes: [ec2], edges: [] }]);

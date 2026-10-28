@@ -248,6 +248,20 @@ than collection (data classification, which accounts are collected, the real
 topology), so findings state what collection would add, and ports no catalogue
 rule covers yet are marked as such rather than given an invented rule id.
 
+The gate widens beyond Terraform plans: IAM policy documents embedded in the
+plan (`aws_iam_policy` / `aws_iam_role_policy`) are parsed with the **same
+policy parser the CIEM evaluator runs**, and a policy that newly grants
+`iam:PassRole` on `Resource: "*"` fails it as critical (with a before-policy —
+plan `change.before` or `--policy-before` — the checks are a true diff: an
+unchanged grant is not newly introduced; statement conditions, SCPs and
+permission boundaries are not evaluated and findings say so). Standalone
+files cover flows outside Terraform: `--policy after.json [--policy-before
+before.json]`. `--helm-values values.yaml` flags the chart values that decide
+network reach: an ingress annotated internet-facing is high, a plain enabled
+ingress is a medium note (the controller's default decides). All inputs share
+one report and one exit code, so teams can wire the same optional CI gate to
+plan, policy and chart changes.
+
 ## Observed reachability
 
 Flow logs are the one signal that says where traffic actually went. The
@@ -256,15 +270,23 @@ queries the `vpc_flow_logs` Glue table — partition projection over
 account/region/day, the standard v5 fields with the account id taken from the
 partition — for ACCEPT flows per network interface within a bounded window
 (default 7 days, max 31, at most 5000 interfaces per run) and writes
-`TrafficObservations` in DynamoDB (one row per interface, TTL 30 days). The
-collector reads that table during EC2 collection with the hub's own
-credentials and marks each instance `traffic_observed` (with the latest
-observation time); member-account credentials never read it. Reachability
-confidence in path likelihood is then **observed AND configured**: traffic
-observed on a workload proves reachability even when a restricted read left
-the configuration unknown, and the issue page lists the observed-traffic fact
-beside the configured ones. Everything is cost-gated: Terraform creates
-nothing without `flow_logs_bucket`, the CronJob ships suspended, and a
+`TrafficObservations` in DynamoDB (one row per interface, TTL 30 days). A
+second, bounded aggregation runs alongside it: the top remote senders
+(`srcaddr`) per interface, ranked by bytes via a window function and capped at
+5 per interface with a parsed-row cap, stored as a small endpoint list on the
+observation row — two Athena scans per run, one extra bound, and a failure in
+the endpoint query degrades to observations without citations. The
+collector reads the table during EC2 collection with the hub's own
+credentials and marks each instance `traffic_observed` (latest observation
+time, and the deduplicated top endpoints, biggest senders first, capped at 5,
+as `observed_endpoints`); member-account credentials never read it.
+Reachability confidence in path likelihood is then **observed AND configured**:
+traffic observed on a workload proves reachability even when a restricted read
+left the configuration unknown, and the graph, the attack-path explorer and
+the issue page cite it — a hop that arrives at an observed workload shows an
+"observed traffic from <address>" chip, and issues store the per-hop citations
+(`observedTraffic`) in their metadata. Everything is cost-gated: Terraform
+creates nothing without `flow_logs_bucket`, the CronJob ships suspended, and a
 deployment without the table simply has no observed traffic.
 
 ## Threat-intelligence matching

@@ -89,10 +89,13 @@ describe('parseArgs', () => {
   });
 
   it.each([
-    [[], 'A plan file path is required'],
+    [[], 'A plan file, --policy or --helm-values input is required'],
     [['--min-severity', 'potato', 'plan.json'], '--min-severity must be'],
     [['--verbose', 'plan.json'], 'Unknown option: --verbose'],
     [['a.json', 'b.json'], 'Unexpected argument: b.json'],
+    [['--policy'], '--policy needs a file path'],
+    [['--policy-before', 'before.json'], '--policy-before only applies together with --policy'],
+    [['--helm-values'], '--helm-values needs a file path'],
   ])('rejects %j', (argv, message) => {
     const parsed = parseArgs(argv as string[]);
     expect(parsed.error).toContain(message);
@@ -127,5 +130,100 @@ describe('main', () => {
     const { io: streams, err } = io('not json');
     expect(main(['plan.json'], streams)).toBe(2);
     expect(err.join('\n')).toContain('not valid JSON');
+  });
+});
+
+describe('shift-left inputs', () => {
+  const passRolePolicy = JSON.stringify({
+    Version: '2012-10-17',
+    Statement: [
+      { Effect: 'Allow', Action: ['iam:PassRole'], Resource: '*' },
+      { Effect: 'Allow', Action: ['s3:GetObject'], Resource: 'arn:aws:s3:::data/*' },
+    ],
+  });
+  const scopedBefore = JSON.stringify({
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Action: ['iam:PassRole'],
+        Resource: 'arn:aws:iam::111122223333:role/app',
+      },
+    ],
+  });
+
+  it('fails the gate on an IAM policy diff that newly grants iam:PassRole on *', () => {
+    const result = runRiskPlan({ policyText: passRolePolicy, policyBeforeText: scopedBefore });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain('IAM Policy Grants iam:PassRole on All Resources');
+    expect(result.output).toContain('Identity → iam:PassRole(*) → compute it launches → role');
+    expect(result.report.failing).toHaveLength(1);
+  });
+
+  it('reports nothing new when the grant already existed', () => {
+    const alreadyWide = JSON.stringify({
+      Version: '2012-10-17',
+      Statement: [{ Effect: 'Allow', Action: ['iam:PassRole'], Resource: '*' }],
+    });
+
+    const result = runRiskPlan({ policyText: passRolePolicy, policyBeforeText: alreadyWide });
+    expect(result.exitCode).toBe(0);
+    expect(result.report.findings).toEqual([]);
+  });
+
+  it('scans policies embedded in a plan, diffing before against after', () => {
+    const result = runRiskPlan({
+      planText: planText([
+        change('aws_iam_policy.wide', 'aws_iam_policy', { policy: passRolePolicy }),
+      ]),
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain('aws_iam_policy.wide');
+
+    const diffed = runRiskPlan({
+      planText: JSON.stringify({
+        resource_changes: [
+          {
+            address: 'aws_iam_policy.wide',
+            mode: 'managed',
+            type: 'aws_iam_policy',
+            name: 'wide',
+            change: {
+              actions: ['update'],
+              before: { policy: passRolePolicy },
+              after: { policy: passRolePolicy },
+            },
+          },
+        ],
+      }),
+    });
+    expect(diffed.report.findings).toEqual([]);
+  });
+
+  it('flags an internet-facing Helm ingress and lets a plain one pass a high gate', () => {
+    const flagged = runRiskPlan({
+      helmValuesText:
+        'ingress:\n  enabled: true\n  annotations:\n    alb.ingress.kubernetes.io/scheme: internet-facing\n',
+    });
+    expect(flagged.exitCode).toBe(1);
+    expect(flagged.output).toContain('Internet-Facing Ingress Declared for the API/UI');
+
+    const note = runRiskPlan({ helmValuesText: 'ingress:\n  enabled: true\n' });
+    expect(note.exitCode).toBe(0);
+    expect(note.output).toContain('Ingress Declared for the API/UI');
+
+    const disabled = runRiskPlan({ helmValuesText: 'ingress:\n  enabled: false\n' });
+    expect(disabled.report.findings).toEqual([]);
+  });
+
+  it('treats a malformed policy or values file as a usage error', () => {
+    expect(() => runRiskPlan({ policyText: 'not json' })).toThrow(
+      '--policy must be a valid IAM policy document (JSON)'
+    );
+    expect(() => runRiskPlan({ helmValuesText: ':::: not yaml ::::' })).toThrow(
+      '--helm-values must be a valid YAML values file'
+    );
   });
 });

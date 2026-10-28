@@ -1073,6 +1073,10 @@ async function collectEc2(
       if (observation) {
         node.properties.traffic_observed = true;
         if (observation.lastSeen) node.properties.traffic_observed_at = observation.lastSeen;
+        if (observation.endpoints && observation.endpoints.length > 0) {
+          // Bounded citation for attack-path hops (address/bytes/flows/last_seen).
+          node.properties.observed_endpoints = JSON.stringify(observation.endpoints);
+        }
       }
     }
   }

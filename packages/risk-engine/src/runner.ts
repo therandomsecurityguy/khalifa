@@ -17,6 +17,7 @@ import type {
 import { extractRulePath, type RulePath } from './rule-path';
 import { coverageLevelForAge, type CoverageLevel } from './coverage';
 import { pathLikelihood } from './likelihood';
+import { observedTrafficFromPath } from './observedTraffic';
 import { pathIndicators, ThreatIndicatorStore, type ThreatIndicator } from './threat-intel';
 import { techniquesForRule } from './attack-techniques';
 
@@ -453,6 +454,7 @@ export class RiskRuleRunner {
     const scoreResult = computeRiskScore(riskInput);
     const likelihood = pathLikelihood(riskInput, this.coverageLevel);
     const independentFinding = this.independentFindingFor(rule, resources);
+    const observedTraffic = observedTrafficFromPath(path.vertices);
 
     return {
       id: this.issueStore.generateIssueId(rule.id, identity),
@@ -477,6 +479,7 @@ export class RiskRuleRunner {
         ...(threatIntel.length > 0 ? { threatIntelMatches: threatIntel } : {}),
         ...(independentFinding !== undefined ? { independentFinding } : {}),
         ...(this.coverageLevel ? { coverageLevel: this.coverageLevel } : {}),
+        ...(observedTraffic.length > 0 ? { observedTraffic } : {}),
         attackTechniques: techniquesForRule(rule.id),
       },
     };
@@ -509,6 +512,7 @@ export class RiskRuleRunner {
     const riskInput = this.riskInputWithThreatIntel(path, threatIntel);
     const scoreResult = computeRiskScore(riskInput);
     const likelihood = pathLikelihood(riskInput, this.coverageLevel);
+    const observedTraffic = observedTrafficFromPath(path.vertices);
     const updatedAt = new Date().toISOString();
 
     const refreshed: Issue = {
@@ -531,6 +535,7 @@ export class RiskRuleRunner {
           matchCount,
           lastRefreshedAt: updatedAt,
           ...(this.coverageLevel ? { coverageLevel: this.coverageLevel } : {}),
+          ...(observedTraffic.length > 0 ? { observedTraffic } : {}),
           attackTechniques: techniquesForRule(rule.id),
         },
         threatIntel,

@@ -106,6 +106,22 @@ function stageOf(vertex: GraphVertex): Stage {
   return STAGE_BY_LABEL[vertex.label] ?? 'compute';
 }
 
+// The first remote sender the flow-log analyzer tagged on this vertex, for a
+// citation chip; junk or absence is simply no address.
+function firstObservedEndpoint(value: unknown): string | undefined {
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!Array.isArray(parsed)) return undefined;
+  const first = parsed[0] as { address?: unknown } | undefined;
+  return first && typeof first.address === 'string' && first.address ? first.address : undefined;
+}
+
 // Flags come only from properties the collector writes; nothing is inferred.
 export function riskFlags(vertex: GraphVertex): RiskFlag[] {
   const p = vertex.properties ?? {};
@@ -124,6 +140,10 @@ export function riskFlags(vertex: GraphVertex): RiskFlag[] {
   if (p.password_enabled === true && p.mfa_enabled === false) add('risk', 'Console without MFA');
   if (typeof p.key_age_days === 'number' && p.key_age_days > 90)
     add('warn', 'Key older than 90 days');
+  if (p.traffic_observed === true) {
+    const endpoint = firstObservedEndpoint(p.observed_endpoints);
+    add('warn', endpoint ? `Observed traffic from ${endpoint}` : 'Observed traffic');
+  }
   if (p.data_classification === 'secret') add('risk', 'Secret data');
   if (p.data_classification === 'restricted') add('risk', 'Restricted data');
   if (p.crown_jewel === true) add('risk', 'Crown jewel');

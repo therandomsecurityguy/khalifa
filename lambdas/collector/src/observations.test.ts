@@ -1,4 +1,8 @@
-import { instanceObservation, loadTrafficObservations } from './observations';
+import {
+  instanceObservation,
+  loadTrafficObservations,
+  MAX_INSTANCE_ENDPOINTS,
+} from './observations';
 
 function clientReturning(...responses: unknown[]): any {
   const send = jest.fn();
@@ -34,6 +38,19 @@ describe('loadTrafficObservations', () => {
             packets: { N: '12' },
             bytes: { N: '4096' },
             last_seen: { S: '2026-10-19T02:00:00Z' },
+            endpoints: {
+              L: [
+                {
+                  M: {
+                    address: { S: '203.0.113.7' },
+                    bytes: { N: '2048' },
+                    flows: { N: '2' },
+                    last_seen: { S: '2026-10-19T01:30:00Z' },
+                  },
+                },
+                { M: { address: { S: '198.51.100.9' }, bytes: { N: '1' }, flows: { N: '1' } } },
+              ],
+            },
           },
         ],
       },
@@ -50,7 +67,34 @@ describe('loadTrafficObservations', () => {
       packets: 12,
       bytes: 4096,
       lastSeen: '2026-10-19T02:00:00Z',
+      endpoints: [
+        {
+          address: '203.0.113.7',
+          bytes: 2048,
+          flows: 2,
+          lastSeen: '2026-10-19T01:30:00Z',
+        },
+        { address: '198.51.100.9', bytes: 1, flows: 1 },
+      ],
     });
+  });
+
+  it('treats a malformed endpoint list as no citations', async () => {
+    const client = clientReturning({
+      Responses: {
+        TrafficObservations: [
+          {
+            interface_id: { S: 'eni-1' },
+            packets: { N: '1' },
+            bytes: { N: '1' },
+            endpoints: { L: [{ M: { flows: { N: '2' } } }, { S: 'junk' }] },
+          },
+        ],
+      },
+    });
+
+    const observations = await loadTrafficObservations(client, 'TrafficObservations', ['eni-1']);
+    expect(observations.get('eni-1')?.endpoints).toBeUndefined();
   });
 
   it('caps the lookups per run', async () => {
@@ -93,5 +137,64 @@ describe('instanceObservation', () => {
   it('is undefined without a match, and tolerates missing ids', () => {
     expect(instanceObservation(['eni-9', undefined], observations)).toBeUndefined();
     expect(instanceObservation([], observations)).toBeUndefined();
+  });
+
+  it('merges endpoints across interfaces, biggest senders first, capped', () => {
+    const withEndpoints = new Map([
+      [
+        'eni-1',
+        {
+          interfaceId: 'eni-1',
+          packets: 1,
+          bytes: 2,
+          endpoints: [
+            { address: '203.0.113.7', bytes: 1024, flows: 2 },
+            { address: '198.51.100.9', bytes: 512, flows: 1 },
+          ],
+        },
+      ],
+      [
+        'eni-2',
+        {
+          interfaceId: 'eni-2',
+          packets: 1,
+          bytes: 2,
+          endpoints: [
+            { address: '203.0.113.7', bytes: 4096, flows: 8 },
+            { address: '192.0.2.10', bytes: 256, flows: 1 },
+          ],
+        },
+      ],
+    ]);
+
+    const observation = instanceObservation(['eni-1', 'eni-2'], withEndpoints);
+
+    expect(observation?.endpoints).toEqual([
+      { address: '203.0.113.7', bytes: 4096, flows: 8 },
+      { address: '198.51.100.9', bytes: 512, flows: 1 },
+      { address: '192.0.2.10', bytes: 256, flows: 1 },
+    ]);
+  });
+
+  it('caps the endpoint citations per instance', () => {
+    const many = new Map([
+      [
+        'eni-1',
+        {
+          interfaceId: 'eni-1',
+          packets: 1,
+          bytes: 1,
+          endpoints: Array.from({ length: 9 }, (_, index) => ({
+            address: `203.0.113.${index}`,
+            bytes: 100 - index,
+            flows: 1,
+          })),
+        },
+      ],
+    ]);
+
+    const observation = instanceObservation(['eni-1'], many);
+    expect(observation?.endpoints).toHaveLength(MAX_INSTANCE_ENDPOINTS);
+    expect(observation?.endpoints?.[0].address).toBe('203.0.113.0');
   });
 });
