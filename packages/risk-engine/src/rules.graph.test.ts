@@ -662,12 +662,16 @@ describe('detection and posture rules', () => {
     ['RULE-021', 'SECRET_READ_NEW_SOURCE_IP'],
     ['RULE-022', 'ACCESS_DENIED_SPIKE'],
     ['RULE-023', 'CANARY_USED'],
+    ['RULE-035', 'NEW_API_FOR_PRINCIPAL'],
+    ['RULE-036', 'UNUSUAL_HOUR_ACTIVITY'],
   ])('%s matches only %s anomalies', async (ruleId, type) => {
     for (const anomaly of [
       'ROOT_USAGE',
       'SECRET_READ_NEW_SOURCE_IP',
       'ACCESS_DENIED_SPIKE',
       'CANARY_USED',
+      'NEW_API_FOR_PRINCIPAL',
+      'UNUSUAL_HOUR_ACTIVITY',
     ]) {
       await vertex('CloudTrailAnomaly', `anomaly-${anomaly}`, { anomaly_type: anomaly });
     }
