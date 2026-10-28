@@ -11,14 +11,19 @@ import { isIP } from 'node:net';
 // per line, '#' comments). AWS-native intelligence needs no import: GuardDuty
 // applies AWS's managed reputation lists itself and the findings they drive
 // already feed RULE-018/RULE-029 — this store adds the customer's own view
-// ("is this IP or account on our list?") so matches can change ranking.
-export type ThreatIndicatorType = 'ip' | 'account';
+// ("is this IP, account, or CVE on our list?") so matches can change ranking.
+// `cve` carries known-exploited membership (e.g. an export of the CISA KEV
+// catalogue's CVE ids); `epss` carries a score per CVE ("CVE-2024-1234,0.97")
+// and feeds the exploitability factor directly.
+export type ThreatIndicatorType = 'ip' | 'account' | 'cve' | 'epss';
 
 export interface ThreatIndicator {
   type: ThreatIndicatorType;
   value: string;
   /** Where the indicator came from, for the record (e.g. the list URI). */
   source: string;
+  /** EPSS-indicator only: the probability score (0..1). */
+  score?: number;
 }
 
 export const THREAT_INDICATOR_MAX_LINES = 50_000;
@@ -31,8 +36,11 @@ export function indicatorKey(type: ThreatIndicatorType, value: string): string {
   return `${type}#${value}`;
 }
 
+const CVE_PATTERN = /^CVE-\d{4}-\d{4,}$/i;
+
 export function isValidIndicator(type: ThreatIndicatorType, value: string): boolean {
   if (type === 'ip') return isIP(value) !== 0;
+  if (type === 'cve' || type === 'epss') return CVE_PATTERN.test(value);
   return /^\d{12}$/.test(value);
 }
 
@@ -59,25 +67,45 @@ export function parseIndicatorList(
   for (const rawLine of text.split('\n')) {
     const line = rawLine.split('#')[0].trim();
     if (!line) continue;
-    if (!isValidIndicator(type, line)) {
+    const parsed = type === 'epss' ? parseEpssLine(line) : { value: line };
+    if (!parsed || !isValidIndicator(type, parsed.value)) {
       invalid += 1;
       continue;
     }
-    const key = indicatorKey(type, line);
+    // CVE ids are case-insensitive identifiers; the store keeps one casing.
+    const value = parsed.value.toUpperCase();
+    const key = indicatorKey(type, value);
     if (seen.has(key)) continue;
     seen.add(key);
     if (indicators.length >= THREAT_INDICATOR_MAX_LINES) {
       truncated = true;
       break;
     }
-    indicators.push({ type, value: line, source });
+    indicators.push({
+      type,
+      value,
+      source,
+      ...(parsed.score !== undefined ? { score: parsed.score } : {}),
+    });
   }
   return { indicators, invalid, truncated };
 }
 
-// Graph facts the matcher joins on: an anomaly's source IP and a trusted
-// external account. Kept here (not in the runner) so the join is testable and
-// shared with anything else that reads the store.
+// EPSS lines are "CVE-2024-1234,0.97" (a CSV's first two columns work as-is);
+// a CVE without its score is not a usable EPSS indicator.
+function parseEpssLine(line: string): { value: string; score?: number } | undefined {
+  const [rawValue, rawScore] = line.split(',');
+  const value = rawValue?.trim();
+  if (!value || rawScore === undefined) return undefined;
+  const score = Number(rawScore.trim());
+  if (!Number.isFinite(score) || score < 0 || score > 1) return undefined;
+  return { value, score };
+}
+
+// Graph facts the matcher joins on: an anomaly's source IP, a trusted
+// external account, and a vulnerability's CVE id (candidate for both the
+// known-exploited list and EPSS scores). Kept here (not in the runner) so the
+// join is testable and shared with anything else that reads the store.
 export function pathIndicators(path: {
   vertices: Array<{ label: string; properties: Record<string, unknown> }>;
 }): Array<{ type: ThreatIndicatorType; value: string }> {
@@ -93,6 +121,14 @@ export function pathIndicators(path: {
       const account = vertex.properties.account_id;
       if (typeof account === 'string' && isValidIndicator('account', account)) {
         candidates.set(indicatorKey('account', account), { type: 'account', value: account });
+      }
+    }
+    if (vertex.label === 'Vulnerability') {
+      const cve = vertex.properties.cve_id;
+      if (typeof cve === 'string' && isValidIndicator('cve', cve)) {
+        const value = cve.toUpperCase();
+        candidates.set(indicatorKey('cve', value), { type: 'cve', value });
+        candidates.set(indicatorKey('epss', value), { type: 'epss', value });
       }
     }
   }
@@ -130,6 +166,7 @@ export class ThreatIndicatorStore {
                   type: indicator.type,
                   value: indicator.value,
                   source: indicator.source,
+                  ...(indicator.score !== undefined ? { score: indicator.score } : {}),
                   added_at: now.toISOString(),
                   expires_at: expiresAt,
                 }) as Record<string, AttributeValue>,
@@ -175,7 +212,13 @@ export class ThreatIndicatorStore {
         const type = item.type?.S as ThreatIndicatorType | undefined;
         const value = item.value?.S;
         if (!type || !value) continue;
-        found.push({ type, value, source: item.source?.S ?? 'unknown' });
+        const score = Number(item.score?.N);
+        found.push({
+          type,
+          value,
+          source: item.source?.S ?? 'unknown',
+          ...(item.score?.N !== undefined && Number.isFinite(score) ? { score } : {}),
+        });
       }
     }
     return found;

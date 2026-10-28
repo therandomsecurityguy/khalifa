@@ -2,6 +2,24 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - UEBA breadth and EPSS/KEV enrichment (long tail, part 1)
+
+### Added
+
+- **Behavioural anomalies in the CloudTrail analyzer**: two new bounded queries (7-day window against a 30-day baseline, same partition projection and exclusions as the existing three) — `NEW_API_FOR_PRINCIPAL` (API calls a principal never made in the baseline; a service it never touched shows through its calls) and `UNUSUAL_HOUR_ACTIVITY` (UTC hours the principal never used). Rows carry a `detail` column (the new APIs, or the hours; capped at 200 chars), the anomaly nodes record it, and two new medium/low rules (RULE-035/RULE-036) surface them — neither auto-tickets (behavioural leads need `/rules/quality` evidence first). ASN attribution is deliberately deferred: it needs an external IP→ASN dataset and a licensing decision, recorded in the plan.
+- **CVE and EPSS threat-intel types**: `threat-intel-import` now imports known-exploited CVE lists (`THREAT_INTEL_CVE_LIST_S3_URI`, e.g. a CISA KEV export) and EPSS score lists (`THREAT_INTEL_EPSS_LIST_S3_URI`, `CVE-YYYY-NNNN,score` — the FIRST CSV's first two columns). The runner candidates `Vulnerability` vertices' `cve_id` for both; a KEV match marks the exploit available and an EPSS score rides the exploitability factor — now one shared helper, `max(CVSS/10, EPSS)` +0.2 for a known exploit, used by both the likelihood and the score so they cannot disagree.
+
+### Load-bearing updates (explicit)
+
+- Rule catalogue **34 → 36 rules** (both enabled, auto-ticketing off): pinned counts in `rules.test.ts`, README and the ARCHITECTURE diagram updated.
+- `REVIEWED_MAPPING` (`control-rule-mapping.test.ts`) gains reviewed entries for RULE-035/RULE-036 (both → KH-DET-1, with reasons); `RULE_TECHNIQUES` gains T1078 for each; `getRemediationHint` gains both hints.
+- KH-DET-1 (`compliance-types.ts`) broadened from "credential-use anomalies" to "identity anomalies": `relatedRules` now includes RULE-035/RULE-036 and the evidence text names the new types (control counts unchanged).
+- Terraform (variables/outputs), chart values/schema/configmap and the OPERATIONAL threat-intel runbook carry the two new list URIs.
+
+### Notes
+
+- Still open from the re-review (`~/Documents/Testing/plans/2026-10-27-predictive-completion.md`): long-tail part 2 — trust-center publication of projections, per-issue risk window and SLO-burn thresholds, exposure-by-type series.
+
 ## [Unreleased] - Observed-traffic hop citations and shift-left v2
 
 ### Added

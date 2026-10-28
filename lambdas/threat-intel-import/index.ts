@@ -70,12 +70,16 @@ function loadConfig(environment: NodeJS.ProcessEnv): ImportConfig {
   for (const [type, name] of [
     ['ip', 'THREAT_INTEL_IP_LIST_S3_URI'],
     ['account', 'THREAT_INTEL_ACCOUNT_LIST_S3_URI'],
+    ['cve', 'THREAT_INTEL_CVE_LIST_S3_URI'],
+    ['epss', 'THREAT_INTEL_EPSS_LIST_S3_URI'],
   ] as const) {
     const uri = environment[name]?.trim();
     if (uri) lists.push({ type, uri });
   }
   if (lists.length === 0) {
-    throw new Error('THREAT_INTEL_IP_LIST_S3_URI or THREAT_INTEL_ACCOUNT_LIST_S3_URI is required');
+    throw new Error(
+      'At least one of THREAT_INTEL_IP_LIST_S3_URI, THREAT_INTEL_ACCOUNT_LIST_S3_URI, THREAT_INTEL_CVE_LIST_S3_URI or THREAT_INTEL_EPSS_LIST_S3_URI is required'
+    );
   }
   return {
     tableName: environment.THREAT_INDICATORS_TABLE || 'ThreatIndicators',

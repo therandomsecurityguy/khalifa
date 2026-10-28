@@ -4,8 +4,8 @@ import { ADMIN_PORT_RANGE_PREDICATE } from './admin-ports';
 const MANAGED_HOP = "optional(outE('CONTAINS').inV().hasLabel('IamPolicyDocument'))";
 
 describe('riskRules', () => {
-  test('should have exactly 34 rules', () => {
-    expect(riskRules.length).toBe(34);
+  test('should have exactly 36 rules', () => {
+    expect(riskRules.length).toBe(36);
   });
 
   test('each rule should have required fields', () => {
@@ -68,7 +68,7 @@ describe('getEnabledRules', () => {
 
   test('should return 34 enabled rules', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(34);
+    expect(enabledRules.length).toBe(36);
   });
 });
 
@@ -138,6 +138,8 @@ describe('getRuleById', () => {
     ['RULE-021', 'Secrets Read', ['CloudTrailAnomaly', 'SECRET_READ_NEW_SOURCE_IP']],
     ['RULE-022', 'AccessDenied', ['CloudTrailAnomaly', 'ACCESS_DENIED_SPIKE']],
     ['RULE-023', 'Canary', ['CloudTrailAnomaly', 'CANARY_USED']],
+    ['RULE-035', 'Never Used Before', ['CloudTrailAnomaly', 'NEW_API_FOR_PRINCIPAL']],
+    ['RULE-036', 'Unusual Hour', ['CloudTrailAnomaly', 'UNUSUAL_HOUR_ACTIVITY']],
     ['RULE-024', 'IMDS', ['Ec2Instance', 'metadata_http_tokens', 'HAS_IAM_ROLE']],
     [
       'RULE-029',

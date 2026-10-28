@@ -129,8 +129,10 @@ export interface IdentityBlastRadius {
 export interface PathExploitability {
   /** Highest CVSS base score among the path's vulnerability vertices. */
   cvssBaseScore?: number;
-  /** An Amazon Inspector finding on the path reports a known exploit. */
+  /** Inspector reports a known exploit, or an imported known-exploited (KEV) list does. */
   exploitAvailable?: boolean;
+  /** Highest EPSS probability among the path's CVEs, from an imported score list. */
+  epss?: number;
 }
 
 export interface RiskScoreInput {

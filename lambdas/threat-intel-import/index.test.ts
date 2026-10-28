@@ -71,7 +71,7 @@ describe('importThreatIntel', () => {
 
   it('requires at least one list', async () => {
     await expect(importThreatIntel({}, {}, {})).rejects.toThrow(
-      'THREAT_INTEL_IP_LIST_S3_URI or THREAT_INTEL_ACCOUNT_LIST_S3_URI is required'
+      'At least one of THREAT_INTEL_IP_LIST_S3_URI, THREAT_INTEL_ACCOUNT_LIST_S3_URI, THREAT_INTEL_CVE_LIST_S3_URI or THREAT_INTEL_EPSS_LIST_S3_URI is required'
     );
   });
 

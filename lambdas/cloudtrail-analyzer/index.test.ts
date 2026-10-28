@@ -213,7 +213,56 @@ describe('CloudTrail analyzer', () => {
       },
     };
     const deniedRows = { ResultSet: { Rows: [anomalyHeader] } };
-    const athenaSend = athena([usagePage, rootRows, secretRows, deniedRows]);
+    const detailHeader = [
+      'principal_arn',
+      'source_ip',
+      'event_count',
+      'first_seen',
+      'last_seen',
+      'detail',
+    ].map((VarCharValue) => ({ VarCharValue }));
+    const newApiRows = {
+      ResultSet: {
+        Rows: [
+          detailHeader,
+          {
+            Data: [
+              'arn:aws:iam::111122223333:user/deploy',
+              '203.0.113.9',
+              '4',
+              '2026-09-10T02:00:00Z',
+              '2026-09-10T02:30:00Z',
+              'CreateUser, AttachUserPolicy',
+            ].map((VarCharValue) => ({ VarCharValue })),
+          },
+        ],
+      },
+    };
+    const unusualHourRows = {
+      ResultSet: {
+        Rows: [
+          detailHeader,
+          {
+            Data: [
+              'arn:aws:iam::111122223333:user/deploy',
+              '203.0.113.9',
+              '3',
+              '2026-09-10T03:00:00Z',
+              '2026-09-10T03:20:00Z',
+              '3',
+            ].map((VarCharValue) => ({ VarCharValue })),
+          },
+        ],
+      },
+    };
+    const athenaSend = athena([
+      usagePage,
+      rootRows,
+      secretRows,
+      newApiRows,
+      unusualHourRows,
+      deniedRows,
+    ]);
     type AnomalyNode = { id: string; properties: Record<string, unknown> };
     type AnomalyWriteBatch = {
       nodes: AnomalyNode[];
@@ -230,12 +279,12 @@ describe('CloudTrail analyzer', () => {
       { ...environment, GRAPH_WRITER_FUNCTION_NAME: 'graph-writer-fn' }
     );
 
-    expect(result.anomalies).toBe(2);
+    expect(result.anomalies).toBe(4);
 
     const nodeBatches = writeAnomalies.mock.calls
       .map((call) => call[0])
       .filter((batch) => batch.nodes.length > 0);
-    expect(nodeBatches).toHaveLength(2);
+    expect(nodeBatches).toHaveLength(4);
 
     const rootNode = nodeBatches[0].nodes[0];
     expect(rootNode.properties.anomaly_type).toBe('ROOT_USAGE');
@@ -253,6 +302,14 @@ describe('CloudTrail analyzer', () => {
     expect(secretNode.properties.anomaly_type).toBe('SECRET_READ_NEW_SOURCE_IP');
     expect(secretNode.properties.account_id).toBe('111122223333');
 
+    const newApiNode = nodeBatches[2].nodes[0];
+    expect(newApiNode.properties.anomaly_type).toBe('NEW_API_FOR_PRINCIPAL');
+    expect(newApiNode.properties.detail).toBe('CreateUser, AttachUserPolicy');
+
+    const unusualHourNode = nodeBatches[3].nodes[0];
+    expect(unusualHourNode.properties.anomaly_type).toBe('UNUSUAL_HOUR_ACTIVITY');
+    expect(unusualHourNode.properties.detail).toBe('3');
+
     const reconcileBatch = writeAnomalies.mock.calls
       .map((call) => call[0])
       .find((batch) => batch.reconcile);
@@ -265,7 +322,7 @@ describe('CloudTrail analyzer', () => {
     const startedQueries = athenaSend.mock.calls.filter(
       ([command]) => command instanceof StartQueryExecutionCommand
     );
-    expect(startedQueries).toHaveLength(4);
+    expect(startedQueries).toHaveLength(6);
   });
 
   it('detects canary credential usage when canary principals are configured', async () => {
@@ -294,7 +351,24 @@ describe('CloudTrail analyzer', () => {
       },
     };
     const emptyRows = { ResultSet: { Rows: [anomalyHeader] } };
-    const athenaSend = athena([usagePage, emptyRows, emptyRows, emptyRows, canaryRows]);
+    const emptyDetailRows = {
+      ResultSet: {
+        Rows: [
+          ['principal_arn', 'source_ip', 'event_count', 'first_seen', 'last_seen', 'detail'].map(
+            (VarCharValue) => ({ VarCharValue })
+          ),
+        ],
+      },
+    };
+    const athenaSend = athena([
+      usagePage,
+      emptyRows,
+      emptyRows,
+      emptyDetailRows,
+      emptyDetailRows,
+      emptyRows,
+      canaryRows,
+    ]);
     const writeAnomalies = jest.fn(async (batch: { nodes: unknown[] }) => ({
       written: batch.nodes.length,
     }));
@@ -338,7 +412,7 @@ describe('CloudTrail analyzer', () => {
     expect(canaryQuery).toBeDefined();
     expect(
       athenaSend.mock.calls.filter(([c]) => c instanceof StartQueryExecutionCommand)
-    ).toHaveLength(5);
+    ).toHaveLength(7);
   });
 
   it('rejects invalid canary ARNs before starting any queries', async () => {

@@ -1,4 +1,5 @@
 import { coverageFactor, type CoverageLevel } from './coverage';
+import { exploitabilityValue } from './exploitability';
 import type { RiskScoreInput } from './types';
 
 // Explainable v1 path likelihood: the product of four independent 0..1
@@ -12,7 +13,7 @@ export interface PathLikelihoodFactors {
   exposure: number;
   /** Admin 1, wildcard 0.9, cross-account 0.7, service-linked 0.4, none 0.5. */
   privilege: number;
-  /** CVSS/10, +0.2 when an exploit is known, capped at 1; no data 0.5. */
+  /** max(CVSS/10, EPSS), +0.2 when an exploit is known, capped at 1; no data 0.5. */
   exploitability: number;
   /**
    * 1 when exposure was derived (or observed traffic proves it), 0.5 when a
@@ -59,13 +60,9 @@ export function pathLikelihood(
   const exposure = EXPOSURE[input.exposureLevel];
   const privilege = input.identityBlastRadius ? PRIVILEGE[input.identityBlastRadius.type] : UNKNOWN;
 
-  let exploitability = UNKNOWN;
-  if (input.exploitability) {
-    const cvss = input.exploitability.cvssBaseScore;
-    let value = typeof cvss === 'number' && Number.isFinite(cvss) ? cvss / 10 : UNKNOWN;
-    if (input.exploitability.exploitAvailable) value += 0.2;
-    exploitability = Math.min(1, Math.max(0, value));
-  }
+  // Shared with the score (exploitability.ts): CVSS or EPSS, +0.2 for a known
+  // exploit (Inspector or an imported KEV list).
+  const exploitability = input.exploitability ? exploitabilityValue(input.exploitability) : UNKNOWN;
 
   // Observed traffic (the flow-log analyzer's facts on a workload) proves
   // reachability even when a restricted read left the configuration unknown:
