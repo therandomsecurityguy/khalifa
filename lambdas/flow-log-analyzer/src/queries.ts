@@ -109,3 +109,92 @@ function timestamp(value: string | undefined, name: string, rowNumber: number): 
   }
   return normalized;
 }
+
+export interface TrafficEndpoint {
+  accountId: string;
+  region: string;
+  interfaceId: string;
+  remoteAddress: string;
+  packets: number;
+  bytes: number;
+  flows: number;
+  lastSeen: string;
+}
+
+// Cost bounds for the endpoint aggregation: one extra Athena query over the
+// same window, top-N remote endpoints per interface (a window-function rank),
+// and a row cap on what is parsed. The write stays one attribute list per
+// interface, so the DynamoDB item size grows by a few hundred bytes at most.
+export const ENDPOINTS_PER_INTERFACE = 5;
+export const MAX_ENDPOINT_ROWS = 25_000;
+
+export function validateEndpointsPerInterface(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 20) {
+    throw new Error('ENDPOINTS_PER_INTERFACE must be an integer between 1 and 20');
+  }
+  return value;
+}
+
+// Which remote endpoints (srcaddr — the ingress source) actually sent accepted
+// traffic to each interface, ranked by bytes and capped per interface. The
+// endpoint evidence lets an attack path cite observed traffic on a hop, not
+// just "this instance saw traffic somewhere".
+export function buildEndpointQuery(
+  database: string,
+  days: number,
+  perInterface: number = ENDPOINTS_PER_INTERFACE
+): string {
+  assertAthenaDatabase(database);
+  const window = validateObservationDays(days);
+  const rank = validateEndpointsPerInterface(perInterface);
+  return `
+    SELECT interface_id, account_id, region, srcaddr, packets, bytes, flows, last_seen
+    FROM (
+      SELECT
+        account_id,
+        region,
+        interface_id,
+        srcaddr,
+        SUM(packets) AS packets,
+        SUM(bytes) AS bytes,
+        COUNT(*) AS flows,
+        date_format(from_unixtime(MAX(end)), '%Y-%m-%dT%H:%i:%sZ') AS last_seen,
+        ROW_NUMBER() OVER (PARTITION BY interface_id ORDER BY SUM(bytes) DESC, srcaddr ASC) AS endpoint_rank
+      FROM ${database}.vpc_flow_logs
+      WHERE log_date >= date_format(current_date - interval '${window}' day, '%Y/%m/%d')
+        AND action = 'ACCEPT'
+        AND interface_id IS NOT NULL
+        AND interface_id <> '-'
+        AND srcaddr IS NOT NULL
+        AND srcaddr <> '-'
+        AND from_unixtime(start) >= current_timestamp - interval '${window}' day
+      GROUP BY account_id, region, interface_id, srcaddr
+    )
+    WHERE endpoint_rank <= ${rank}
+    ORDER BY interface_id, endpoint_rank
+  `;
+}
+
+export function parseEndpointRow(
+  data: { VarCharValue?: string }[],
+  rowNumber: number
+): TrafficEndpoint {
+  if (!data || data.length !== 8) {
+    throw new Error(`Invalid Athena endpoint row ${rowNumber}: expected 8 columns`);
+  }
+  const interfaceId = required(data[0].VarCharValue, 'interface_id', rowNumber);
+  const accountId = required(data[1].VarCharValue, 'account_id', rowNumber);
+  const region = required(data[2].VarCharValue, 'region', rowNumber);
+  const remoteAddress = required(data[3].VarCharValue, 'srcaddr', rowNumber);
+  if (!/^[0-9A-Fa-f.:]{3,45}$/.test(remoteAddress)) {
+    throw new Error(`Invalid Athena endpoint row ${rowNumber}: srcaddr must be an IP address`);
+  }
+  const packets = safeCount(data[4].VarCharValue, 'packets', rowNumber);
+  const bytes = safeCount(data[5].VarCharValue, 'bytes', rowNumber);
+  const flows = safeCount(data[6].VarCharValue, 'flows', rowNumber);
+  const lastSeen = timestamp(data[7].VarCharValue, 'last_seen', rowNumber);
+  if (!/^\d{12}$/.test(accountId)) {
+    throw new Error(`Invalid Athena endpoint row ${rowNumber}: account_id must be 12 digits`);
+  }
+  return { accountId, region, interfaceId, remoteAddress, packets, bytes, flows, lastSeen };
+}

@@ -2,7 +2,7 @@ import { analyzePlan } from './analyzers';
 import type { PlannedResource } from './plan';
 
 function res(type: string, address: string, after: Record<string, unknown>): PlannedResource {
-  return { address, type, name: address, actions: ['create'], after };
+  return { address, type, name: address, actions: ['create'], after, before: {} };
 }
 
 const policy = (document: unknown) => JSON.stringify(document);
@@ -91,6 +91,7 @@ describe('security group ingress', () => {
           name: 'gone',
           actions: ['delete'],
           after: {},
+          before: {},
         },
       ])
     ).toEqual([]);

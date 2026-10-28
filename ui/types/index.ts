@@ -194,6 +194,20 @@ export interface CoverageStatement {
   note: string;
 }
 
+export interface ObservedEndpoint {
+  address: string;
+  bytes?: number;
+  flows?: number;
+  lastSeen?: string;
+}
+
+export interface ObservedTrafficCitation {
+  /** 1-based hop number: the edge that arrives at this vertex. */
+  hop: number;
+  vertexId: string;
+  endpoints: ObservedEndpoint[];
+}
+
 export interface ScoredPath {
   nodes: GraphVertex[];
   edges: GraphEdge[];
@@ -202,6 +216,8 @@ export interface ScoredPath {
   /** Explainable 0..1 path likelihood (product of the factors). */
   likelihood: number;
   likelihoodFactors: PathLikelihoodFactors;
+  /** Hops whose target workload actually saw accepted traffic (flow logs). */
+  observedTraffic?: ObservedTrafficCitation[];
 }
 
 export interface AttackPathSimulationEdge {

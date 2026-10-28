@@ -52,6 +52,13 @@ export { globMatch } from './glob';
 export { extractRulePath, type RulePath } from './rule-path';
 export { pathLikelihood, type PathLikelihood, type PathLikelihoodFactors } from './likelihood';
 export {
+  MAX_CITED_ENDPOINTS,
+  observedTrafficFromPath,
+  parseObservedEndpoints,
+  type ObservedEndpoint,
+  type ObservedTrafficCitation,
+} from './observedTraffic';
+export {
   COVERAGE_AGING_HOURS,
   COVERAGE_FACTORS,
   COVERAGE_FRESH_HOURS,

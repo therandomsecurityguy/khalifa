@@ -45,6 +45,27 @@ const bucket = v('arn:aws:s3:::data', 'S3Bucket', {
 });
 
 describe('riskFlags', () => {
+  it('cites observed traffic with the first remote sender when present', () => {
+    const observed = {
+      id: 'arn:aws:ec2:us-west-2:111122223333:instance/i-1',
+      label: 'Ec2Instance',
+      properties: {
+        traffic_observed: true,
+        observed_endpoints: JSON.stringify([{ address: '203.0.113.7', bytes: 2048, flows: 3 }]),
+      },
+    } as GraphVertex;
+    expect(riskFlags(observed)).toEqual([
+      { level: 'warn', text: 'Observed traffic from 203.0.113.7' },
+    ]);
+
+    const withoutDetail = {
+      id: 'arn:aws:ec2:us-west-2:111122223333:instance/i-2',
+      label: 'Ec2Instance',
+      properties: { traffic_observed: true, observed_endpoints: 'junk' },
+    } as GraphVertex;
+    expect(riskFlags(withoutDetail)).toEqual([{ level: 'warn', text: 'Observed traffic' }]);
+  });
+
   it('flags only properties the collector records', () => {
     expect(riskFlags(ec2)).toEqual([{ level: 'risk', text: 'Internet exposed' }]);
     expect(riskFlags(v('b', 'S3Bucket', { data_classification: 'public' }))).toEqual([]);

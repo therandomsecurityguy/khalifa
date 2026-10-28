@@ -9,11 +9,17 @@ import { marshall } from '@aws-sdk/util-dynamodb';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { Logger } from '../shared/types';
 import {
+  buildEndpointQuery,
   buildTrafficQuery,
   DEFAULT_OBSERVATION_DAYS,
+  ENDPOINTS_PER_INTERFACE,
   MAX_OBSERVATIONS,
+  MAX_ENDPOINT_ROWS,
+  parseEndpointRow,
   parseTrafficRow,
+  validateEndpointsPerInterface,
   validateObservationDays,
+  type TrafficEndpoint,
   type TrafficObservation,
 } from './src/queries';
 
@@ -21,9 +27,14 @@ import {
 // written to a DynamoDB cache the collector reads when it collects instances.
 // Reachability confidence becomes observed AND configured: configured exposure
 // says where an attacker could reach, an accepted flow says where traffic
-// actually went. Optional and cost-gated — the Glue table and the CronJob only
-// exist when the operator points them at a flow-log bucket (suspend: true by
-// default).
+// actually went — and the second, bounded aggregation records *which remote
+// endpoints* sent that traffic, so an attack path can cite observed traffic on
+// a specific hop. Cost bounds: one extra Athena query over the same window,
+// top-ENDPOINTS_PER_INTERFACE remote senders per interface, a parsed-row cap,
+// and a failure in the endpoint query degrades to observations without
+// endpoints rather than failing the run. Optional and cost-gated — the Glue
+// table and the CronJob only exist when the operator points them at a
+// flow-log bucket (suspend: true by default).
 const logger = new Logger('flow-log-analyzer');
 const defaultAthenaClient = new AthenaClient({
   region: process.env.AWS_REGION || 'us-east-1',
@@ -49,6 +60,7 @@ interface AnalyzerConfig {
   athenaResultsLocation: string;
   trafficObservationsTable: string;
   observationDays: number;
+  endpointsPerInterface: number;
 }
 
 interface Row {
@@ -65,8 +77,11 @@ interface AnalyzerDependencies {
 
 export interface FlowLogAnalysisResult {
   observations: number;
+  endpoints: number;
   truncated: boolean;
+  endpointsTruncated: boolean;
   queryExecutionId: string;
+  endpointsQueryExecutionId?: string;
 }
 
 export function normalizeAthenaResultsLocation(value: string | undefined): string {
@@ -100,6 +115,9 @@ function loadConfig(environment: NodeJS.ProcessEnv): AnalyzerConfig {
     observationDays: validateObservationDays(
       environment.FLOW_LOG_DAYS ?? DEFAULT_OBSERVATION_DAYS,
       'FLOW_LOG_DAYS'
+    ),
+    endpointsPerInterface: validateEndpointsPerInterface(
+      Number(environment.ENDPOINTS_PER_INTERFACE ?? ENDPOINTS_PER_INTERFACE)
     ),
   };
 }
@@ -139,16 +157,81 @@ export async function analyzeFlowLogs(
   }
   const observations = parsed.slice(0, MAX_OBSERVATIONS);
 
+  const endpointEvidence = await collectEndpointEvidence(config, days, dependencies);
+
   await writeObservations(
     observations,
     days,
     config.trafficObservationsTable,
     dependencies.dynamoClient,
     dependencies.sleep,
-    dependencies.now()
+    dependencies.now(),
+    endpointEvidence.endpoints
   );
-  logger.info(`Wrote ${observations.length} traffic observations`);
-  return { observations: observations.length, truncated, queryExecutionId };
+  logger.info(
+    `Wrote ${observations.length} traffic observations with ${endpointEvidence.count} endpoint citations`
+  );
+  return {
+    observations: observations.length,
+    endpoints: endpointEvidence.count,
+    truncated,
+    endpointsTruncated: endpointEvidence.truncated,
+    queryExecutionId,
+    ...(endpointEvidence.queryExecutionId
+      ? { endpointsQueryExecutionId: endpointEvidence.queryExecutionId }
+      : {}),
+  };
+}
+
+interface EndpointEvidence {
+  endpoints: Map<string, TrafficEndpoint[]>;
+  count: number;
+  truncated: boolean;
+  queryExecutionId?: string;
+}
+
+// Bounded and failure-tolerant: the endpoint query is the second Athena scan
+// of the run, and when it fails the observations are still written without
+// citations — the hop evidence is an enrichment, never a dependency.
+async function collectEndpointEvidence(
+  config: AnalyzerConfig,
+  days: number,
+  dependencies: AnalyzerDependencies
+): Promise<EndpointEvidence> {
+  const endpoints = new Map<string, TrafficEndpoint[]>();
+  try {
+    const queryExecutionId = await startQuery(
+      buildEndpointQuery(config.athenaDatabase, days, config.endpointsPerInterface),
+      config,
+      dependencies.athenaClient
+    );
+    await waitForQuery(
+      queryExecutionId,
+      dependencies.athenaClient,
+      dependencies.sleep,
+      dependencies.signal
+    );
+    const rows = await fetchRawRows(queryExecutionId, dependencies.athenaClient);
+    const parsed = rows.map((row, index) => parseEndpointRow(row.Data || [], index + 2));
+    const truncated = parsed.length > MAX_ENDPOINT_ROWS;
+    if (truncated) {
+      logger.warn('Endpoint rows truncated', { limit: MAX_ENDPOINT_ROWS, rows: parsed.length });
+    }
+    let count = 0;
+    for (const endpoint of parsed.slice(0, MAX_ENDPOINT_ROWS)) {
+      const list = endpoints.get(endpoint.interfaceId) ?? [];
+      if (list.length >= config.endpointsPerInterface) continue;
+      list.push(endpoint);
+      endpoints.set(endpoint.interfaceId, list);
+      count += 1;
+    }
+    return { endpoints, count, truncated, queryExecutionId };
+  } catch (error) {
+    logger.warn('Endpoint aggregation unavailable; writing observations without citations', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { endpoints, count: 0, truncated: false };
+  }
 }
 
 export const handler = async (event: AnalyzerEvent = {}): Promise<FlowLogAnalysisResult> =>
@@ -157,25 +240,32 @@ export const handler = async (event: AnalyzerEvent = {}): Promise<FlowLogAnalysi
 export function observationItems(
   observations: TrafficObservation[],
   windowDays: number,
-  observedAt: Date
+  observedAt: Date,
+  endpoints?: Map<string, TrafficEndpoint[]>
 ): Record<string, AttributeValue>[] {
   const nowSeconds = Math.floor(observedAt.getTime() / 1000);
-  return observations.map(
-    (observation) =>
-      marshall({
-        interface_id: observation.interfaceId,
-        account_id: observation.accountId,
-        region: observation.region,
-        packets: observation.packets,
-        bytes: observation.bytes,
-        flows: observation.flows,
-        first_seen: observation.firstSeen,
-        last_seen: observation.lastSeen,
-        window_days: windowDays,
-        observed_at: observedAt.toISOString(),
-        expires_at: nowSeconds + OBSERVATION_TTL_DAYS * 86_400,
-      }) as Record<string, AttributeValue>
-  );
+  return observations.map((observation) => {
+    const citations = (endpoints?.get(observation.interfaceId) ?? []).map((endpoint) => ({
+      address: endpoint.remoteAddress,
+      bytes: endpoint.bytes,
+      flows: endpoint.flows,
+      last_seen: endpoint.lastSeen,
+    }));
+    return marshall({
+      interface_id: observation.interfaceId,
+      account_id: observation.accountId,
+      region: observation.region,
+      packets: observation.packets,
+      bytes: observation.bytes,
+      flows: observation.flows,
+      first_seen: observation.firstSeen,
+      last_seen: observation.lastSeen,
+      window_days: windowDays,
+      observed_at: observedAt.toISOString(),
+      expires_at: nowSeconds + OBSERVATION_TTL_DAYS * 86_400,
+      ...(citations.length > 0 ? { endpoints: citations } : {}),
+    }) as Record<string, AttributeValue>;
+  });
 }
 
 async function writeObservations(
@@ -184,9 +274,10 @@ async function writeObservations(
   tableName: string,
   dynamoClient: DynamoDBClient,
   sleep: (milliseconds: number) => Promise<void>,
-  observedAt: Date
+  observedAt: Date,
+  endpoints?: Map<string, TrafficEndpoint[]>
 ): Promise<void> {
-  const items = observationItems(observations, windowDays, observedAt);
+  const items = observationItems(observations, windowDays, observedAt, endpoints);
   for (let index = 0; index < items.length; index += BATCH_SIZE) {
     const batch = items.slice(index, index + BATCH_SIZE);
     let attempt = 0;

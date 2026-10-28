@@ -7,6 +7,7 @@ import {
   getRuleById,
   pathLikelihood,
   riskInputFromPath,
+  observedTrafficFromPath,
 } from '@khalifa/risk-engine';
 import { getApiNeptuneClient } from '../services/api-dependencies';
 import { graphCoverage } from '../services/coverage';
@@ -127,12 +128,14 @@ export async function searchAttackPaths(req: Request, res: Response): Promise<vo
         const riskInput = riskInputFromPath(path.nodes);
         const { score, severity } = computeRiskScore(riskInput);
         const likelihood = pathLikelihood(riskInput, coverage.level);
+        const observedTraffic = observedTrafficFromPath(path.nodes);
         return {
           ...path,
           score,
           severity,
           likelihood: likelihood.value,
           likelihoodFactors: likelihood.factors,
+          ...(observedTraffic.length > 0 ? { observedTraffic } : {}),
         };
       })
       .sort((a, b) => b.score - a.score || b.likelihood - a.likelihood);

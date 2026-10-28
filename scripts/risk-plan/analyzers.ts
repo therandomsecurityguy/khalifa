@@ -1,4 +1,5 @@
 import { RULE_CATALOGUE, SEVERITY_RANK, type PlanSeverity } from './catalogue';
+import { policyFindingsForResource } from './iam-policies';
 import type { PlannedResource } from './plan';
 
 export interface PlanFinding {
@@ -14,7 +15,7 @@ export interface PlanFinding {
 
 const WORLD_CIDRS = new Set(['0.0.0.0/0', '::/0']);
 
-interface RawFinding {
+export interface RawFinding {
   ruleId: string | null;
   address: string;
   detail: string;
@@ -58,6 +59,10 @@ export function analyzePlan(resources: PlannedResource[]): PlanFinding[] {
       case 'aws_iam_role':
         raw.push(...roleTrustFindings(resource));
         break;
+      case 'aws_iam_policy':
+      case 'aws_iam_role_policy':
+        raw.push(...policyFindingsForResource(resource));
+        break;
       case 'aws_secretsmanager_secret_policy':
         raw.push(...secretPolicyFindings(resource));
         break;
@@ -80,6 +85,12 @@ export function analyzePlan(resources: PlannedResource[]): PlanFinding[] {
     }
   }
 
+  return finalizeFindings(raw);
+}
+
+// One finding per resource and rule, with the details joined: a security group
+// with three world-open rules is one thing to fix, not three.
+export function finalizeFindings(raw: RawFinding[]): PlanFinding[] {
   const merged = new Map<string, PlanFinding>();
   for (const finding of raw) {
     const key = `${finding.address}\0${finding.ruleId ?? finding.fallbackName}`;
@@ -99,7 +110,11 @@ export function analyzePlan(resources: PlannedResource[]): PlanFinding[] {
     });
   }
 
-  return [...merged.values()].sort(
+  return sortFindings([...merged.values()]);
+}
+
+export function sortFindings(findings: PlanFinding[]): PlanFinding[] {
+  return [...findings].sort(
     (a, b) =>
       SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || a.address.localeCompare(b.address)
   );
