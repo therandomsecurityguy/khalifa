@@ -14,7 +14,7 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1166.0",
+    "@aws-sdk/client-dynamodb": "^3.1167.0",
     "@aws-sdk/util-dynamodb": "^3.996.2",
     "@khalifa/risk-engine": "*",
     "gremlin": "^3.8.2"
