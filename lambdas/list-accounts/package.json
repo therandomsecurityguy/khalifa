@@ -12,8 +12,8 @@
     "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
-    "@aws-sdk/client-lambda": "^3.400.0",
-    "@aws-sdk/client-organizations": "^3.400.0"
+    "@aws-sdk/client-lambda": "^3.1166.0",
+    "@aws-sdk/client-organizations": "^3.1166.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
