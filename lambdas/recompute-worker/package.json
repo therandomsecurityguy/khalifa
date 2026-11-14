@@ -14,7 +14,7 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
-    "@aws-sdk/client-sqs": "^3.400.0",
+    "@aws-sdk/client-sqs": "^3.1166.0",
     "@khalifa/risk-engine": "*"
   },
   "devDependencies": {
