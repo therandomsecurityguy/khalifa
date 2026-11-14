@@ -1,0 +1,155 @@
+version: 2
+updates:
+  # ---------------------------------------------------------------------------
+  # npm — one entry for the workspace root. The root package-lock.json is the
+  # only lockfile CI and the container build consume (`npm ci` at the repo
+  # root); it resolves api-service, cdk, packages/*, ui and lambdas/*.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    # The lambdas, API and risk engine depend on 37 AWS SDK clients and the
+    # @smithy/* they build on; the packages release in lockstep, so
+    # minor/patch updates land as one reviewable PR instead of dozens.
+    groups:
+      aws-sdk:
+        patterns:
+          - "@aws-sdk/*"
+          - "@smithy/*"
+        update-types: ["minor", "patch"]
+      # The plugin and parser must ship the matching version (the plugin
+      # peer-depends on the parser); group so they never drift apart.
+      typescript-eslint:
+        patterns:
+          - "@typescript-eslint/*"
+    ignore:
+      # ts-jest declares peer typescript ">=4.3 <7", so a 7.x bump cannot
+      # install (npm ci fails with ERESOLVE). Revisit when ts-jest widens the
+      # peer range.
+      - dependency-name: "typescript"
+        versions: ["7.x"]
+
+  # Root Dockerfile: the api / ui / rule-runner stages built on the
+  # digest-pinned Chainguard node image.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # Gremlin Server image for the graph-queries job.
+  - package-ecosystem: "docker"
+    directory: "/test/gremlin"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    ignore:
+      # Neptune engine 1.4.7.0 speaks Gremlin 3.7.1 only (see the Dockerfile
+      # comment). Take digest updates, but no tag moves until the engine
+      # gains a newer protocol.
+      - dependency-name: "tinkerpop/gremlin-server"
+        versions: [">= 3.8.0"]
+
+  # ---------------------------------------------------------------------------
+  # Terraform — provider constraints live in versions.tf. The repo does not
+  # commit .terraform.lock.hcl (gitignored), so updates land as constraint
+  # bumps in the module that declares them.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "terraform"
+    directory: "/deploy/terraform/khalifa-data"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  - package-ecosystem: "terraform"
+    directory: "/deploy/terraform/khalifa-eks"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  - package-ecosystem: "terraform"
+    directory: "/deploy/terraform/khalifa-registry"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  - package-ecosystem: "terraform"
+    directory: "/deploy/terraform/examples/complete"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # GitHub Actions — workflows pin actions to commit SHAs with a version
+  # comment; Dependabot moves both.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
