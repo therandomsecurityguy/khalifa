@@ -65,7 +65,7 @@ export async function getRuleQuality(_req: Request, res: Response): Promise<void
   }
 }
 
-export async function getRule(req: Request, res: Response): Promise<void> {
+export async function getRule(req: Request<{ id: string }>, res: Response): Promise<void> {
   const rule = getRuleById(req.params.id);
   if (!rule) {
     res.status(404).json({ code: 'NOT_FOUND', message: `Unknown rule ${req.params.id}` });

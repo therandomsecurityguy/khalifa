@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { DynamoDBIssueRepository } from '@khalifa/risk-engine';
-import { parseBoundedInteger } from '../middleware/gremlin-validator';
+import { parseBoundedInteger, pathParam } from '../middleware/gremlin-validator';
 import { getApiNeptuneClient } from '../services/api-dependencies';
 import { ALL_LABELS } from '../services/neptune-client';
 import type { GraphVertex, GraphEdge, Issue } from '../types';
@@ -91,9 +91,12 @@ export async function listPropertyValues(req: Request, res: Response): Promise<v
   }
 }
 
-export async function getResource(req: Request<{ arn: string }>, res: Response): Promise<void> {
+export async function getResource(
+  req: Request<{ arn: string | string[] }>,
+  res: Response
+): Promise<void> {
   try {
-    const { arn } = req.params;
+    const arn = pathParam(req.params.arn);
     const { includeNeighbors, includeIssues } = req.query;
 
     const includeNeigh = includeNeighbors !== 'false';

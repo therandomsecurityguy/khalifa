@@ -8,7 +8,7 @@ describe('Prometheus metrics', () => {
   it('records HTTP metrics using the bounded route template label', () => {
     const req = {
       method: 'GET',
-      route: { path: '/resources/:arn(*)' },
+      route: { path: '/resources/*arn' },
       baseUrl: '',
       originalUrl: '/resources/arn:aws:iam::123456789012:role/team/Admin',
     } as unknown as Request;
@@ -22,7 +22,7 @@ describe('Prometheus metrics', () => {
     const metrics = renderMetrics();
     expect(next).toHaveBeenCalledTimes(1);
     expect(metrics).toContain(
-      'khalifa_api_http_requests_total{method="GET",route="/resources/:arn(*)",status_code="200"} 1'
+      'khalifa_api_http_requests_total{method="GET",route="/resources/*arn",status_code="200"} 1'
     );
     expect(metrics).not.toContain('123456789012');
   });
