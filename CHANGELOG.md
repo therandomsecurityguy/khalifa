@@ -2,6 +2,16 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Dependency update automation
+
+### Added
+
+- **Dependabot version updates**: `.github/dependabot.yml` covers the npm workspace root with one entry (the root `package-lock.json` is the only lockfile CI and the container build consume, so it resolves `api-service`, `cdk`, `packages/*`, `ui` and `lambdas/*`), both Dockerfiles (the digest-pinned Chainguard node stages; the Gremlin server takes digest updates but keeps its Neptune-pinned 3.7.1 tag), the four Terraform modules (provider constraints live in `versions.tf`; `.terraform.lock.hcl` stays gitignored) and the SHA-pinned GitHub Actions — weekly, Mondays 09:00 UTC. The AWS SDK/`@smithy` and typescript-eslint groups keep lockstep packages in one PR, and two known-blocked ranges are ignored with their reasons recorded: `typescript` 7.x (ts-jest's `>=4.3 <7` peer range) and Gremlin `>= 3.8.0` (Neptune engine 1.4.7.0 speaks 3.7.1 only).
+
+### Notes
+
+- The `dependencies` and `github-actions` labels were created on the repository so Dependabot can apply them to its PRs.
+
 ## [Unreleased] - Risk windows, exposure series and trust-center projections (long tail, part 2)
 
 ### Added
