@@ -11,6 +11,7 @@ All notable changes to Khalifa.
 ### Notes
 
 - The `dependencies` and `github-actions` labels were created on the repository so Dependabot can apply them to its PRs.
+- `eslint` majors (`>= 9`) are ignored until the flat-config migration lands: ESLint 9+ defaults to `eslint.config.js` and drops `--ext`, while the repo still lints through `.eslintrc.js` on 8.57.1.
 
 ## [Unreleased] - Risk windows, exposure series and trust-center projections (long tail, part 2)
 

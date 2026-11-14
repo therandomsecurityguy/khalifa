@@ -38,6 +38,11 @@ updates:
       # peer range.
       - dependency-name: "typescript"
         versions: ["7.x"]
+      # ESLint 9+ defaults to flat config (eslint.config.js) and drops the
+      # --ext flag; the repo still lints through .eslintrc.js with --ext on
+      # 8.57.1. Revisit with the flat-config migration.
+      - dependency-name: "eslint"
+        versions: [">= 9.0.0"]
 
   # Root Dockerfile: the api / ui / rule-runner stages built on the
   # digest-pinned Chainguard node image.
