@@ -4,7 +4,7 @@ USER root
 WORKDIR /workspace
 ENV NODE_ENV=development
 
-RUN test "$(node --version)" = "v26.12.1" && npm install --global --ignore-scripts --no-audit --no-fund npm@11.19.1 && test "$(/usr/local/bin/npm --version)" = "11.19.1"
+RUN test "$(node --version)" = "v26.13.1" && npm install --global --ignore-scripts --no-audit --no-fund npm@11.19.1 && test "$(/usr/local/bin/npm --version)" = "11.19.1"
 
 COPY package.json package-lock.json ./
 COPY api-service/package.json ./api-service/
