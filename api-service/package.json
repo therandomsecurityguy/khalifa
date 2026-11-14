@@ -15,8 +15,8 @@
     "test": "cd .. && jest --selectProjects api-service --passWithNoTests"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1166.0",
-    "@aws-sdk/lib-dynamodb": "^3.1166.0",
+    "@aws-sdk/client-dynamodb": "^3.1167.0",
+    "@aws-sdk/lib-dynamodb": "^3.1167.0",
     "@aws-sdk/util-dynamodb": "^3.450.0",
     "@khalifa/integrations": "*",
     "@khalifa/risk-engine": "*",
