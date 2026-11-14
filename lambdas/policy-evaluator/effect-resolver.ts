@@ -37,7 +37,7 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
         allStatements.push({ statement: stmt, source: policy.policyArn });
       }
       policiesEvaluated.push(policy.policyArn);
-    } catch (e) {}
+    } catch {}
   }
 
   for (const policy of input.sessionPolicies || []) {
@@ -47,7 +47,7 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
         allStatements.push({ statement: stmt, source: policy.policyArn });
       }
       policiesEvaluated.push(policy.policyArn);
-    } catch (e) {}
+    } catch {}
   }
 
   for (const policy of input.resourcePolicies || []) {
@@ -57,7 +57,7 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
         allStatements.push({ statement: stmt, source: policy.policyArn });
       }
       policiesEvaluated.push(policy.policyArn);
-    } catch (e) {}
+    } catch {}
   }
 
   const explicitDenies = allStatements.filter((s) => s.statement.effect === 'Deny');
@@ -108,7 +108,7 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
               }
             }
           }
-        } catch (e) {}
+        } catch {}
       } else {
         allowedActions.add('*');
       }
@@ -138,7 +138,7 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
                 }
               }
             }
-          } catch (e) {}
+          } catch {}
         }
       }
     } else {
@@ -154,7 +154,7 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
                   bs.effect === 'Allow' && bs.actions.some((ba) => isActionMatched(ba, action))
               );
               if (!boundaryAllowsAction) blockedByBoundary = true;
-            } catch (e) {}
+            } catch {}
           }
 
           if (!blockedByBoundary) {
@@ -166,7 +166,7 @@ export function resolveEffectivePermissions(input: ResolveInput): EffectivePermi
                     ss.effect === 'Allow' && ss.actions.some((sa) => isActionMatched(sa, action))
                 );
                 if (!scpAllows) blockedByBoundary = true;
-              } catch (e) {}
+              } catch {}
             }
           }
 
