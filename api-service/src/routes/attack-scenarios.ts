@@ -38,7 +38,10 @@ export async function listAttackScenarios(_req: Request, res: Response): Promise
 // matched — no AWS calls and nothing is executed. A step that fails (timeout,
 // denied read) records its error and the rest still run; only a run where
 // every step fails is an error.
-export async function runAttackScenario(req: Request, res: Response): Promise<void> {
+export async function runAttackScenario(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
   const scenario = getAttackScenario(req.params.id);
   if (!scenario) {
     res

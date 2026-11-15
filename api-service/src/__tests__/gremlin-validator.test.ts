@@ -43,6 +43,18 @@ describe('Gremlin input validation', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts a wildcard-split ARN path parameter', () => {
+    const next = jest.fn();
+    validateArnPathParam('principal')(
+      {
+        params: { principal: ['arn:aws:iam::123456789012:role', 'team', 'Admin'] },
+      } as unknown as Request,
+      response(),
+      next
+    );
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['1.5', '-1', '1e2', '201', ['10']])('rejects bounded integer %p', (value) => {
     expect(() => parseBoundedInteger(value, 10, 1, 200, 'limit')).toThrow(
       'limit must be an integer between 1 and 200'

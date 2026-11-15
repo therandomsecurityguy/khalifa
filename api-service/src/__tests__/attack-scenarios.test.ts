@@ -28,7 +28,7 @@ function call(query: Record<string, unknown>, params: Record<string, string> = {
     user: { sub: 's', email: 'v@example.com', groups: [], tokenUse: 'id' },
   };
   return {
-    req: req as unknown as Request,
+    req: req as unknown as Request<{ id: string }>,
     res: res as Response & { statusCode: number; body?: any },
   };
 }

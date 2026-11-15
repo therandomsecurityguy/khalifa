@@ -3,24 +3,21 @@ import { requireViewer } from '../middleware/rbac';
 import { expensiveRateLimiter } from '../middleware/rate-limit';
 
 describe('API route registration', () => {
-  const stack = (app as unknown as { _router: { stack: any[] } })._router.stack;
+  const stack = (app as unknown as { router: { stack: any[] } }).router.stack;
   const paths = stack.filter((layer) => layer.route).map((layer) => layer.route.path as string);
 
   it('registers static routes before overlapping dynamic routes', () => {
     for (const [staticPath, dynamicPath] of [
       ['/issues/summary', '/issues/:id'],
       ['/issues/schedule', '/issues/:id'],
-      ['/resources/search', '/resources/:arn(*)'],
-      ['/resources/labels', '/resources/:arn(*)'],
-      ['/resources/properties', '/resources/:arn(*)'],
-      ['/resources/values', '/resources/:arn(*)'],
-      ['/resources/graph', '/resources/:arn(*)'],
-      ['/secrets/reader-counts', '/secrets/:arn(*)'],
+      ['/resources/search', '/resources/*arn'],
+      ['/resources/labels', '/resources/*arn'],
+      ['/resources/properties', '/resources/*arn'],
+      ['/resources/values', '/resources/*arn'],
+      ['/resources/graph', '/resources/*arn'],
+      ['/secrets/reader-counts', '/secrets/*arn'],
       ['/rules/quality', '/rules/:id'],
-      [
-        '/identity/least-privilege/summary',
-        '/identity/least-privilege/:accountId/:principalArn(*)',
-      ],
+      ['/identity/least-privilege/summary', '/identity/least-privilege/:accountId/*principalArn'],
     ]) {
       expect(paths.indexOf(staticPath)).toBeGreaterThanOrEqual(0);
       expect(paths.indexOf(staticPath)).toBeLessThan(paths.indexOf(dynamicPath));
@@ -46,10 +43,11 @@ describe('API route registration', () => {
   });
 
   it('captures an ARN containing resource path slashes as one parameter', () => {
-    const layer = stack.find((candidate) => candidate.route?.path === '/resources/:arn(*)');
+    const layer = stack.find((candidate) => candidate.route?.path === '/resources/*arn');
 
     expect(layer.match('/resources/arn:aws:iam::123456789012:role/team/Admin')).toBe(true);
-    expect(layer.params.arn).toBe('arn:aws:iam::123456789012:role/team/Admin');
+    // Express 5 wildcards split on `/`; the handlers rejoin the segments.
+    expect(layer.params.arn.join('/')).toBe('arn:aws:iam::123456789012:role/team/Admin');
   });
 
   it('registers the data sources route', () => {
@@ -68,7 +66,7 @@ describe('API route registration', () => {
 
   it('serves one secret behind ARN validation and the same checks, after the list route', () => {
     const listIndex = stack.findIndex((layer) => layer.route?.path === '/secrets');
-    const detailIndex = stack.findIndex((layer) => layer.route?.path === '/secrets/:arn(*)');
+    const detailIndex = stack.findIndex((layer) => layer.route?.path === '/secrets/*arn');
     expect(detailIndex).toBeGreaterThan(listIndex);
     const handlers = stack[detailIndex].route.stack.map((layer: any) => layer.handle);
     expect(handlers).toHaveLength(4);
@@ -90,7 +88,9 @@ describe('API route registration', () => {
     expect(layer.match('/secrets/arn:aws:ssm:us-west-2:111122223333:parameter/db/password')).toBe(
       true
     );
-    expect(layer.params.arn).toBe('arn:aws:ssm:us-west-2:111122223333:parameter/db/password');
+    expect(layer.params.arn.join('/')).toBe(
+      'arn:aws:ssm:us-west-2:111122223333:parameter/db/password'
+    );
   });
 
   it('lists attack scenarios to viewers and gates running one behind the expensive limit', () => {

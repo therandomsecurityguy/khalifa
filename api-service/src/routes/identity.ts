@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
-import { parseBoundedInteger } from '../middleware/gremlin-validator';
+import { parseBoundedInteger, pathParam } from '../middleware/gremlin-validator';
 import { getApiNeptuneClient } from '../services/api-dependencies';
 import { LeastPrivilegeStore } from '../services/least-privilege-store';
 import type {
@@ -23,11 +23,11 @@ const accessAnalyzerTable = process.env.ACCESS_ANALYZER_TABLE || 'AccessAnalyzer
 const leastPrivilegeStore = new LeastPrivilegeStore();
 
 export async function getEffectivePermissions(
-  req: Request<{ principal: string }>,
+  req: Request<{ principal: string | string[] }>,
   res: Response
 ): Promise<void> {
   try {
-    const { principal } = req.params;
+    const principal = pathParam(req.params.principal);
     if (!principal) {
       res.status(400).json({ code: 'BAD_REQUEST', message: 'principal is required' });
       return;
@@ -134,11 +134,11 @@ export async function getUnusedPermissions(req: Request, res: Response): Promise
 }
 
 export async function getRightsizingRecommendation(
-  req: Request<{ principal: string }>,
+  req: Request<{ principal: string | string[] }>,
   res: Response
 ): Promise<void> {
   try {
-    const { principal } = req.params;
+    const principal = pathParam(req.params.principal);
 
     if (!principal) {
       res.status(400).json({ code: 'BAD_REQUEST', message: 'principal is required' });
@@ -261,9 +261,13 @@ export async function getLeastPrivilegeFindings(req: Request, res: Response): Pr
   }
 }
 
-export async function getLeastPrivilegeFinding(req: Request, res: Response): Promise<void> {
+export async function getLeastPrivilegeFinding(
+  req: Request<{ accountId: string | string[]; principalArn: string | string[] }>,
+  res: Response
+): Promise<void> {
   try {
-    const { accountId, principalArn } = req.params;
+    const accountId = pathParam(req.params.accountId);
+    const principalArn = pathParam(req.params.principalArn);
 
     if (!/^\d{12}$/.test(accountId) || !principalArn) {
       res

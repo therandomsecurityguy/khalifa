@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { DynamoDBIssueRepository, getRuleById } from '@khalifa/risk-engine';
+import { pathParam } from '../middleware/gremlin-validator';
 import { getApiNeptuneClient } from '../services/api-dependencies';
 import type { SecretRecord, SecretShare } from '../services/neptune-client';
 import { secretReaders, type SecretReader } from '../services/secret-readers';
@@ -170,9 +171,12 @@ async function readersOf(record: SecretRecord): Promise<SecretReadersResult | nu
   }
 }
 
-export async function getSecret(req: Request<{ arn: string }>, res: Response): Promise<void> {
-  const { arn } = req.params;
-  if (typeof arn !== 'string' || !SECRET_ARN.test(arn)) {
+export async function getSecret(
+  req: Request<{ arn: string | string[] }>,
+  res: Response
+): Promise<void> {
+  const arn = pathParam(req.params.arn);
+  if (!SECRET_ARN.test(arn)) {
     res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid secret ARN' });
     return;
   }

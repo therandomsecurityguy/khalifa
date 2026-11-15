@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Express 5
+
+### Changed
+
+- **API runtime moves to Express 5** (4.22.2 → 5.3.0, with `@types/express` 5): the slash-containing ARN detail routes (`/secrets/*arn`, `/resources/*arn`, and the `/identity/` principal routes) use the v5 named-wildcard syntax — the old `:arn(*)` form now throws at registration on path-to-regexp v8 — the ARN middleware and handlers rejoin the captured path segments, and route params follow the v5 `string | string[]` types. The default query parser is now Express's built-in `simple`; the flat query parameters this API uses are unaffected.
+
 ## [Unreleased] - Dependency update automation
 
 ### Added

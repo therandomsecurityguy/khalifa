@@ -49,11 +49,22 @@ export function validateGremlinSelectors(req: Request, res: Response, next: Next
   next();
 }
 
+/**
+ * Express 5 types path parameters as `string | string[]`: plain `:param`
+ * segments stay strings, while named wildcards (`*arn`) capture the remaining
+ * path as an array of segments. Routes carrying ARNs use wildcards so an ARN
+ * containing `/` is not split across parameters; this rejoins the segments
+ * into the raw value.
+ */
+export function pathParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value.join('/') : (value ?? '');
+}
+
 export function validateArnPathParam(
   parameter: string
 ): (req: Request, res: Response, next: NextFunction) => void {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const arn = req.params[parameter];
+    const arn = pathParam(req.params[parameter]);
     if (!arn) {
       next();
       return;

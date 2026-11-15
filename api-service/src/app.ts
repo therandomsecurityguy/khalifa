@@ -132,7 +132,7 @@ app.get('/data-sources', requireViewer, expensiveRateLimiter, getDataSources);
 app.get('/secrets', requireViewer, expensiveRateLimiter, listSecrets);
 app.get('/secrets/reader-counts', requireViewer, expensiveRateLimiter, listSecretReaderCounts);
 app.get(
-  '/secrets/:arn(*)',
+  '/secrets/*arn',
   validateArnPathParam('arn'),
   requireViewer,
   expensiveRateLimiter,
@@ -144,7 +144,7 @@ app.get('/resources/labels', requireViewer, expensiveRateLimiter, listResourceLa
 app.get('/resources/properties', requireViewer, expensiveRateLimiter, listResourceProperties);
 app.get('/resources/values', requireViewer, expensiveRateLimiter, listPropertyValues);
 app.get('/resources/graph', requireViewer, expensiveRateLimiter, getResourceGraph);
-app.get('/resources/:arn(*)', validateArnPathParam('arn'), requireViewer, getResource);
+app.get('/resources/*arn', validateArnPathParam('arn'), requireViewer, getResource);
 
 app.get('/compliance/frameworks', requireViewer, listFrameworks);
 app.get('/compliance/frameworks/:framework/controls', requireViewer, getFrameworkControls);
@@ -174,20 +174,20 @@ app.get('/identity/trust-graph', requireViewer, getTrustGraph);
 app.get('/identity/least-privilege', requireViewer, getLeastPrivilegeFindings);
 app.get('/identity/least-privilege/summary', requireViewer, getLeastPrivilegeSummary);
 app.get(
-  '/identity/least-privilege/:accountId/:principalArn(*)',
+  '/identity/least-privilege/:accountId/*principalArn',
   validateArnPathParam('principalArn'),
   requireViewer,
   getLeastPrivilegeFinding
 );
 app.get(
-  '/identity/effective-permissions/:principal(*)',
+  '/identity/effective-permissions/*principal',
   validateArnPathParam('principal'),
   requireViewer,
   expensiveRateLimiter,
   getEffectivePermissions
 );
 app.get(
-  '/identity/rightsizing/:principal(*)',
+  '/identity/rightsizing/*principal',
   validateArnPathParam('principal'),
   requireViewer,
   expensiveRateLimiter,
