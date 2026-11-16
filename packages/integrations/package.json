@@ -14,12 +14,12 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.1167.0",
-    "@aws-sdk/client-sns": "^3.1167.0",
-    "@aws-sdk/client-securityhub": "^3.1167.0",
-    "@aws-sdk/client-ssm": "^3.1167.0",
-    "@aws-sdk/client-dynamodb": "^3.1167.0",
-    "@aws-sdk/lib-dynamodb": "^3.1167.0"
+    "@aws-sdk/client-secrets-manager": "^3.1168.0",
+    "@aws-sdk/client-sns": "^3.1168.0",
+    "@aws-sdk/client-securityhub": "^3.1168.0",
+    "@aws-sdk/client-ssm": "^3.1168.0",
+    "@aws-sdk/client-dynamodb": "^3.1168.0",
+    "@aws-sdk/lib-dynamodb": "^3.1168.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

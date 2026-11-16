@@ -14,11 +14,11 @@
   },
   "dependencies": {
     "@khalifa/risk-engine": "*",
-    "@aws-sdk/client-lambda": "^3.1167.0",
-    "@aws-sdk/client-s3": "^3.1167.0",
-    "@aws-sdk/client-macie2": "^3.1167.0",
-    "@aws-sdk/client-dynamodb": "^3.1167.0",
-    "@aws-sdk/lib-dynamodb": "^3.1167.0",
+    "@aws-sdk/client-lambda": "^3.1168.0",
+    "@aws-sdk/client-s3": "^3.1168.0",
+    "@aws-sdk/client-macie2": "^3.1168.0",
+    "@aws-sdk/client-dynamodb": "^3.1168.0",
+    "@aws-sdk/lib-dynamodb": "^3.1168.0",
     "@aws-sdk/util-dynamodb": "^3.996.2",
     "gremlin": "^3.8.2"
   },
