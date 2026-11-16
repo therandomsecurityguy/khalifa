@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/node:latest-dev@sha256:a03fb8bd4192dafde1f53e6daca70aec2b4f310c74ede320f82698e205429278 AS dependencies
+FROM cgr.dev/chainguard/node:latest-dev@sha256:56d4f3c02b31d2093d99f10b4653576af8d7bfac6df3ce67893e49e1141534b7 AS dependencies
 
 USER root
 WORKDIR /workspace
@@ -39,7 +39,7 @@ FROM dependencies AS rule-runner-build
 
 RUN /usr/local/bin/npm run build:packages && /usr/local/bin/npm run build -w lambdas/runtime
 
-FROM cgr.dev/chainguard/node:latest@sha256:c551f700dbfcbfb139f63a31eb2a55e96799ca604619d51cc008337535031599 AS runtime
+FROM cgr.dev/chainguard/node:latest@sha256:b5cfeb41b0d2201451fdae40162e65e5023df1dca1515363aa7015a5a458ebdd AS runtime
 
 ENV NODE_ENV=production
 USER 65532
