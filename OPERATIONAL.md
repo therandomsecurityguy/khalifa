@@ -393,3 +393,62 @@ at `GET /compliance/reconciliation/publishable`.
 If the workflow was skipped, `TRUST_CENTER_PROJECT` is unset. If the page looks
 empty, reconciliation is `STALE`/`MISSING` or nothing is allowlisted yet — the
 fail-closed behavior, not a bug.
+
+## K. Backup and restore
+
+### What is covered
+
+| Data                                    | Mechanism                                                                                              | Window                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| Neptune graph                           | Automated cluster snapshots (`backup_retention_period = 7` in `khalifa-data`) plus a final snapshot on cluster deletion | 7 days         |
+| DynamoDB (all eight tables)             | Point-in-time recovery enabled per table (`dynamodb.tf`)                                                | 35 days                      |
+| Secrets Manager (`<name_prefix>-khalifa/runtime`, `<name_prefix>-khalifa/neptune-auth`) | Secret recovery window                                                                  | 30 days after deletion       |
+| Athena results / access logs (S3)       | Lifecycle-expired (query results after 7 days) and regenerated on demand                                | n/a                          |
+| Trust center site                       | Regenerated nightly from the publishable endpoint                                                       | n/a — stateless              |
+| Cognito users                           | **Not backed up** — re-create or invite users (`admin-create-user`)                                     | —                            |
+| EKS cluster                             | Operator-owned; recreated from Terraform                                                                | —                            |
+
+### Restoring DynamoDB
+
+Point-in-time restores always create a **new table**; the protected original is
+never overwritten. Restore, validate, then repoint the deployment:
+
+```bash
+aws dynamodb restore-table-to-point-in-time \
+  --source-table-name SecurityIssues \
+  --target-table-name SecurityIssues-restore \
+  --restore-date-time 2026-11-15T00:00:00Z
+# Validate counts and keys, then repoint the `*.Table` chart/terraform values
+# (or adopt the restored name) and roll the API/rule-runner workloads.
+```
+
+Deletion protection stays on throughout — disabling it is not a restore step.
+
+### Restoring Neptune
+
+```bash
+aws neptune describe-db-cluster-snapshots --db-cluster-identifier <name>
+aws neptune restore-db-cluster-from-snapshot \
+  --db-cluster-identifier <name>-restore --snapshot-identifier <snapshot-arn>
+```
+
+Update `neptune_endpoint` (module output → tfvars / chart values) and roll the
+workloads. The graph is a projection of AWS truth: after a restore, re-run the
+organization collector to reconcile anything newer than the snapshot instead of
+trusting the restored copy blindly.
+
+### Restoring secrets
+
+- Inside the 30-day window: `aws secretsmanager restore-secret`. External
+  Secrets re-pulls on its refresh interval; restart workloads that read the
+  value at startup.
+- Past the window: regenerate the collector ExternalId and graph-writer token,
+  update the member-account trust policies (`scripts/deploy-collector-role.sh`),
+  and redeploy. The values never go into files, tickets, or chat.
+
+### Drill
+
+Quarterly, on a scratch basis: restore one DynamoDB table to a `-restore` name
+and compare row counts; restore a Neptune snapshot into a scratch cluster and
+run a packet of rule queries against it; tear both down afterwards (the scratch
+Neptune cluster is the cost item — keep it short-lived).
