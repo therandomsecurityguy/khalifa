@@ -1,0 +1,54 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "khalifa.fullname" . }}-api
+  labels:
+    {{- include "khalifa.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: khalifa-api
+      rules:
+        - alert: KhalifaApiMetricsAbsent
+          expr: absent(khalifa_api_http_requests_total)
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Khalifa API metrics are absent
+            description: >-
+              No khalifa_api_http_requests_total samples for 15m: the API pod is
+              down, failing to start, or no longer scraped. Check /livez,
+              /readyz, and the ServiceMonitor target in Prometheus.
+        - alert: KhalifaApiErrorRatio
+          expr: >-
+            sum(rate(khalifa_api_http_requests_total{status_code=~"5.."}[5m]))
+            / clamp_min(sum(rate(khalifa_api_http_requests_total[5m])), 0.001) > 0.05
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: Khalifa API 5xx ratio above 5%
+            description: >-
+              More than 5% of API responses are 5xx for 10m. Check the API logs
+              and the data plane; /readyz names the unreachable dependency.
+        - alert: KhalifaApiAverageLatency
+          expr: >-
+            sum(rate(khalifa_api_http_request_duration_seconds_sum[5m]))
+            / clamp_min(sum(rate(khalifa_api_http_request_duration_seconds_count[5m])), 0.001) > 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Khalifa API average latency above 1s
+            description: >-
+              Average request latency has exceeded 1s for 10m — the threshold
+              OPERATIONAL.md's SLO table names. The exposition carries
+              sum/count only, so this is the mean, not a p99.
+{{- with .Values.prometheusRule.rules }}
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- end }}

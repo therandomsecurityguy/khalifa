@@ -162,6 +162,15 @@ api:
     scrapeTimeout: 10s
     path: /metrics
 
+# Prometheus Operator alert rules (opt-in). The default group covers API
+# metrics absence, 5xx ratio, and average latency drift; append additional
+# PrometheusRule groups through `rules`. Requires the Prometheus Operator
+# CRDs (same prerequisite as api.serviceMonitor).
+prometheusRule:
+  enabled: false
+  labels: {}
+  rules: []
+
 ui:
   image: ''
   replicaCount: 2
