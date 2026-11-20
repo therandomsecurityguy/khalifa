@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Backup and restore runbook
+
+### Added
+
+- **Backup & restore runbook** (OPERATIONAL.md §K): coverage table (Neptune snapshots 7d, DynamoDB PITR 35d on all eight tables, Secrets Manager 30d recovery window), restore procedures for DynamoDB / Neptune / secrets, and a quarterly drill — with the honest gaps recorded (Cognito users are not backed up; S3 query results are regenerable). The AGENTS.md runbook index now points at it.
+
 ## [Unreleased] - Monitoring & alerting
 
 ### Added

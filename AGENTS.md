@@ -247,7 +247,7 @@ and in `CHANGELOG.md` under **Unreleased**:
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Install on EKS, module inputs, teardown        | [`deploy/terraform/examples/complete/README.md`](deploy/terraform/examples/complete/README.md)                                             |
 | Architecture, graph model, reconciliation flow | [`ARCHITECTURE.md`](ARCHITECTURE.md)                                                                                                       |
-| Runbooks: IRSA, analyzer, trust-center go-live | [`OPERATIONAL.md`](OPERATIONAL.md) (sections B, J; J.1 is the step-by-step)                                                                |
+| Runbooks: IRSA, analyzer, backup/restore, trust-center go-live | [`OPERATIONAL.md`](OPERATIONAL.md) (sections B, J, K; J.1 is the step-by-step)                                                                |
 | Compliance frameworks and mappings             | [`README.md`](README.md) §Compliance, [`packages/risk-engine/src/framework-citations.ts`](packages/risk-engine/src/framework-citations.ts) |
 | Trust-center sync and site                     | [`scripts/trust-center-sync/README.md`](scripts/trust-center-sync/README.md), [`trust-center/README.md`](trust-center/README.md)           |
 | Deployment validation                          | [`scripts/validate-deployment-modules.sh`](scripts/validate-deployment-modules.sh)                                                         |
