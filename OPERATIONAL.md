@@ -166,6 +166,24 @@ Then set `cloudtrailAnalyzer.suspend = false` in the environment's Helm values. 
 8. [ ] Review and restrict NetworkPolicies
 9. [ ] Enable Pod Security Standards (restricted)
 10. [ ] Configure RBAC for namespace access
+11. [ ] Verify release image signatures (`cosign verify`, below)
+
+### Verifying release images
+
+Every release signs each published digest keyless with cosign (Sigstore); the
+build's provenance and SBOM attestations ride along with it. For private ECR,
+log in first (`aws ecr get-login-password` | `docker login`) so cosign can
+reach the registry, then pin the deploy digest:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/therandomsecurityguy/khalifa/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/example-khalifa-api@sha256:<digest>"
+```
+
+The identity regexp pins the repository the signature must come from; the
+digest is the one already pinned in `terraform.tfvars`.
 
 ## H. Deployment Commands
 

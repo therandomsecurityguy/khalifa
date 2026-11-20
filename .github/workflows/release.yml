@@ -234,6 +234,22 @@ jobs:
 
           echo "$images" > artifacts/images.json
 
+      - name: Install cosign
+        if: env.PUBLISH_IMAGES == 'true' && env.DRY_RUN != 'true'
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Sign images (keyless)
+        if: env.PUBLISH_IMAGES == 'true' && env.DRY_RUN != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Sign every published digest from artifacts/images.json keyless:
+          # the signature binds the image to this workflow's OIDC identity,
+          # alongside the buildx provenance and SBOM attestations.
+          jq -r '.[].reference' artifacts/images.json | while IFS= read -r reference; do
+            cosign sign --yes "$reference"
+          done
+
       - name: Create release assets
         shell: bash
         run: |
