@@ -2,6 +2,23 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Repo completeness
+
+### Added
+
+- **Community files**: `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), issue forms for bugs and feature requests with security-routing contact links, and a pull-request template matching the house style (Summary / Why this is safe / Test plan).
+- **Onboarding aids**: `api-service/.env.example` (every variable the service reads, with the in-code defaults), `ui/README.md`, and a Helm chart `README.md` plus `templates/NOTES.txt` post-install hints.
+- **`.editorconfig`** aligned with the Prettier settings (2-space, LF, final newline; Markdown exempt from trailing-whitespace trimming).
+
+### Fixed
+
+- README API table no longer carries a duplicated header row (it rendered two stray rows).
+- OPERATIONAL.md monitoring URLs folded into the Logging & Observability section — the standalone copy had collided with the "I." letter used by Graph Query Profiling.
+
+### Changed
+
+- Untracked accidental artifacts: `cdk/node_modules/**` (8,110 files) and `ui/tsconfig.tsbuildinfo` — both stay ignored and on disk, but `npm ci` and typecheck no longer dirty the working tree.
+
 ## [Unreleased] - Express 5
 
 ### Changed

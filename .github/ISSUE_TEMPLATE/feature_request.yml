@@ -1,0 +1,41 @@
+name: Feature request
+description: Propose a capability, integration, or improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: How you would see it working; note anything the architecture already covers.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Collection / data sources
+        - Risk engine / rules
+        - Compliance frameworks
+        - Attack paths / adversary scenarios
+        - CIEM / least privilege
+        - API / UI
+        - Deployment / Terraform / chart
+        - Trust center
+        - Other
+    validations:
+      required: true

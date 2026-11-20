@@ -97,6 +97,12 @@ aws logs put-retention-policy \
 3. Rule execution success/failure
 4. Neptune query latency
 
+### Monitoring URLs
+
+- CloudWatch Log Insights: `/aws/eks/security-graph-cluster/workload`
+- X-Ray: Service map for api-service
+- Prometheus metrics: `http://<pod>:8080/metrics`
+
 ## E. SLOs
 
 | Service     | SLO                   | Alert Threshold   |
@@ -281,12 +287,6 @@ Read the profile output for: a `NeptuneGraphStep` with an id or index hit, no
 count at each step. The evaluator lambdas log a warning when a bounded
 enumeration hits its item cap (`maxItems`, default 50000), which is the signal
 that a label-wide traversal needs paging or reshaping.
-
-## I. Monitoring URLs
-
-- CloudWatch Log Insights: `/aws/eks/security-graph-cluster/workload`
-- X-Ray: Service map for api-service
-- Prometheus metrics: `http://<pod>:8080/metrics`
 
 ## J. Trust-center sync
 
