@@ -1,1 +1,0 @@
-"use strict";Object.defineProperty(exports,"__esModule",{value:!0}),exports.mergeBuildSpecs=mergeBuildSpecs;var codebuild=()=>{var tmp=require("../../../../aws-codebuild");return codebuild=()=>tmp,tmp};function mergeBuildSpecs(a,b){return!a||!b?a??b:codebuild().mergeBuildSpecs(a,b)}

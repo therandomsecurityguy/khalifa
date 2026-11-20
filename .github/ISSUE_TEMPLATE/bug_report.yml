@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in Khalifa is not working as documented.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For security vulnerabilities, use the private
+        process in SECURITY.md instead of a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include the exact command, endpoint, or UI path.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Minimal steps. For plan or query issues, include the input with identifiers redacted.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release tag, image digest, or commit SHA.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where does it happen?
+      options:
+        - API service
+        - UI
+        - Helm chart / Kubernetes
+        - Terraform / deployment
+        - Collector / lambdas
+        - Risk engine / compliance
+        - Trust center
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Redact account IDs, ARNs, tokens, and anything else sensitive.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed secrets and real account identifiers from everything pasted above.
+          required: true

@@ -1,0 +1,15 @@
+Khalifa {{ .Chart.Version }} installed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Check readiness:
+  kubectl -n {{ .Release.Namespace }} get pods
+  kubectl -n {{ .Release.Namespace }} get externalsecret
+
+Reach the API locally:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "khalifa.fullname" . }}-api {{ .Values.api.port }}:{{ .Values.api.service.port }}
+  curl http://localhost:{{ .Values.api.port }}/livez && curl http://localhost:{{ .Values.api.port }}/readyz
+
+readyz fails closed until the data plane is reachable — it names the missing configuration.
+
+Documentation:
+  - deploy/terraform/examples/complete/README.md  (install walkthrough)
+  - OPERATIONAL.md                               (runbooks, IRSA, trust center)

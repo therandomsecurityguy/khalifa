@@ -210,8 +210,6 @@ Unauthenticated: `/health`, `/livez`, `/readyz`, `/metrics`. Everything else nee
 
 | Endpoint                                                                                      | Description                                                                                                                         |
 | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Endpoint                                                                                      | Description                                                                                                                         |
-| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------                                |
 | `GET /session`                                                                                | Signed-in identity and effective role (Viewer+)                                                                                     |
 | `GET /rules` · `/rules/:id`                                                                   | Rule catalog with names, owners, severity hints, and ATT&CK techniques (Viewer+)                                                    |
 | `GET /rules/quality`                                                                          | Per-rule open/suppressed/resolved counts, the dismissal-rate verdict, and independent-detector corroboration (Viewer+)              |

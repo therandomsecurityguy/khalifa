@@ -1,1 +1,0 @@
-"use strict";Object.defineProperty(exports,"__esModule",{value:!0}),exports.isAssetManifest=isAssetManifest,exports.isStackArtifact=isStackArtifact;function isAssetManifest(s){return s.constructor.name==="AssetManifestArtifact"}function isStackArtifact(a){return a.constructor.name==="CloudFormationStackArtifact"}

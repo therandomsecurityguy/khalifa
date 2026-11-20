@@ -1,1 +1,0 @@
-"use strict";Object.defineProperty(exports,"__esModule",{value:!0}),exports.JSII_RUNTIME_SYMBOL=exports.RESOURCE_SYMBOL=void 0,exports.RESOURCE_SYMBOL=Symbol.for("@aws-cdk/core.Resource"),exports.JSII_RUNTIME_SYMBOL=Symbol.for("jsii.rtti");
