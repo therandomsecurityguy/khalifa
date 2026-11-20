@@ -1,0 +1,2221 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Khalifa API",
+    "version": "1.0.0",
+    "description": "REST API for the Khalifa security graph: issues and attack paths, resources,\nsecrets, compliance, CIEM, and trends.\n\n**Authentication.** Every endpoint except `/health`, `/livez`, `/readyz`,\n`/metrics`, and `/openapi.json` requires a Bearer JWT — a Cognito token, or a\nCloudflare Access JWT when the Access provider fronts the API. RBAC groups:\n`khalifa-admin`, `khalifa-analyst`, `khalifa-viewer`; each operation states\nits role floor. `/compliance/reconciliation/publishable` accepts only the\nAccess service token configured for the trust-center sync.\n\n**Rate limits.** A shared limiter applies to all routes; expensive\ngraph-heavy reads pass through an additional stricter limiter.\n\n**Errors** are JSON: `{ \"code\": string, \"message\": string }`.\n\nDocs: README.md (§API), ARCHITECTURE.md, OPERATIONAL.md."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Same origin as the deployment"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Probes and scrape/description surfaces (unauthenticated)."
+    },
+    {
+      "name": "Session",
+      "description": "Identity and effective role."
+    },
+    {
+      "name": "Rules",
+      "description": "The rule catalogue and quality evidence."
+    },
+    {
+      "name": "Issues",
+      "description": "Findings lifecycle."
+    },
+    {
+      "name": "Attack paths",
+      "description": "Path search and fix simulation."
+    },
+    {
+      "name": "Attack scenarios",
+      "description": "Curated technique chains run over the live graph."
+    },
+    {
+      "name": "Accounts & data sources",
+      "description": "Collection scope and freshness."
+    },
+    {
+      "name": "Secrets",
+      "description": "Secret inventory, readers, and one secret."
+    },
+    {
+      "name": "Resources",
+      "description": "Search and graph exploration."
+    },
+    {
+      "name": "Compliance",
+      "description": "Frameworks, reports, drift, and the publishable feed."
+    },
+    {
+      "name": "Identity",
+      "description": "CIEM: escalation, trust, effective permissions, rightsizing."
+    },
+    {
+      "name": "Trends",
+      "description": "Posture series and projections."
+    },
+    {
+      "name": "Integrations",
+      "description": "Issue sinks."
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "health",
+        "summary": "Liveness (alias of /livez)",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Process is alive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Liveness"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/livez": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "livez",
+        "summary": "Liveness probe",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Process is alive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Liveness"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "readyz",
+        "summary": "Readiness probe (fails closed)",
+        "description": "Fails closed until the configuration and the data plane are reachable; the body names exactly what is missing. Unauthenticated by design so probes and operators can curl it.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "description": "Not ready — see `checks` for the missing dependency.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "metrics",
+        "summary": "Prometheus metrics",
+        "description": "Prometheus exposition (`khalifa_api_http_requests_total`, `khalifa_api_http_request_duration_seconds_*`). Scraped by the chart ServiceMonitor when enabled; alert rules ship with the chart.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Prometheus text exposition.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "openapi",
+        "summary": "This document",
+        "description": "The OpenAPI description of the API, served unauthenticated.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OpenAPI document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/session": {
+      "get": {
+        "tags": ["Session"],
+        "operationId": "getSession",
+        "summary": "Signed-in identity and effective role",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Identity (sub, email, groups) and the effective role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/rules": {
+      "get": {
+        "tags": ["Rules"],
+        "operationId": "listRules",
+        "summary": "Rule catalogue",
+        "description": "Requires **Viewer**. Names, owners, severity hints, and ATT&CK techniques.",
+        "responses": {
+          "200": {
+            "description": "All rules.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/rules/quality": {
+      "get": {
+        "tags": ["Rules"],
+        "operationId": "getRuleQuality",
+        "summary": "Per-rule quality report",
+        "description": "Open/suppressed/resolved counts, the dismissal-rate verdict, and independent-detector corroboration — the evidence behind calibration changes.",
+        "responses": {
+          "200": {
+            "description": "Quality report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/rules/{id}": {
+      "get": {
+        "tags": ["Rules"],
+        "operationId": "getRule",
+        "summary": "One rule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Rule id, e.g. `RULE-002`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/issues": {
+      "get": {
+        "tags": ["Issues"],
+        "operationId": "listIssues",
+        "summary": "Search open/suppressed/resolved issues",
+        "parameters": [
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "description": "Filter by severity.",
+            "schema": {
+              "type": "string",
+              "enum": ["critical", "high", "medium", "low"]
+            }
+          },
+          {
+            "name": "team",
+            "in": "query",
+            "required": false,
+            "description": "Filter by owning team.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "env",
+            "in": "query",
+            "required": false,
+            "description": "Filter by environment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Filter by lifecycle state.",
+            "schema": {
+              "type": "string",
+              "enum": ["open", "suppressed", "resolved"]
+            }
+          },
+          {
+            "name": "ruleId",
+            "in": "query",
+            "required": false,
+            "description": "Filter by rule id; repeatable (bounded).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size (bounded).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "nextToken",
+            "in": "query",
+            "required": false,
+            "description": "Pagination cursor from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "description": "Sort order (default `desc`).",
+            "schema": {
+              "type": "string",
+              "enum": ["desc", "asc"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Issues page (`items`, `nextToken` when more).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/issues/counts": {
+      "get": {
+        "tags": ["Issues"],
+        "operationId": "getIssueCounts",
+        "summary": "Issue counts",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Counts by severity/status/rule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/issues/stats": {
+      "get": {
+        "tags": ["Issues"],
+        "operationId": "getIssueStats",
+        "summary": "Issue statistics",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Statistics summary.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/issues/summary": {
+      "get": {
+        "tags": ["Issues"],
+        "operationId": "getIssueSummary",
+        "summary": "Issue summary",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Summary view.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/issues/schedule": {
+      "get": {
+        "tags": ["Issues"],
+        "operationId": "getIssueSchedule",
+        "summary": "Collection schedule",
+        "description": "Requires **Viewer**. The cron expression and timezone the rule runner uses.",
+        "responses": {
+          "200": {
+            "description": "Schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/issues/{id}": {
+      "get": {
+        "tags": ["Issues"],
+        "operationId": "getIssue",
+        "summary": "One issue with its attack path",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Issue id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Issue plus path.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/issues/{id}/suppress": {
+      "post": {
+        "tags": ["Issues"],
+        "operationId": "suppressIssue",
+        "summary": "Suppress an issue",
+        "description": "Requires **Analyst**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Issue id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueSuppressRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Suppressed (`id`, `status`, `reason`, `expiresAt`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/issues/{id}/reopen": {
+      "post": {
+        "tags": ["Issues"],
+        "operationId": "reopenIssue",
+        "summary": "Reopen a suppressed issue",
+        "description": "Requires **Analyst**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Issue id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueReopenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reopened (`id`, `status`, `reason`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/attack-paths/search": {
+      "get": {
+        "tags": ["Attack paths"],
+        "operationId": "searchAttackPaths",
+        "summary": "Search attack paths (expensive query)",
+        "description": "Requires **Viewer**. Each path carries a likelihood. `maxPathLength` is capped lower for non-Analysts (4 vs 10).",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Start preset (default `any`).",
+            "schema": {
+              "type": "string",
+              "enum": ["any", "internet", "outside", "resource"]
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Target preset.",
+            "schema": {
+              "type": "string",
+              "enum": ["restricted", "crown", "secrets", "admin", "resource"]
+            }
+          },
+          {
+            "name": "fromResource",
+            "in": "query",
+            "required": false,
+            "description": "Start resource ARN (required when `from=resource`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "toResource",
+            "in": "query",
+            "required": false,
+            "description": "Target resource ARN (required when `to=resource`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "description": "Scope to a 12-digit account id.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{12}$"
+            }
+          },
+          {
+            "name": "maxPathLength",
+            "in": "query",
+            "required": false,
+            "description": "Hop cap (1–4 Viewer / 1–10 Analyst; default 4).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size (1–100; default 50).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching paths, each with a likelihood and coverage statement.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/attack-paths/simulate": {
+      "get": {
+        "tags": ["Attack paths"],
+        "operationId": "simulateAttackPaths",
+        "summary": "What a fix would remove (expensive query)",
+        "description": "Requires **Viewer**. Re-runs one rule against the live graph and counts paths per edge — the remediation priority.",
+        "parameters": [
+          {
+            "name": "ruleId",
+            "in": "query",
+            "required": false,
+            "description": "Rule whose paths to simulate.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-edge path counts, capped, with a coverage statement.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/attack-scenarios": {
+      "get": {
+        "tags": ["Attack scenarios"],
+        "operationId": "listAttackScenarios",
+        "summary": "Curated ATT&CK technique chains",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Scenario catalogue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/attack-scenarios/{id}": {
+      "get": {
+        "tags": ["Attack scenarios"],
+        "operationId": "runAttackScenario",
+        "summary": "Run one scenario over the live graph (expensive query)",
+        "description": "Requires **Viewer**. Graph-only emulation: each step re-evaluates the rule's query; failures are recorded per step, and a run only fails when every step fails.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Scenario id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-step results with matches and a coverage statement.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/accounts": {
+      "get": {
+        "tags": ["Accounts & data sources"],
+        "operationId": "listAccounts",
+        "summary": "Collected accounts",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Account ids and names.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/data-sources": {
+      "get": {
+        "tags": ["Accounts & data sources"],
+        "operationId": "getDataSources",
+        "summary": "Collection freshness per data source",
+        "description": "Requires **Viewer**. Trust signals for the graph's coverage.",
+        "responses": {
+          "200": {
+            "description": "Per-source freshness and coverage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/secrets": {
+      "get": {
+        "tags": ["Secrets"],
+        "operationId": "listSecrets",
+        "summary": "Secret inventory (expensive query)",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Secret inventory page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/secrets/reader-counts": {
+      "get": {
+        "tags": ["Secrets"],
+        "operationId": "listSecretReaderCounts",
+        "summary": "Who can read which secrets (expensive query)",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Reader counts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/secrets/{arn}": {
+      "get": {
+        "tags": ["Secrets"],
+        "operationId": "getSecret",
+        "summary": "One secret: facts, issues, and readers (expensive query)",
+        "description": null,
+        "parameters": [
+          {
+            "name": "arn",
+            "in": "path",
+            "required": true,
+            "description": "Secret or parameter ARN.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inventory item, issues, and readers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/resources/search": {
+      "get": {
+        "tags": ["Resources"],
+        "operationId": "searchResources",
+        "summary": "Resource search",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Matching resources.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/resources/labels": {
+      "get": {
+        "tags": ["Resources"],
+        "operationId": "listResourceLabels",
+        "summary": "Label explorer (expensive query)",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "description": "Scope to one label; `*` means all labels (the explorer sentinel).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Label inventory.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/resources/properties": {
+      "get": {
+        "tags": ["Resources"],
+        "operationId": "listResourceProperties",
+        "summary": "Property explorer (expensive query)",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "description": "Scope to one label.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "property",
+            "in": "query",
+            "required": false,
+            "description": "Scope to one property name.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Property inventory.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/resources/values": {
+      "get": {
+        "tags": ["Resources"],
+        "operationId": "listPropertyValues",
+        "summary": "Distinct property values (expensive query)",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "description": "Scope to one label.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "property",
+            "in": "query",
+            "required": false,
+            "description": "Scope to one property name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "value",
+            "in": "query",
+            "required": false,
+            "description": "Prefix or exact-match filter on values.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size (bounded).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "nextToken",
+            "in": "query",
+            "required": false,
+            "description": "Pagination cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Distinct values page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/resources/graph": {
+      "get": {
+        "tags": ["Resources"],
+        "operationId": "getResourceGraph",
+        "summary": "Graph slice around a resource (expensive query)",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "arn",
+            "in": "query",
+            "required": false,
+            "description": "Root resource ARN.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "depth",
+            "in": "query",
+            "required": false,
+            "description": "Traversal depth (0–3; default 2).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nodes and edges.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/resources/{arn}": {
+      "get": {
+        "tags": ["Resources"],
+        "operationId": "getResource",
+        "summary": "One resource with neighbors and issues",
+        "description": null,
+        "parameters": [
+          {
+            "name": "arn",
+            "in": "path",
+            "required": true,
+            "description": "Resource ARN.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeNeighbors",
+            "in": "query",
+            "required": false,
+            "description": "Set `false` to skip neighbors (default true).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeIssues",
+            "in": "query",
+            "required": false,
+            "description": "Set `false` to skip issues (default true).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resource, neighbors, edges, issues.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/compliance/frameworks": {
+      "get": {
+        "tags": ["Compliance"],
+        "operationId": "listFrameworks",
+        "summary": "Frameworks (CIS + mapped)",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Framework catalogue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/compliance/frameworks/{framework}": {
+      "get": {
+        "tags": ["Compliance"],
+        "operationId": "getFrameworkSummary",
+        "summary": "Framework summary",
+        "parameters": [
+          {
+            "name": "framework",
+            "in": "path",
+            "required": true,
+            "description": "Framework id, e.g. `CIS_AWS_FOUNDATIONS`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requirement/control status rollup.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/compliance/frameworks/{framework}/controls": {
+      "get": {
+        "tags": ["Compliance"],
+        "operationId": "getFrameworkControls",
+        "summary": "Controls under a framework",
+        "parameters": [
+          {
+            "name": "framework",
+            "in": "path",
+            "required": true,
+            "description": "Framework id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Controls with statuses.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/compliance/frameworks/{framework}/controls/{controlId}": {
+      "get": {
+        "tags": ["Compliance"],
+        "operationId": "getControlDetails",
+        "summary": "One control with evidence",
+        "parameters": [
+          {
+            "name": "framework",
+            "in": "path",
+            "required": true,
+            "description": "Framework id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "controlId",
+            "in": "path",
+            "required": true,
+            "description": "Control id, e.g. `2.1.4`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Control details, evidence, citations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/compliance/frameworks/{framework}/report": {
+      "get": {
+        "tags": ["Compliance"],
+        "operationId": "getComplianceReport",
+        "summary": "Latest report (expensive query)",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "framework",
+            "in": "path",
+            "required": true,
+            "description": "Framework id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "description": "Set `csv` for a CSV export; default JSON.",
+            "schema": {
+              "type": "string",
+              "enum": ["csv", "json"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest assessment report (or CSV).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/compliance/frameworks/{framework}/drift": {
+      "get": {
+        "tags": ["Compliance"],
+        "operationId": "getDriftReport",
+        "summary": "Drift versus the previous report (expensive query)",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "framework",
+            "in": "path",
+            "required": true,
+            "description": "Framework id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Control-level status changes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/compliance/reconciliation/publishable": {
+      "get": {
+        "tags": ["Compliance"],
+        "operationId": "getPublishableRequirements",
+        "summary": "Sanitized publishable CIS posture",
+        "description": "Accepts only the Cloudflare Access service token whose client id is configured (`reconciliation.trustCenterSyncClientId`); empty configuration accepts no one. This is the only feed the trust-center sync reads.",
+        "responses": {
+          "200": {
+            "description": "Sanitized statuses plus the staleness window the endpoint enforces.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/identity/escalation-paths": {
+      "get": {
+        "tags": ["Identity"],
+        "operationId": "getEscalationPaths",
+        "summary": "Escalation paths",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "sourceAccount",
+            "in": "query",
+            "required": false,
+            "description": "Filter by source account.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "targetRole",
+            "in": "query",
+            "required": false,
+            "description": "Filter by target role.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "escalationType",
+            "in": "query",
+            "required": false,
+            "description": "Filter by escalation type.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskLevel",
+            "in": "query",
+            "required": false,
+            "description": "Filter by risk level.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Escalation paths.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/identity/unused-permissions": {
+      "get": {
+        "tags": ["Identity"],
+        "operationId": "getUnusedPermissions",
+        "summary": "Unused permissions for a principal",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "principal",
+            "in": "query",
+            "required": false,
+            "description": "Principal ARN (required).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unused grants.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/identity/trust-graph": {
+      "get": {
+        "tags": ["Identity"],
+        "operationId": "getTrustGraph",
+        "summary": "Principal trust graph",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Trust edges.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/identity/effective-permissions/{principal}": {
+      "get": {
+        "tags": ["Identity"],
+        "operationId": "getEffectivePermissions",
+        "summary": "Computed effective permissions",
+        "description": null,
+        "parameters": [
+          {
+            "name": "principal",
+            "in": "path",
+            "required": true,
+            "description": "Principal ARN.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Allowed/denied actions, conditional grants, blast radius.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/identity/rightsizing/{principal}": {
+      "get": {
+        "tags": ["Identity"],
+        "operationId": "getRightsizingRecommendation",
+        "summary": "Least-privilege recommendation for a principal",
+        "description": null,
+        "parameters": [
+          {
+            "name": "principal",
+            "in": "path",
+            "required": true,
+            "description": "Principal ARN.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current vs recommended policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/identity/least-privilege": {
+      "get": {
+        "tags": ["Identity"],
+        "operationId": "listLeastPrivilegeFindings",
+        "summary": "Least-privilege sweep findings",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "description": "Filter by account.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size (bounded).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "nextToken",
+            "in": "query",
+            "required": false,
+            "description": "Pagination cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Findings page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/identity/least-privilege/summary": {
+      "get": {
+        "tags": ["Identity"],
+        "operationId": "getLeastPrivilegeSummary",
+        "summary": "Least-privilege summary",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "description": "Filter by account id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskLevel",
+            "in": "query",
+            "required": false,
+            "description": "Filter by risk level.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "principalType",
+            "in": "query",
+            "required": false,
+            "description": "Filter by principal type.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size (bounded).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "nextToken",
+            "in": "query",
+            "required": false,
+            "description": "Pagination cursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Summary rollup.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/identity/least-privilege/{accountId}/{principalArn}": {
+      "get": {
+        "tags": ["Identity"],
+        "operationId": "getLeastPrivilegeFinding",
+        "summary": "One least-privilege finding",
+        "description": "Requires **Viewer**. `accountId` is a 12-digit account; the principal ARN contains `/` and is captured as a wildcard.",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "description": "12-digit account id.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{12}$"
+            }
+          },
+          {
+            "name": "principalArn",
+            "in": "path",
+            "required": true,
+            "description": "Principal ARN.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Finding detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/trends": {
+      "get": {
+        "tags": ["Trends"],
+        "operationId": "listTrendMetrics",
+        "summary": "Trend metric catalogue",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Available metric ids and names.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/trends/{metric}": {
+      "get": {
+        "tags": ["Trends"],
+        "operationId": "getTrend",
+        "summary": "One trend series with projections",
+        "description": "Requires **Viewer**. Each series carries 7/30-day projections with confidence, or is omitted when the underlying read fails.",
+        "parameters": [
+          {
+            "name": "metric",
+            "in": "path",
+            "required": true,
+            "description": "Metric id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Window in days (1–365; default 90).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Series samples and projections.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/integrations/status": {
+      "get": {
+        "tags": ["Integrations"],
+        "operationId": "getIntegrationsStatus",
+        "summary": "Issue sink status",
+        "description": "Requires **Viewer**.",
+        "responses": {
+          "200": {
+            "description": "Configured sinks and last delivery state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Cognito ID/access token, or a Cloudflare Access JWT when the Access provider fronts the API."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable code."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable detail."
+          }
+        }
+      },
+      "Liveness": {
+        "type": "object",
+        "required": ["status", "timestamp"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Readiness": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ready", "not_ready"]
+          },
+          "checks": {
+            "type": "object",
+            "description": "Per-dependency result; `missing` names absent configuration."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "IssueSuppressRequest": {
+        "type": "object",
+        "required": ["reason", "expiresAt"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Future time within 90 days."
+          }
+        }
+      },
+      "IssueReopenRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid input.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid credentials.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such resource.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The resource changed since it was read.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Unexpected server error.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

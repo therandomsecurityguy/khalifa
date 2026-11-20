@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import express from 'express';
+import openapiDocument from './openapi.json';
 import {
   listIssues,
   getIssue,
@@ -105,6 +106,12 @@ app.get('/readyz', async (_req: Request, res: Response) => {
 
 app.get('/metrics', (_req: Request, res: Response) => {
   res.type('text/plain; version=0.0.4; charset=utf-8').send(renderMetrics());
+});
+
+// The API description itself: unauthenticated like the probes, and pinned to
+// the registered routes by openapi.test.ts.
+app.get('/openapi.json', (_req: Request, res: Response) => {
+  res.json(openapiDocument);
 });
 
 app.use(authenticate);

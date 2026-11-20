@@ -16,7 +16,7 @@
     "sourceMap": true,
     "moduleResolution": "node"
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "src/openapi.json"],
   "exclude": ["node_modules", "dist"],
   "references": [{ "path": "../packages/risk-engine" }]
 }

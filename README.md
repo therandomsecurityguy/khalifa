@@ -206,7 +206,7 @@ Event-driven scanning is opt-in via `ENABLE_DSPM_EVENT_TRIGGER=true`: an SQS que
 
 ## API
 
-Unauthenticated: `/health`, `/livez`, `/readyz`, `/metrics`. Everything else needs a Cognito JWT, or a verified Cloudflare Access identity when the Access provider is configured. RBAC groups: `khalifa-admin`, `khalifa-analyst`, `khalifa-viewer`.
+Unauthenticated: `/health`, `/livez`, `/readyz`, `/metrics`, and `/openapi.json` — the OpenAPI description of everything else. Everything else needs a Cognito JWT, or a verified Cloudflare Access identity when the Access provider is configured. RBAC groups: `khalifa-admin`, `khalifa-analyst`, `khalifa-viewer`.
 
 | Endpoint                                                                                      | Description                                                                                                                         |
 | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
