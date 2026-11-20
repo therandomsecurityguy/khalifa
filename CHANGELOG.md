@@ -2,6 +2,17 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Monitoring & alerting
+
+### Added
+
+- **Prometheus alert rules** (chart, opt-in via `prometheusRule.enabled`): API metrics absent (15m), 5xx ratio above 5% (10m), and average latency above 1s (10m) — the thresholds the SLO table already names. Additional PrometheusRule groups append through `prometheusRule.rules`.
+- **Grafana dashboard** (`deploy/observability/grafana-dashboard.json`): requests by status, 5xx ratio, average latency, and top routes; import and pick the Prometheus data source.
+
+### Notes
+
+- Domain alerts (issue backlog, reconciliation staleness, queue depth) need domain gauges that the API does not expose yet; deferred deliberately rather than alerted on absent data (recorded in `deploy/observability/README.md`).
+
 ## [Unreleased] - Repo completeness
 
 ### Added

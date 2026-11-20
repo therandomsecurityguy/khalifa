@@ -90,12 +90,18 @@ aws logs put-retention-policy \
   --retention-in-days 90
 ```
 
-### Recommended Dashboards
+### Dashboards and alerts
 
-1. API latency (p50, p95, p99)
-2. Issue count by severity
-3. Rule execution success/failure
-4. Neptune query latency
+- [`deploy/observability/grafana-dashboard.json`](deploy/observability/grafana-dashboard.json)
+  ships the API dashboard (request rate by status, 5xx ratio, average latency,
+  top routes); import it and select the Prometheus data source.
+- `prometheusRule.enabled: true` in the chart renders alerts for API metrics
+  absence (15m), 5xx ratio above 5% (10m), and average latency above 1s (10m)
+  — the thresholds in section E. Extra groups append through
+  `prometheusRule.rules`.
+- Domain alerts (issue backlog, reconciliation staleness, queue depth) need
+  domain gauges the API does not expose yet; deferred deliberately rather
+  than alerted on absent data — see `deploy/observability/README.md`.
 
 ### Monitoring URLs
 

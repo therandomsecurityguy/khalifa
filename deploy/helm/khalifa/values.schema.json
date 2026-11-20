@@ -173,6 +173,16 @@
     },
     "collection": { "$ref": "#/definitions/collection" },
     "api": { "$ref": "#/definitions/apiWorkload" },
+    "prometheusRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "labels", "rules"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "labels": { "$ref": "#/definitions/stringMap" },
+        "rules": { "type": "array", "items": { "type": "object" } }
+      }
+    },
     "ui": { "$ref": "#/definitions/uiWorkload" },
     "ruleRunner": { "$ref": "#/definitions/cronJob" },
     "organizationCollector": { "$ref": "#/definitions/cronJob" },
