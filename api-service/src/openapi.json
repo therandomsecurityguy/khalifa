@@ -199,6 +199,30 @@
         }
       }
     },
+    "/version": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "version",
+        "summary": "Build identity of the running image",
+        "description": "The version and source SHA the release build baked into the image, or `dev` for local builds. Unauthenticated like the probes.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Build identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildInfo"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/session": {
       "get": {
         "tags": ["Session"],
@@ -2135,6 +2159,20 @@
           "timestamp": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "BuildInfo": {
+        "type": "object",
+        "required": ["version", "sha"],
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Release version (`dev` for local builds)."
+          },
+          "sha": {
+            "type": "string",
+            "description": "Source commit the image was built from (empty for local builds)."
           }
         }
       },

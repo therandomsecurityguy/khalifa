@@ -41,6 +41,14 @@ RUN /usr/local/bin/npm run build:packages && /usr/local/bin/npm run build -w lam
 
 FROM cgr.dev/chainguard/node:latest@sha256:b5cfeb41b0d2201451fdae40162e65e5023df1dca1515363aa7015a5a458ebdd AS runtime
 
+# Build identity, set by the release workflow's build args. The API reports it
+# through /version and the khalifa_build_info metric; targets that do not read
+# it receive the variables harmlessly.
+ARG BUILD_VERSION=dev
+ARG BUILD_SHA=
+ENV KHALIFA_VERSION=${BUILD_VERSION}
+ENV KHALIFA_SHA=${BUILD_SHA}
+
 ENV NODE_ENV=production
 USER 65532
 
