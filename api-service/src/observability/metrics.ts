@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { renderDomainMetrics } from './domain-metrics';
 
 interface RequestMetric {
   count: number;
@@ -46,6 +47,8 @@ export function renderMetrics(): string {
       `khalifa_api_http_request_duration_seconds_count${labels} ${metric.count}`
     );
   }
+
+  lines.push(...renderDomainMetrics());
 
   return `${lines.join('\n')}\n`;
 }

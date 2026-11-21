@@ -51,4 +51,40 @@ spec:
 {{- with .Values.prometheusRule.rules }}
         {{- toYaml . | nindent 8 }}
 {{- end }}
+    - name: khalifa-posture
+      rules:
+        - alert: KhalifaDomainMetricsUnavailable
+          expr: khalifa_domain_metrics_ok == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: Khalifa domain metrics refresh is failing
+            description: >-
+              The API has not refreshed khalifa_open_issues /
+              khalifa_reconciliation_* values for 30m — gauges are stale and
+              the posture alerts below cannot be trusted. Check the API logs
+              for the domain metrics refresh error.
+        - alert: KhalifaReconciliationNotOk
+          expr: khalifa_reconciliation_ok == 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: CIS reconciliation is not OK
+            description: >-
+              The reconciliation record is MISSING or STALE: the trust center
+              publishes nothing while this holds (fail-closed), and mapped
+              frameworks go unpublished with it.
+        - alert: KhalifaReconciliationAgeHigh
+          expr: khalifa_reconciliation_age_seconds > 129600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: Reconciliation record older than 36h
+            description: >-
+              The publishable endpoint enforces a 24h staleness window;
+              assessments have stopped producing fresh records. Check the
+              compliance job and the Security Hub reader role.
 {{- end }}
