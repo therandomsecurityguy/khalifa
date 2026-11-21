@@ -12,6 +12,9 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as sns from 'aws-cdk-lib/aws-sns';
+import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import type { Construct } from 'constructs';
 
@@ -35,6 +38,9 @@ export interface SecurityGraphIngestionStackProps extends cdk.StackProps {
   /** Buckets the DSPM scanner may read object content from. Empty keeps the
    *  historical all-buckets grant; setting it scopes s3:GetObject. */
   dspmBucketAllowlist?: string[];
+  /** Optional address subscribed to the stack's alarm topic (DLQ depth,
+   *  stalled incremental queue, queue-processor errors). */
+  alarmEmail?: string;
 }
 
 export class SecurityGraphIngestionStack extends cdk.Stack {
@@ -912,5 +918,67 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       schedule: events.Schedule.cron({ minute: '0', hour: '3' }),
       targets: [new targets.LambdaFunction(leastPrivilegeSweepFn)],
     });
+
+    // ---- Alarms ----------------------------------------------------------
+    // The AWS-native counterpart to the chart's PrometheusRule: poison
+    // messages, a stalled incremental queue, and a failing queue processor
+    // all publish to one topic so an operator can subscribe an address (or
+    // the deployment's paging stack) with `alarmEmail`.
+    const alarmTopic = new sns.Topic(this, 'AlarmTopic', {
+      topicName: 'security-graph-alarms',
+    });
+    if (props.alarmEmail) {
+      alarmTopic.addSubscription(new snsSubscriptions.EmailSubscription(props.alarmEmail));
+    }
+    const sendAlarms = (alarm: cloudwatch.Alarm) =>
+      alarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+
+    sendAlarms(
+      new cloudwatch.Alarm(this, 'DlqNotEmpty', {
+        alarmName: 'security-graph-dlq-not-empty',
+        alarmDescription:
+          'Incremental messages exhausted maxReceiveCount and landed in the dead-letter queue.',
+        metric: deadLetterQueue.metricApproximateNumberOfMessagesVisible({
+          period: cdk.Duration.minutes(5),
+          statistic: 'Maximum',
+        }),
+        threshold: 0,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      })
+    );
+
+    sendAlarms(
+      new cloudwatch.Alarm(this, 'IncrementalQueueStalled', {
+        alarmName: 'security-graph-incremental-queue-stalled',
+        alarmDescription:
+          'Oldest incremental message is older than 15 minutes — the processor is stalled or failing.',
+        metric: incrementalQueue.metricApproximateAgeOfOldestMessage({
+          period: cdk.Duration.minutes(5),
+          statistic: 'Maximum',
+        }),
+        threshold: cdk.Duration.minutes(15).toSeconds(),
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        evaluationPeriods: 3,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      })
+    );
+
+    sendAlarms(
+      new cloudwatch.Alarm(this, 'IncrementalProcessorErrors', {
+        alarmName: 'security-graph-incremental-processor-errors',
+        alarmDescription:
+          'The incremental queue processor Lambda is erroring; event-driven collection is degraded.',
+        metric: incrementalProcessorFn.metricErrors({
+          period: cdk.Duration.minutes(5),
+          statistic: 'Sum',
+        }),
+        threshold: 0,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      })
+    );
   }
 }

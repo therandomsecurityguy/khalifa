@@ -102,6 +102,9 @@ aws logs put-retention-policy \
 - Domain alerts (issue backlog, reconciliation staleness, queue depth) need
   domain gauges the API does not expose yet; deferred deliberately rather
   than alerted on absent data — see `deploy/observability/README.md`.
+- AWS-side failures publish to the CDK stack's `security-graph-alarms` SNS
+  topic: DLQ not empty, incremental queue stalled (>15m), queue-processor
+  Lambda errors. Subscribe an address with the stack's `alarmEmail` property.
 
 ### Monitoring URLs
 

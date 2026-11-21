@@ -26,4 +26,20 @@ describe('Prometheus metrics', () => {
     );
     expect(metrics).not.toContain('123456789012');
   });
+
+  it('reports the build identity, with local fallbacks', () => {
+    const previous = { version: process.env.KHALIFA_VERSION, sha: process.env.KHALIFA_SHA };
+    delete process.env.KHALIFA_VERSION;
+    delete process.env.KHALIFA_SHA;
+    expect(renderMetrics()).toContain('khalifa_build_info{version="dev",sha=""} 1');
+
+    process.env.KHALIFA_VERSION = '1.11.0';
+    process.env.KHALIFA_SHA = 'abc123';
+    expect(renderMetrics()).toContain('khalifa_build_info{version="1.11.0",sha="abc123"} 1');
+
+    if (previous.version === undefined) delete process.env.KHALIFA_VERSION;
+    else process.env.KHALIFA_VERSION = previous.version;
+    if (previous.sha === undefined) delete process.env.KHALIFA_SHA;
+    else process.env.KHALIFA_SHA = previous.sha;
+  });
 });

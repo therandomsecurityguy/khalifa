@@ -35,7 +35,7 @@ describe('API route registration', () => {
 
   it('keeps health and metrics endpoints ahead of authentication', () => {
     const authenticationIndex = stack.findIndex((layer) => layer.name === 'authenticate');
-    for (const path of ['/health', '/livez', '/readyz', '/metrics']) {
+    for (const path of ['/health', '/livez', '/readyz', '/metrics', '/version']) {
       const routeIndex = stack.findIndex((layer) => layer.route?.path === path);
       expect(routeIndex).toBeGreaterThanOrEqual(0);
       expect(routeIndex).toBeLessThan(authenticationIndex);

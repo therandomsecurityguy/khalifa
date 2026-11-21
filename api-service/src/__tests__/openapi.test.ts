@@ -32,6 +32,7 @@ const SPEC_PUBLIC = new Set([
   'get /readyz',
   'get /metrics',
   'get /openapi.json',
+  'get /version',
 ]);
 
 describe('OpenAPI document', () => {

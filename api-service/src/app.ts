@@ -32,7 +32,7 @@ import { validateGremlinSelectors, validateArnPathParam } from './middleware/gre
 import { authenticate } from './middleware/auth';
 import { requireViewer, requireAnalyst, requireTrustCenterSync } from './middleware/rbac';
 import { apiRateLimiter, expensiveRateLimiter } from './middleware/rate-limit';
-import { metricsMiddleware, renderMetrics } from './observability/metrics';
+import { metricsMiddleware, renderMetrics, buildInfo } from './observability/metrics';
 import compression from 'compression';
 import helmet from 'helmet';
 import { getReadinessService } from './services/readiness';
@@ -112,6 +112,10 @@ app.get('/metrics', (_req: Request, res: Response) => {
 // the registered routes by openapi.test.ts.
 app.get('/openapi.json', (_req: Request, res: Response) => {
   res.json(openapiDocument);
+});
+
+app.get('/version', (_req: Request, res: Response) => {
+  res.json(buildInfo());
 });
 
 app.use(authenticate);

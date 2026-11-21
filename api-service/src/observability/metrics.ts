@@ -30,7 +30,12 @@ export function renderMetrics(): string {
     '# TYPE khalifa_api_http_requests_total counter',
     '# HELP khalifa_api_http_request_duration_seconds HTTP request duration in seconds.',
     '# TYPE khalifa_api_http_request_duration_seconds summary',
+    '# HELP khalifa_build_info Build identity of the running API image.',
+    '# TYPE khalifa_build_info gauge',
   ];
+
+  const build = buildInfo();
+  lines.push(`khalifa_build_info${formatLabels({ version: build.version, sha: build.sha })} 1`);
 
   for (const [key, metric] of requests) {
     const [method, route, status] = JSON.parse(key) as string[];
@@ -47,6 +52,17 @@ export function renderMetrics(): string {
 
 export function resetMetricsForTests(): void {
   requests.clear();
+}
+
+/**
+ * Build identity baked into the image by the release workflow
+ * (`BUILD_VERSION` / `BUILD_SHA` build args), falling back for local builds.
+ */
+export function buildInfo(): { version: string; sha: string } {
+  return {
+    version: process.env.KHALIFA_VERSION || 'dev',
+    sha: process.env.KHALIFA_SHA || '',
+  };
 }
 
 function routeName(req: Request): string {

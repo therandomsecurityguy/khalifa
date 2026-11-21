@@ -2,6 +2,13 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Build identity and AWS alarms
+
+### Added
+
+- **Runtime build identity**: the release build bakes `BUILD_VERSION`/`BUILD_SHA` into the image; the API reports them at `/version` (unauthenticated, documented in the OpenAPI spec) and as `khalifa_build_info{version,sha}` on `/metrics`, and the release workflow passes both build args.
+- **CDK alarms**: DLQ-not-empty, incremental-queue-stalled (>15m), and queue-processor-errors publish to a `security-graph-alarms` SNS topic — the AWS-native counterpart to the chart's PrometheusRule; opt-in email via the stack's `alarmEmail` property.
+
 ## [Unreleased] - OpenAPI reference
 
 ### Added

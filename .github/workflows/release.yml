@@ -222,7 +222,7 @@ jobs:
             require_immutable_repository "$repository"
             require_absent_tag "$repository" "$GITHUB_SHA"
             require_absent_tag "$repository" "$VERSION"
-            docker buildx build --platform linux/amd64 --target "$target" --tag "$image:$GITHUB_SHA" --tag "$image:$VERSION" --provenance=mode=max --sbom=true --push .
+            docker buildx build --platform linux/amd64 --target "$target" --build-arg BUILD_VERSION="$VERSION" --build-arg BUILD_SHA="$GITHUB_SHA" --tag "$image:$GITHUB_SHA" --tag "$image:$VERSION" --provenance=mode=max --sbom=true --push .
             sha_digest="$(get_digest "$repository" "$GITHUB_SHA")"
             version_digest="$(get_digest "$repository" "$VERSION")"
             if [[ "$sha_digest" != "$version_digest" ]]; then
