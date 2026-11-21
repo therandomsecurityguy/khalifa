@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - OpenAPI reference
+
+### Added
+
+- **OpenAPI 3.1 description of the API**, served unauthenticated at `/openapi.json`: 50 operations with auth role floors, parameters, and the error shape. `openapi.test.ts` pins it to the Express route table in both directions (no undocumented route, no phantom operation) and keeps exactly the probes/metrics/description routes public — drift fails CI.
+
 ## [Unreleased] - Release image signing
 
 ### Added
