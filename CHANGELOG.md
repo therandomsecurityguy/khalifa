@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Coverage thresholds
+
+### Added
+
+- **Coverage floors in CI**: `ci:test` now runs jest with `--coverage` and global thresholds (statements 78 / branches 70 / functions 74 / lines 79), set ~1 point under the measured baseline (79.5 / 71.2 / 75.0 / 80.6 across 163 suites) and run under the same 8 GB heap the CI job already uses.
+
 ## [Unreleased] - UI shell smoke
 
 ### Changed
