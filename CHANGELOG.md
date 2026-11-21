@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Release image signing
+
+### Added
+
+- **Keyless cosign signing**: the release workflow signs every published image digest with Sigstore using the workflow's OIDC identity (`id-token: write` was already granted), alongside the existing provenance and SBOM attestations. OPERATIONAL.md §G gains a `cosign verify` snippet (identity regexp + digest) and a pre-production checklist item for it.
+
 ## [Unreleased] - Backup and restore runbook
 
 ### Added
