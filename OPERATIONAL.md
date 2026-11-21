@@ -99,9 +99,10 @@ aws logs put-retention-policy \
   absence (15m), 5xx ratio above 5% (10m), and average latency above 1s (10m)
   — the thresholds in section E. Extra groups append through
   `prometheusRule.rules`.
-- Domain alerts (issue backlog, reconciliation staleness, queue depth) need
-  domain gauges the API does not expose yet; deferred deliberately rather
-  than alerted on absent data — see `deploy/observability/README.md`.
+- Domain alerts ride cached gauges refreshed every five minutes
+  (`khalifa_open_issues{severity}`, `khalifa_reconciliation_ok` /
+  `_status` / `_age_seconds`, `khalifa_domain_metrics_ok`): reconciliation
+  not OK (15m, critical), older than 36h (1h), and a failing refresh (30m).
 - AWS-side failures publish to the CDK stack's `security-graph-alarms` SNS
   topic: DLQ not empty, incremental queue stalled (>15m), queue-processor
   Lambda errors. Subscribe an address with the stack's `alarmEmail` property.
