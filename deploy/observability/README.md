@@ -7,13 +7,26 @@
 
 Alert rules deliberately live in the Helm chart
 (`prometheusRule.enabled`) rather than here, so they ship and roll back with
-the release. The default group covers API metrics absence, 5xx ratio above 5%,
-and average latency above 1s — the thresholds `OPERATIONAL.md` §E already
-names. Extra groups can be appended through `prometheusRule.rules`.
+the release. The rules cover HTTP traffic (metrics absent, 5xx ratio, average
+latency) and posture: reconciliation not OK (15m, critical — the trust center
+publishes nothing while it holds), reconciliation older than 36h, and the
+domain refresh itself failing (30m). Extra groups can be appended through
+`prometheusRule.rules`.
+
+## Domain gauges
+
+The posture values come from `khalifa_open_issues{severity}`,
+`khalifa_reconciliation_ok`, `khalifa_reconciliation_status`,
+`khalifa_reconciliation_age_seconds`, and `khalifa_domain_metrics_ok` — read
+by the API on a **five-minute interval** and cached, because the issue counts
+page through open issues and a 30s scrape must not become a query every 30s.
+The alerts' `for:` windows are all well above the refresh interval; stale
+values are preferable to a gap, and `khalifa_domain_metrics_ok` catches a
+refresh that never succeeds.
 
 ## Deliberately deferred
 
-Domain alerts — issue backlog, reconciliation staleness, queue/DLQ depth, rule
-execution results — need domain **gauges**, which the API does not expose yet.
-Alerting on absent series would page on nothing, so those panels and rules
-wait for gauges (a scrape-time DynamoDB read needs a caching design first).
+Queue and DLQ depth stay out of Prometheus: reading them needs a CloudWatch
+call at scrape time. Those failures are covered by the CDK stack's
+`security-graph-alarms` topic instead (DLQ not empty, queue stalled,
+processor errors).

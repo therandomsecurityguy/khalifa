@@ -2,6 +2,13 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Domain metrics and posture alerts
+
+### Added
+
+- **Domain gauges on `/metrics`**: `khalifa_open_issues{severity}` and the reconciliation trio (`khalifa_reconciliation_ok` / `_status` / `_age_seconds`) plus `khalifa_domain_metrics_ok`, read from the issue repository and the reconciliation record on a five-minute interval and cached — stale is preferable to a gap, and the scrape stays cheap.
+- **Posture alerts** in the chart's PrometheusRule: reconciliation not OK (15m, critical — the trust center publishes nothing while it holds), reconciliation older than 36h (1h), and a failing domain refresh (30m). Two dashboard panels (open issues by severity, reconciliation state) join the API dashboard.
+
 ## [Unreleased] - Build identity and AWS alarms
 
 ### Added

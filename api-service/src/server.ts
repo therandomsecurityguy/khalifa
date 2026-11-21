@@ -1,12 +1,16 @@
 import app from './app';
 import { closeApiNeptuneClient } from './services/api-dependencies';
 import { closeReadinessDependencies } from './services/readiness';
+import { startDomainMetrics, stopDomainMetrics } from './observability/domain-metrics';
 
 const port = Number(process.env.PORT || 8080);
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error(`Invalid PORT: ${process.env.PORT}`);
 }
+
+// Refreshes the domain gauges on an interval; scrapes read the cache.
+startDomainMetrics();
 
 const server = app.listen(port, () => {
   console.log(`API service listening on port ${port}`);
@@ -34,6 +38,7 @@ function shutdown(signal: NodeJS.Signals): void {
     try {
       await closeApiNeptuneClient();
       closeReadinessDependencies();
+      stopDomainMetrics();
     } catch (closeError) {
       console.error('Dependency shutdown failed:', closeError);
       process.exitCode = 1;
