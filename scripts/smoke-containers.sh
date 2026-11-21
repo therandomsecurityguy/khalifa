@@ -79,6 +79,15 @@ if [[ " ${targets[*]} " == *" ui "* ]]; then
   docker run --detach --name "$ui_container" --read-only --tmpfs /tmp --tmpfs /app/ui/.next/cache:uid=65532,gid=65532 --cap-drop ALL --security-opt no-new-privileges:true --health-interval 1s --health-start-period 1s --publish 127.0.0.1::3000 khalifa-ui:smoke >/dev/null
   wait_for_http "$ui_container" 3000 /healthz
   wait_for_health "$ui_container"
+  # The shell renders (a page that needs the API shows its empty/error states
+  # without one), so the served title is the meaningful liveness boundary for
+  # the UI beyond /healthz.
+  ui_port=$(get_host_port "$ui_container" 3000)
+  curl --fail --silent --location "http://127.0.0.1:$ui_port/" | grep -qi "<title>Khalifa - Security Graph</title>" || {
+    echo "UI page shell did not render" >&2
+    docker logs "$ui_container"
+    exit 1
+  }
   docker stop --time 10 "$ui_container" >/dev/null
   [[ "$(docker inspect --format '{{.State.ExitCode}}' "$ui_container")" =~ ^(0|143)$ ]]
 fi
