@@ -13,6 +13,8 @@ npm ci
 npm run ci:quality   # format, lint, typecheck, tests, build, packaging smoke
 ```
 
+Or open the repository in the dev container (`.devcontainer/`) — Node 24, Docker, Terraform, and kubectl/Helm are ready and `npm ci` runs on create.
+
 ## Project Structure
 
 - `lambdas/` — collector, incremental collector, graph writer, policy evaluator, CloudTrail analyzer, DSPM scanner, least-privilege sweep, runtime dispatcher

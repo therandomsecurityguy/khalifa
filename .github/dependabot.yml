@@ -142,6 +142,22 @@ updates:
       prefix: "chore(deps)"
       include: "scope"
 
+  # Dev container feature references (Node, Docker-in-Docker, Terraform,
+  # kubectl/Helm tooling) — bumped like any other dependency.
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
   # GitHub Actions — workflows pin actions to commit SHAs with a version
   # comment; Dependabot moves both.
   - package-ecosystem: "github-actions"
