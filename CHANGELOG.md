@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Architecture diagrams
+
+### Added
+
+- **Two Mermaid diagrams in ARCHITECTURE.md**: the graph model's main node classes and the stored edge types rules traverse (the schema tables remain exhaustive), and the reconciliation-to-publish flow with its record states and per-requirement gates.
+
 ## [Unreleased] - Supply-chain workflows
 
 ### Added

@@ -421,7 +421,81 @@ monitoring statement (cadence plus the automatic-unpublish window) derives from
 the endpoint's published `maxAgeHours`, so the public claim cannot drift from
 the gate.
 
+The flow, at a glance:
+
+```mermaid
+flowchart TD
+    RUN["Compliance job: evaluate CIS + Khalifa baseline and reconcile with Security Hub (read-only reader role)"] --> REC["CIS_RECONCILIATION record in the reports table"]
+    REC --> STATE{Record status}
+    STATE -->|nothing written yet| MISSING["MISSING"]
+    STATE -->|run errored| STALE["STALE"]
+    STATE -->|clean run| OK["OK — per-requirement Security Hub/Khalifa statuses, stability streaks, disagreements"]
+    OK --> GATE{Per-requirement publish gates}
+    GATE -->|allowlisted + Security Hub result with no missing data + stable for minAgreementDays| PUB["Publishable: requirement, title, section, status"]
+    GATE -->|NOT_ALLOWLISTED / NO_SECURITY_HUB_RESULT / SECURITY_HUB_NO_DATA / NOT_STABLE_LONG_ENOUGH| HELD["Held back from the page"]
+    PUB --> EP["GET /compliance/reconciliation/publishable — Access service token only"]
+    MAP["Mapped frameworks: published only while every cited control is reconciliation-publishable or assessed PASS/FAIL"] -.->|adds requirements| EP
+    EP --> SYNC["Nightly Trust center sync — fails closed on STALE/MISSING or transport errors"]
+    SYNC --> PAGES["Cloudflare Pages deployment (statuses only)"]
+    MISSING --> NOPUB["Nothing publishes — the previous deployment stays live"]
+    STALE --> NOPUB
+```
+
 ## Graph Schema
+
+The main node classes and the stored edge types the rules traverse, at a
+glance — the tables below are exhaustive; this shows the shape. (Derived
+views such as `EffectivePermission` / `EscalationPath` are computed by the
+policy evaluator and queried by the CIEM rules; they are not collected
+edges.)
+
+```mermaid
+flowchart LR
+    subgraph reach["Internet reach"]
+        NET["Internet"]
+        EXT["ExternalAccount"]
+    end
+    subgraph network["Network"]
+        IGW["InternetGateway / LoadBalancer"]
+        VPC["Vpc / Subnet"]
+        SG["SecurityGroup + SecurityGroupRule"]
+        ENI["NetworkInterface"]
+    end
+    subgraph compute["Compute and data"]
+        EC2["Ec2Instance"]
+        LAM["LambdaFunction"]
+        BUCKET["S3Bucket"]
+        SEC["Secret / Parameter"]
+        VULN["Vulnerability (Inspector)"]
+    end
+    subgraph identity["Identity"]
+        USER["IamUser"]
+        KEY["AccessKey"]
+        ROLE["IamRole"]
+        DOC["IamPolicy (+ IamPolicyStatement)"]
+        ESC["EscalationPath / EffectivePermission (derived)"]
+    end
+    subgraph detection["Detection and classification"]
+        FIND["SecurityHubFinding / AccessAnalyzer finding"]
+        DSPM["DataClassificationFinding (DSPM)"]
+    end
+
+    NET -->|EXPOSES| IGW
+    IGW -->|ATTACHED_TO| VPC
+    SG -->|PROTECTS| ENI
+    ENI -->|ATTACHED_TO| EC2
+    EC2 -->|HAS_IAM_ROLE| ROLE
+    LAM -->|HAS_IAM_ROLE| ROLE
+    USER -->|HAS_ACCESS_KEY| KEY
+    ROLE -->|ATTACHED_TO| DOC
+    DOC -->|GRANTS| BUCKET
+    DOC -->|GRANTS| SEC
+    ROLE -->|TRUSTS| EXT
+    ROLE -.->|derived view| ESC
+    FIND -->|DETECTS_ON| EC2
+    EC2 -->|HAS_CVE| VULN
+    DSPM -->|CLASSIFIES| BUCKET
+```
 
 ### Vertex Labels
 
