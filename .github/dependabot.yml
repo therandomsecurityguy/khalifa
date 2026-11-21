@@ -158,3 +158,11 @@ updates:
     commit-message:
       prefix: "chore(ci)"
       include: "scope"
+    # The CodeQL workflow runs init/analyze (and Scorecard's upload-sarif)
+    # from the same release; mixing versions aborts analysis with "Loaded a
+    # configuration file for version X, but running version Y". Group them so
+    # every codeql-action usage bumps in one PR.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"

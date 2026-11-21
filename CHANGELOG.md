@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Supply-chain workflows
+
+### Added
+
+- **Dependency review** on PRs (fails at high severity, comments the summary on failure), **CodeQL** code scanning (javascript-typescript, `security-extended`, on PRs/main plus a weekly sweep), and the **OpenSSF Scorecard** (weekly, results published to the OpenSSF API and code scanning). All actions are SHA-pinned, and a new Dependabot group keeps the three `github/codeql-action` usages on the same version.
+
 ## [Unreleased] - Domain metrics and posture alerts
 
 ### Added
