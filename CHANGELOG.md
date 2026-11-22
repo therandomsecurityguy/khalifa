@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Dev container and template docs
+
+### Added
+
+- **Dev container** (`.devcontainer/`): the Node 24 image plus Docker-in-Docker, Terraform, and kubectl/Helm features, with `npm ci` on create — Dependabot gains a `devcontainers` entry to keep the feature refs current. `templates/README.md` documents the member-account CloudFormation pair (parameters, ExternalId handling, and the deploy script).
+
 ## [Unreleased] - Architecture diagrams
 
 ### Added
