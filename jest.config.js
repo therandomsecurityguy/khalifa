@@ -1,5 +1,17 @@
 module.exports = {
   globalSetup: '<rootDir>/jest.setup.js',
+  // Floors set ~1 point under the measured baseline (79.5 / 71.2 / 75.0 /
+  // 80.6 on 2026-11-21, 163 suites); ratchet up as coverage improves.
+  // Enforced when jest runs with --coverage (npm run ci:test), not on plain
+  // local `npm run test` runs.
+  coverageThreshold: {
+    global: {
+      statements: 78,
+      branches: 70,
+      functions: 74,
+      lines: 79,
+    },
+  },
   projects: [
     {
       displayName: 'risk-engine',

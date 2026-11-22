@@ -39,7 +39,7 @@
     "ci:lint": "npm run format:check && npm run lint",
     "ci:typecheck": "npm run typecheck",
     "ci:build": "npm run build",
-    "ci:test": "npm run test",
+    "ci:test": "NODE_OPTIONS=--max-old-space-size=8192 npm run test -- --coverage",
     "ci:audit": "node scripts/check-npm-audit.mjs",
     "ci:quality": "npm run ci:lint && npm run ci:typecheck && npm run ci:test && npm run ci:build && npm run package:lambdas && npm run smoke:lambdas",
     "risk:plan": "tsx scripts/risk-plan/index.ts",
