@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/node:latest-dev@sha256:56d4f3c02b31d2093d99f10b4653576af8d7bfac6df3ce67893e49e1141534b7 AS dependencies
+FROM cgr.dev/chainguard/node:latest-dev@sha256:cd993dc8ec644f8f35e8356f6b442e807cdc5e42f303da5ce19a55d7cf660b51 AS dependencies
 
 USER root
 WORKDIR /workspace
@@ -39,7 +39,7 @@ FROM dependencies AS rule-runner-build
 
 RUN /usr/local/bin/npm run build:packages && /usr/local/bin/npm run build -w lambdas/runtime
 
-FROM cgr.dev/chainguard/node:latest@sha256:b5cfeb41b0d2201451fdae40162e65e5023df1dca1515363aa7015a5a458ebdd AS runtime
+FROM cgr.dev/chainguard/node:latest@sha256:3fb5318a58807dec0f2ece547efbe8d62c67b7b2fd91a16795b98651d6385dbe AS runtime
 
 # Build identity, set by the release workflow's build args. The API reports it
 # through /version and the khalifa_build_info metric; targets that do not read
