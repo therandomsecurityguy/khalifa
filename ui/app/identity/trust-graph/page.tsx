@@ -38,7 +38,7 @@ function TrustGraphView() {
       />
       <PageBody>
         <form
-          className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-white p-4 shadow"
+          className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-white p-4 shadow-sm"
           onSubmit={(event) => {
             event.preventDefault();
             navigate(account, limit);

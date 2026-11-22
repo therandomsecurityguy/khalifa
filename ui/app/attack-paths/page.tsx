@@ -166,7 +166,7 @@ export default function AttackPathsPage() {
         description="How an attacker could get from an entry point to something that matters, across accounts."
       />
       <PageBody>
-        <div className="overflow-hidden rounded-lg bg-white shadow">
+        <div className="overflow-hidden rounded-lg bg-white shadow-sm">
           <div role="search" aria-label="Filters" className="border-b border-gray-200 p-4">
             {query && (
               <div className="flex flex-wrap items-end gap-3">

@@ -36,7 +36,10 @@ function ScenarioCard({ scenario }: { scenario: AttackScenarioDetail }) {
     >
       <p className="text-xs text-gray-500">
         {scenario.techniques.map((technique) => (
-          <span key={technique.id} className="mr-2 inline-block rounded bg-gray-100 px-1.5 py-0.5">
+          <span
+            key={technique.id}
+            className="mr-2 inline-block rounded-sm bg-gray-100 px-1.5 py-0.5"
+          >
             {technique.id} · {technique.name}
           </span>
         ))}
@@ -69,7 +72,7 @@ function ScenarioCard({ scenario }: { scenario: AttackScenarioDetail }) {
       <div className="mt-4 flex items-center gap-3">
         <button
           type="button"
-          className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-sm bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           disabled={action.pending}
           onClick={() => void action.run()}
         >

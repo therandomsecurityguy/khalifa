@@ -102,7 +102,7 @@ function ReadersCard({ readers }: { readers: NonNullable<SecretDetail['readers']
                 type="button"
                 aria-pressed={broadOnly === option.value}
                 onClick={() => setBroadOnly(option.value)}
-                className="rounded px-3 py-1 text-sm font-medium text-gray-600 aria-pressed:bg-white aria-pressed:text-gray-900 aria-pressed:shadow-sm"
+                className="rounded-sm px-3 py-1 text-sm font-medium text-gray-600 aria-pressed:bg-white aria-pressed:text-gray-900 aria-pressed:shadow-xs"
               >
                 {option.label}
               </button>

@@ -85,7 +85,7 @@ export default function RulesPage() {
                     <Td>
                       {rule.severityHint ? (
                         <span
-                          className={`rounded px-1.5 py-0.5 text-xs font-semibold ${TONES.severitySoft[rule.severityHint] ?? TONES.severitySoft.unknown}`}
+                          className={`rounded-sm px-1.5 py-0.5 text-xs font-semibold ${TONES.severitySoft[rule.severityHint] ?? TONES.severitySoft.unknown}`}
                         >
                           {rule.severityHint}
                         </span>

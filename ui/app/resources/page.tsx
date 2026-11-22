@@ -283,7 +283,7 @@ function ResourceSearchView() {
       <PageBody>
         <form
           onSubmit={submit}
-          className="mb-6 grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow md:grid-cols-4"
+          className="mb-6 grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow-sm md:grid-cols-4"
         >
           <div>
             <SearchSelect

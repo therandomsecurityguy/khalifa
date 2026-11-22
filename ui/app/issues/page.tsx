@@ -273,7 +273,7 @@ export default function IssuesPage() {
         {summary.status === 'error' ? (
           <ErrorState error={summary.error} onRetry={summary.reload} className="mb-6" />
         ) : summary.status !== 'success' ? (
-          <div className="mb-6 rounded-lg bg-white shadow" aria-busy="true">
+          <div className="mb-6 rounded-lg bg-white shadow-sm" aria-busy="true">
             <LoadingState label="Loading summary…" />
           </div>
         ) : (
