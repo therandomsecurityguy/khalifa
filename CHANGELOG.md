@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - UI shell smoke
+
+### Changed
+
+- The container smoke test now asserts the UI serves its application shell (the `Khalifa - Security Graph` title on the redirected root), not just `/healthz` — pages needing the API render their empty/error states without one, so the shell is the meaningful boundary.
+
 ## [Unreleased] - Dev container and template docs
 
 ### Added
