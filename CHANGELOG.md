@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Tailwind 4
+
+### Changed
+
+- **UI moves to Tailwind CSS v4** (3.4.19 → 4.3.5): PostCSS now runs `@tailwindcss/postcss` (the plugin left the package), `globals.css` imports `tailwindcss`, and the v3 JS config is gone (v4 detects sources). The v4 utility renames are applied deliberately — `shadow-sm`/`rounded-sm` → `-xs`, bare `shadow`/`rounded`/`blur` → the new `-sm`, `outline-none` → `outline-hidden`, bare `ring` → `ring-3` — so nothing silently takes the v4 meaning. The design-token contrast test now parses v4’s `oklch()` palette values (it read the v3 hex palette directly).
+
 ## [Unreleased] - Coverage thresholds
 
 ### Added

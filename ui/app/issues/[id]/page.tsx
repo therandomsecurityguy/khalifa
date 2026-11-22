@@ -397,7 +397,7 @@ function SuppressForm({
           rows={2}
           maxLength={MAX_REASON_LENGTH}
           placeholder="Why this risk is accepted, and what will fix it"
-          className="mt-1 block w-full resize-y rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          className="mt-1 block w-full resize-y rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 shadow-xs focus:border-indigo-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
           value={reason}
           onChange={(event) => onReason(event.target.value)}
         />
@@ -420,7 +420,7 @@ function SuppressForm({
                   onChange={() => onDays(value)}
                   className="peer sr-only"
                 />
-                <span className="block rounded px-3 py-0.5 text-sm font-medium text-gray-600 peer-checked:bg-white peer-checked:text-gray-900 peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500">
+                <span className="block rounded-sm px-3 py-0.5 text-sm font-medium text-gray-600 peer-checked:bg-white peer-checked:text-gray-900 peer-checked:shadow-xs peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500">
                   {value} days
                 </span>
               </label>
@@ -651,7 +651,7 @@ export default function IssueDetailPage() {
                               <dt className="text-gray-500">{fact.label}</dt>
                               <dd className="break-words text-gray-900">
                                 {fact.decisive ? (
-                                  <span className="rounded bg-red-50 px-1.5 font-semibold text-red-800">
+                                  <span className="rounded-sm bg-red-50 px-1.5 font-semibold text-red-800">
                                     {fact.value}
                                   </span>
                                 ) : (

@@ -209,7 +209,7 @@ export default function LeastPrivilegePage() {
                                   <h4 className="mb-2 text-sm font-semibold text-gray-900">
                                     Removed actions ({finding.removedActions.length})
                                   </h4>
-                                  <div className="max-h-48 overflow-y-auto rounded border border-gray-200 bg-white p-2">
+                                  <div className="max-h-48 overflow-y-auto rounded-sm border border-gray-200 bg-white p-2">
                                     {finding.removedActions.map((action) => (
                                       <div key={action} className="py-0.5 font-mono text-xs">
                                         {action}
@@ -221,7 +221,7 @@ export default function LeastPrivilegePage() {
                                   <h4 className="mb-2 text-sm font-semibold text-gray-900">
                                     Recommended policy
                                   </h4>
-                                  <pre className="max-h-48 overflow-y-auto rounded border border-gray-200 bg-white p-2 text-xs">
+                                  <pre className="max-h-48 overflow-y-auto rounded-sm border border-gray-200 bg-white p-2 text-xs">
                                     {JSON.stringify(finding.recommendedPolicy, null, 2)}
                                   </pre>
                                 </div>

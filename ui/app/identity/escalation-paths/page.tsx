@@ -65,7 +65,7 @@ function EscalationPathsView() {
       />
       <PageBody>
         <form
-          className="mb-6 grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow md:grid-cols-5"
+          className="mb-6 grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow-sm md:grid-cols-5"
           onSubmit={(event) => {
             event.preventDefault();
             navigate(form);

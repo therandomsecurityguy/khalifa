@@ -157,7 +157,7 @@ function Summary({
     <div
       role="group"
       aria-label="Filter secrets"
-      className="mb-6 grid grid-cols-1 rounded-xl border border-gray-200 bg-white shadow-sm lg:grid-cols-[17.5rem_1fr_1fr]"
+      className="mb-6 grid grid-cols-1 rounded-xl border border-gray-200 bg-white shadow-xs lg:grid-cols-[17.5rem_1fr_1fr]"
     >
       <button
         type="button"
@@ -186,7 +186,7 @@ function Summary({
         <span className="flex w-full flex-col gap-1.5 text-sm text-gray-600">
           {mix.map((entry) => (
             <span key={entry.kind} className="flex items-center gap-2">
-              <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${entry.swatch}`} />
+              <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-xs ${entry.swatch}`} />
               {KIND_LABEL[entry.kind]}
               <span className="ml-auto font-semibold tabular-nums text-gray-900">
                 {entry.count.toLocaleString('en-US')}

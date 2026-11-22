@@ -180,11 +180,11 @@ function TrendSummary({
                   <span className="w-16 shrink-0 text-xs text-gray-500">
                     {formatTrendDate(point.date)}
                   </span>
-                  <div className="h-3 min-w-16 flex-1 rounded bg-gray-100">
+                  <div className="h-3 min-w-16 flex-1 rounded-sm bg-gray-100">
                     {point.value > 0 && (
                       <div
                         data-testid="trend-bar"
-                        className={`h-3 rounded ${latest ? 'bg-indigo-600' : 'bg-indigo-400'}`}
+                        className={`h-3 rounded-sm ${latest ? 'bg-indigo-600' : 'bg-indigo-400'}`}
                         style={{ width: `${Math.max(4, (point.value / max) * 100)}%` }}
                       />
                     )}
@@ -203,7 +203,7 @@ function TrendSummary({
                         <span
                           key={chip.severity}
                           data-testid="severity-chip"
-                          className={`rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${TONES.severitySoft[chip.severity]}`}
+                          className={`rounded-sm px-1.5 py-0.5 text-xs font-semibold tabular-nums ${TONES.severitySoft[chip.severity]}`}
                         >
                           <span aria-hidden="true">{SEVERITY_LETTER[chip.severity]}</span>
                           <span className="sr-only">{chip.severity}</span> {chip.text}
@@ -263,7 +263,7 @@ function TrendsView() {
           <ErrorState error={metrics.error} onRetry={metrics.reload} className="mb-6" />
         )}
         <form
-          className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-white p-4 shadow"
+          className="mb-6 flex flex-wrap items-end gap-4 rounded-lg bg-white p-4 shadow-sm"
           onSubmit={(event) => {
             event.preventDefault();
             apply(metric || selectedMetric, days);

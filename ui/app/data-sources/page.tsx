@@ -80,7 +80,7 @@ function Stat({ label, value, note }: { label: string; value: string; note: stri
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-lg bg-white shadow">
+    <section className="overflow-hidden rounded-lg bg-white shadow-sm">
       <h2 className="border-b border-sky-200 bg-sky-100 px-6 py-3 text-base font-medium text-gray-900">
         {title}
       </h2>
@@ -615,7 +615,7 @@ export default function DataSourcesPage() {
           <LoadingState label="Loading data sources…" />
         ) : (
           <div className="space-y-4">
-            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-gray-200 shadow sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-gray-200 shadow-sm sm:grid-cols-4">
               <Stat
                 label="Accounts"
                 value={fmt(accounts.length)}
