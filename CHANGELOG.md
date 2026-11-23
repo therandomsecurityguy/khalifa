@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI inventory API
+
+### Added
+
+- **AI inventory API**: `GET /ai/inventory` serves bounded per-type sections (agents, knowledge bases, guardrails, custom models, endpoints, notebooks, Studio domains) with counts (null when the grouped count query fails, never a failed page), curated facts, and truncation flags; `?type=` and `?limit=` narrow the read, and the endpoint carries the expensive-read rate limit. `GET /ai/agents/{arn}` serves one agent with its execution role, knowledge bases, guardrail, action-group tools, custom model, and open issues, grouping neighbors by edge label in both edge orientations. Both require Viewer and are documented in the OpenAPI description (which the route/spec parity test pins).
+
 ## [Unreleased] - Test heap headroom
 
 ### Changed

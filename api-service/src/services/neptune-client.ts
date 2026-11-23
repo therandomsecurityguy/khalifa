@@ -103,6 +103,77 @@ function attackPathOptions(): NeptuneQueryOptions {
   return { timeoutMs: ATTACK_PATH_TIMEOUT_MS, maxAttempts: 1 };
 }
 
+// The AI/agent labels the collector writes, fixed so a caller can never name
+// an arbitrary label for an inventory read.
+export const AI_INVENTORY_LABELS = {
+  agents: 'AiAgent',
+  knowledgeBases: 'AiKnowledgeBase',
+  guardrails: 'AiGuardrail',
+  models: 'AiModel',
+  endpoints: 'AiEndpoint',
+  notebooks: 'AiNotebook',
+  domains: 'AiDomain',
+} as const;
+export type AiInventoryType = keyof typeof AI_INVENTORY_LABELS;
+
+export interface AiInventoryItem {
+  id: string;
+  arn: string;
+  name: string | null;
+  status: string | null;
+  account_id: string | null;
+  region: string | null;
+  platform: string | null;
+  role_arn: string | null;
+  // Curated per-type facts, never a full property dump.
+  facts: Record<string, string | number | boolean>;
+}
+
+export interface AiInventorySection {
+  type: AiInventoryType;
+  label: string;
+  // Null when the grouped count traversal failed; the items are still served.
+  count: number | null;
+  items: AiInventoryItem[];
+  truncated: boolean;
+}
+
+const AI_INVENTORY_FACTS: Record<AiInventoryType, string[]> = {
+  agents: ['guardrail_configured', 'foundation_model', 'has_instruction'],
+  knowledgeBases: ['storage_type', 'data_source_count'],
+  guardrails: ['version'],
+  models: ['base_model_name', 'customization_type'],
+  endpoints: ['data_capture_enabled', 'network_isolation', 'in_vpc'],
+  notebooks: ['direct_internet_access', 'root_access'],
+  domains: ['auth_mode', 'app_network_access_type'],
+};
+
+function aiInventoryItem(type: AiInventoryType, vertex: GraphVertex): AiInventoryItem {
+  const properties = vertex.properties;
+  const text = (key: string): string | null => {
+    const value = properties[key];
+    return typeof value === 'string' && value ? value : null;
+  };
+  const facts: Record<string, string | number | boolean> = {};
+  for (const key of AI_INVENTORY_FACTS[type]) {
+    const value = properties[key];
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      facts[key] = value;
+    }
+  }
+  return {
+    id: vertex.id,
+    arn: text('arn') ?? vertex.id,
+    name: text('name'),
+    status: text('status'),
+    account_id: text('account_id'),
+    region: text('collection_region'),
+    platform: text('platform'),
+    role_arn: text('role_arn'),
+    facts,
+  };
+}
+
 export class NeptuneClient {
   private readonly runtime: Pick<NeptuneRuntimeClient, 'close' | 'execute'>;
 
@@ -304,6 +375,65 @@ export class NeptuneClient {
     // Vertex ids are ARNs, so this is an index lookup rather than a property scan.
     const results = await this.executeTraversal((g) => g.V(arn).limit(1).elementMap());
     return results.length && isRawMap(results[0]) ? extractVertex(results[0]) : null;
+  }
+
+  // AI inventory across the fixed label set: one id-ordered, bounded read per
+  // type (limit + 1 vertices, so a full page is detectable). Counts come from
+  // a single grouped traversal and degrade to null when it fails or times
+  // out, so a slow count never takes the inventory down with it.
+  async listAiInventory(limit: number, types?: AiInventoryType[]): Promise<AiInventorySection[]> {
+    const requested = types ?? (Object.keys(AI_INVENTORY_LABELS) as AiInventoryType[]);
+    const entries = requested.map((type): [AiInventoryType, string] => [
+      type,
+      AI_INVENTORY_LABELS[type],
+    ]);
+
+    const pages = await Promise.all(
+      entries.map(async ([type, label]) => {
+        const rows = await this.executeTraversal((g) =>
+          g
+            .V()
+            .hasLabel(label)
+            .order()
+            .by(t.id)
+            .limit(limit + 1)
+            .elementMap()
+        );
+        return { type, label, vertices: rows.filter(isRawMap).map(extractVertex) };
+      })
+    );
+
+    let counts: Map<string, number> | null = null;
+    try {
+      const rows = await this.executeTraversal((g) =>
+        g
+          .V()
+          .hasLabel(P.within(...entries.map(([, label]) => label)))
+          .group()
+          .by(__.label())
+          .by(__.count())
+      );
+      if (rows.length && isRawMap(rows[0])) {
+        counts = new Map(
+          mapEntries(rows[0])
+            .map(([label, count]): [string, number] => [
+              stringValue(label),
+              Number(unwrapValue(count)),
+            ])
+            .filter(([, count]) => Number.isFinite(count))
+        );
+      }
+    } catch (error) {
+      console.error('AI inventory count unavailable:', error);
+    }
+
+    return pages.map(({ type, label, vertices }) => ({
+      type,
+      label,
+      count: counts?.get(label) ?? null,
+      items: vertices.slice(0, limit).map((vertex) => aiInventoryItem(type, vertex)),
+      truncated: vertices.length > limit,
+    }));
   }
 
   // One index lookup for many ids; ids not in the graph are simply absent.
