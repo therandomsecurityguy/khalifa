@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - SageMaker AI inventory
+
+### Added
+
+- **SageMaker AI inventory collection**: a `sagemaker` stage collects endpoints (with their endpoint configuration's execution role, KMS key, VPC and network-isolation facts, and data capture state), notebook instances (direct internet access, root access, volume KMS, instance metadata service version), and Studio domains (auth mode, app network access type, KMS, VPC, execution role). New graph vertices `AiEndpoint`, `AiNotebook`, `AiDomain`, each linked to its execution role with `RUNS_AS`. The read-only `AiRead` statement gains seven `sagemaker` actions on the member role template and the hub grants. Studio apps, models, training jobs, and pipelines are not collected yet.
+
 ## [Unreleased] - AI inventory collection
 
 ### Added

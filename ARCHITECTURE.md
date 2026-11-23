@@ -84,7 +84,7 @@ flowchart LR
 
     subgraph COLLECT["Collector: per account + region, every 2h"]
         direction TB
-        STAGES["30+ service stages<br/>iam-access-keys<br/>iam-credential-report<br/>guardduty, securityhub<br/>bedrock, agentcore"]
+        STAGES["30+ service stages<br/>iam-access-keys<br/>iam-credential-report<br/>guardduty, securityhub<br/>bedrock, agentcore, sagemaker"]
         TAGS["Tag extraction:<br/>env, data_classification,<br/>crown_jewel, canary, owner"]
         EXP["Exposure derivation:<br/>is_internet_exposed,<br/>EKS endpoint_world_open"]
     end
@@ -561,6 +561,9 @@ flowchart LR
 | `AiKnowledgeBase`           | Bedrock             | `arn`, `role_arn`, `storage_type`, `s3_bucket_arns`                                                                                                                |
 | `AiGuardrail`               | Bedrock             | `arn`, `status`, `version`                                                                                                                                         |
 | `AiModel`                   | Bedrock             | `arn`, `base_model_arn`, `status`                                                                                                                                  |
+| `AiEndpoint`                | SageMaker           | `arn`, `status`, `role_arn`, `kms_key_id`, `data_capture_enabled`                                                                                                  |
+| `AiNotebook`                | SageMaker           | `arn`, `status`, `role_arn`, `direct_internet_access`, `volume_kms_key_id`                                                                                         |
+| `AiDomain`                  | SageMaker           | `arn`, `status`, `auth_mode`, `app_network_access_type`, `vpc_id`                                                                                                  |
 | `EffectivePermission`       | Policy Evaluator    | `principal_arn`, `allowed_actions`, `denied_actions`, `is_admin`, `blast_radius`                                                                                   |
 | `EscalationPath`            | Policy Evaluator    | `source_arn`, `target_arn`, `risk_level`, `escalation_type`                                                                                                        |
 
@@ -593,7 +596,7 @@ flowchart LR
 | `HAS_CVE`                      | Instance/Lambda/ContainerImage → Vulnerability (Inspector)          |
 | `HAS_ALIAS` / `HAS_STAGE`      | Function → Alias/Stage                                              |
 | `CLASSIFIES`                   | DataClassificationFinding → S3Bucket/RdsInstance/LambdaFunction     |
-| `RUNS_AS`                      | AiAgent → IamRole (agent execution role)                            |
+| `RUNS_AS`                      | AiAgent/AiEndpoint/AiNotebook/AiDomain → IamRole (execution role)   |
 | `HAS_KB`                       | AiAgent → AiKnowledgeBase                                           |
 | `HAS_ACTION_GROUP`             | AiAgent → LambdaFunction (a tool the agent can invoke)              |
 | `PROTECTED_BY`                 | AiAgent → AiGuardrail                                               |
@@ -630,6 +633,7 @@ flowchart LR
 | `port_from` / `port_to`                           | number           | Security group rule                                  |
 | `flow_logs_enabled`                               | boolean          | EC2 DescribeFlowLogs                                 |
 | `guardrail_configured`                            | boolean          | Bedrock agent guardrail config                       |
+| `direct_internet_access`                          | string           | SageMaker notebook config                            |
 | `platform`                                        | string           | AI inventory source (`bedrock` or `agentcore`)       |
 
 ## Authentication
