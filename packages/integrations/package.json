@@ -22,9 +22,9 @@
     "@aws-sdk/lib-dynamodb": "^3.1173.0"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^26.6.6",
-    "jest": "^29.5.0",
+    "jest": "^30.5.2",
     "ts-jest": "^29.4.15",
     "typescript": "^5.0.0",
     "eslint": "^8.56.0",
