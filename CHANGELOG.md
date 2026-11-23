@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Test heap headroom
+
+### Changed
+
+- **CI test heap raised to 12 GB** (8 → 12): the single-process `--runInBand` jest run with coverage accumulates past the old ceiling on the fuller AI-inventory test tree — a recent PR run died with an 8 GB heap OOM mid-suite. Coverage floors, the single-process design, and the test set are unchanged; only the V8 old-space limit moved, and `ci:test` and the workflow env stay in step.
+
 ## [Unreleased] - SageMaker AI inventory
 
 ### Added
