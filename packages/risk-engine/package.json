@@ -19,11 +19,11 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1172.0",
-    "@aws-sdk/client-securityhub": "^3.1172.0",
-    "@aws-sdk/client-sts": "^3.1172.0",
+    "@aws-sdk/client-dynamodb": "^3.1173.0",
+    "@aws-sdk/client-securityhub": "^3.1173.0",
+    "@aws-sdk/client-sts": "^3.1173.0",
     "@aws-sdk/credential-provider-node": "^3.972.83",
-    "@aws-sdk/lib-dynamodb": "^3.1172.0",
+    "@aws-sdk/lib-dynamodb": "^3.1173.0",
     "@aws-sdk/util-dynamodb": "^3.996.2",
     "@khalifa/integrations": "*",
     "@smithy/core": "^3.41.0",
