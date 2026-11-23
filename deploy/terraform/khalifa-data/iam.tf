@@ -196,6 +196,28 @@ locals {
       Resource = ["*"]
     },
     {
+      # AI/agent inventory: Bedrock agents, knowledge bases, guardrails and
+      # custom models, plus AgentCore agent runtimes. Read-only.
+      Sid    = "AiRead"
+      Effect = "Allow"
+      Action = [
+        "bedrock:GetAgent",
+        "bedrock:GetAgentActionGroup",
+        "bedrock:GetDataSource",
+        "bedrock:GetKnowledgeBase",
+        "bedrock:ListAgentActionGroups",
+        "bedrock:ListAgentKnowledgeBases",
+        "bedrock:ListAgents",
+        "bedrock:ListCustomModels",
+        "bedrock:ListDataSources",
+        "bedrock:ListGuardrails",
+        "bedrock:ListKnowledgeBases",
+        "bedrock-agentcore:GetAgentRuntime",
+        "bedrock-agentcore:ListAgentRuntimes",
+      ]
+      Resource = ["*"]
+    },
+    {
       # Observed reachability: the collector reads the flow-log analyzer's
       # per-interface observations while it collects instances. The read runs
       # with the hub's own credentials, so only the hub roles need it.
