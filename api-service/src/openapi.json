@@ -1336,6 +1336,107 @@
         }
       }
     },
+    "/ai/inventory": {
+      "get": {
+        "tags": ["AI inventory"],
+        "operationId": "getAiInventory",
+        "summary": "AI estate inventory (agents, knowledge bases, guardrails, models, endpoints, notebooks, domains)",
+        "description": "Requires **Viewer**. Bounded per-type reads; counts may be null when the grouped count query fails.",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Limit the response to one type (default: all).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "agents",
+                "knowledgeBases",
+                "guardrails",
+                "models",
+                "endpoints",
+                "notebooks",
+                "domains"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Items per type, 1-100 (default 20).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-type sections with counts, items, and truncation flags.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/ai/agents/{arn}": {
+      "get": {
+        "tags": ["AI inventory"],
+        "operationId": "getAiAgent",
+        "summary": "One AI agent with role, knowledge bases, guardrail, tools, model, and issues",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "arn",
+            "in": "path",
+            "required": true,
+            "description": "AI agent ARN.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/compliance/frameworks": {
       "get": {
         "tags": ["Compliance"],

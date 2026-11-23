@@ -12,6 +12,7 @@ import {
 import { listAccounts, searchAttackPaths, simulateAttackPaths } from './routes/attack-paths';
 import { listAttackScenarios, runAttackScenario } from './routes/attack-scenarios';
 import { getDataSources } from './routes/data-sources';
+import { getAiAgent, getAiInventory } from './routes/ai';
 import {
   getResource,
   searchResources,
@@ -156,6 +157,9 @@ app.get('/resources/properties', requireViewer, expensiveRateLimiter, listResour
 app.get('/resources/values', requireViewer, expensiveRateLimiter, listPropertyValues);
 app.get('/resources/graph', requireViewer, expensiveRateLimiter, getResourceGraph);
 app.get('/resources/*arn', validateArnPathParam('arn'), requireViewer, getResource);
+
+app.get('/ai/inventory', requireViewer, expensiveRateLimiter, getAiInventory);
+app.get('/ai/agents/*arn', validateArnPathParam('arn'), requireViewer, getAiAgent);
 
 app.get('/compliance/frameworks', requireViewer, listFrameworks);
 app.get('/compliance/frameworks/:framework/controls', requireViewer, getFrameworkControls);
