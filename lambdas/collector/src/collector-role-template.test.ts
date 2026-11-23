@@ -66,8 +66,9 @@ describe('organization collection infrastructure', () => {
     // granted to the hub in khalifa-data/iam.tf.
     expect(roleTemplate).toContain('inspector2:ListFindings');
     // AI/agent inventory: Bedrock agents, knowledge bases, guardrails and
-    // custom models, plus AgentCore agent runtimes. Also granted to the hub in
-    // khalifa-data/iam.tf, and read-only by construction.
+    // custom models; AgentCore agent runtimes; SageMaker endpoints, notebooks
+    // and Studio domains. Also granted to the hub in khalifa-data/iam.tf, and
+    // read-only by construction.
     for (const action of [
       'bedrock:ListAgents',
       'bedrock:GetAgent',
@@ -82,6 +83,13 @@ describe('organization collection infrastructure', () => {
       'bedrock:ListCustomModels',
       'bedrock-agentcore:ListAgentRuntimes',
       'bedrock-agentcore:GetAgentRuntime',
+      'sagemaker:ListEndpoints',
+      'sagemaker:DescribeEndpoint',
+      'sagemaker:DescribeEndpointConfig',
+      'sagemaker:ListNotebookInstances',
+      'sagemaker:DescribeNotebookInstance',
+      'sagemaker:ListDomains',
+      'sagemaker:DescribeDomain',
     ]) {
       expect(roleTemplate).toContain(action);
     }

@@ -214,6 +214,13 @@ locals {
         "bedrock:ListKnowledgeBases",
         "bedrock-agentcore:GetAgentRuntime",
         "bedrock-agentcore:ListAgentRuntimes",
+        "sagemaker:DescribeDomain",
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:DescribeEndpointConfig",
+        "sagemaker:DescribeNotebookInstance",
+        "sagemaker:ListDomains",
+        "sagemaker:ListEndpoints",
+        "sagemaker:ListNotebookInstances",
       ]
       Resource = ["*"]
     },

@@ -102,6 +102,7 @@ import {
 import { BedrockClient } from '@aws-sdk/client-bedrock';
 import { BedrockAgentClient } from '@aws-sdk/client-bedrock-agent';
 import { BedrockAgentCoreControlClient } from '@aws-sdk/client-bedrock-agentcore-control';
+import { SageMakerClient } from '@aws-sdk/client-sagemaker';
 import { appendAll } from '../shared/arrays';
 import type { GraphNode, GraphEdge } from '../shared/types';
 import { Logger } from '../shared/types';
@@ -133,6 +134,7 @@ import { summarizePublicAccessBlock } from './src/bucket-public-access';
 import { collectAgentCoreRuntimes, collectBedrock } from './src/ai';
 import { collectContainerImages } from './src/containers';
 import { collectCrossAccountTrust } from './src/cross-account';
+import { collectSageMaker } from './src/sagemaker';
 import { collectIamAccessKeys, collectIamCredentialReport } from './src/iam-posture';
 import { secretAgeProperties } from './src/secret-ages';
 import { instanceRoleEdges, listInstanceProfileRoles } from './src/instance-profiles';
@@ -404,6 +406,7 @@ function createClients(region: string, credentials?: ClientCredentials) {
     bedrockClient: new BedrockClient({ ...baseConfig, ...credConfig }),
     bedrockAgentClient: new BedrockAgentClient({ ...baseConfig, ...credConfig }),
     bedrockAgentCoreClient: new BedrockAgentCoreControlClient({ ...baseConfig, ...credConfig }),
+    sageMakerClient: new SageMakerClient({ ...baseConfig, ...credConfig }),
     route53Client: new Route53Client({ ...baseConfig, ...credConfig }),
     apiGatewayClient: new APIGatewayClient({ ...baseConfig, ...credConfig }),
     lambdaClient: new LambdaClient({ ...baseConfig, ...credConfig }),
@@ -504,6 +507,7 @@ export const collect = async (
     bedrockClient,
     bedrockAgentClient,
     bedrockAgentCoreClient,
+    sageMakerClient,
     route53Client,
     apiGatewayClient,
     lambdaClient,
@@ -709,6 +713,11 @@ export const collect = async (
       service: 'agentcore',
       enabled: true,
       run: () => collectAgentCoreRuntimes(bedrockAgentCoreClient, accountId, region),
+    },
+    {
+      service: 'sagemaker',
+      enabled: true,
+      run: () => collectSageMaker(sageMakerClient, accountId, region),
     },
     {
       service: 'cross-account-trust',
