@@ -99,6 +99,9 @@ import {
   ListBackupVaultsCommand,
   ListBackupPlansCommand,
 } from '@aws-sdk/client-backup';
+import { BedrockClient } from '@aws-sdk/client-bedrock';
+import { BedrockAgentClient } from '@aws-sdk/client-bedrock-agent';
+import { BedrockAgentCoreControlClient } from '@aws-sdk/client-bedrock-agentcore-control';
 import { appendAll } from '../shared/arrays';
 import type { GraphNode, GraphEdge } from '../shared/types';
 import { Logger } from '../shared/types';
@@ -127,6 +130,7 @@ import { collectLoadBalancers } from './src/load-balancers';
 import { buildAwsManagedPolicyNode, isAwsManagedPolicyArn } from './src/iam-managed-policies';
 import { summarizeEventSelectors } from './src/cloudtrail-selectors';
 import { summarizePublicAccessBlock } from './src/bucket-public-access';
+import { collectAgentCoreRuntimes, collectBedrock } from './src/ai';
 import { collectContainerImages } from './src/containers';
 import { collectCrossAccountTrust } from './src/cross-account';
 import { collectIamAccessKeys, collectIamCredentialReport } from './src/iam-posture';
@@ -397,6 +401,9 @@ function createClients(region: string, credentials?: ClientCredentials) {
     guardDutyClient: new GuardDutyClient({ ...baseConfig, ...credConfig }),
     inspector2Client: new Inspector2Client({ ...baseConfig, ...credConfig }),
     securityHubClient: new SecurityHubClient({ ...baseConfig, ...credConfig }),
+    bedrockClient: new BedrockClient({ ...baseConfig, ...credConfig }),
+    bedrockAgentClient: new BedrockAgentClient({ ...baseConfig, ...credConfig }),
+    bedrockAgentCoreClient: new BedrockAgentCoreControlClient({ ...baseConfig, ...credConfig }),
     route53Client: new Route53Client({ ...baseConfig, ...credConfig }),
     apiGatewayClient: new APIGatewayClient({ ...baseConfig, ...credConfig }),
     lambdaClient: new LambdaClient({ ...baseConfig, ...credConfig }),
@@ -494,6 +501,9 @@ export const collect = async (
     guardDutyClient,
     inspector2Client,
     securityHubClient,
+    bedrockClient,
+    bedrockAgentClient,
+    bedrockAgentCoreClient,
     route53Client,
     apiGatewayClient,
     lambdaClient,
@@ -689,6 +699,16 @@ export const collect = async (
       service: 'ecr',
       enabled: true,
       run: () => collectContainerImages(ecrClient, accountId, region, new Map()),
+    },
+    {
+      service: 'bedrock',
+      enabled: true,
+      run: () => collectBedrock(bedrockAgentClient, bedrockClient, accountId, region),
+    },
+    {
+      service: 'agentcore',
+      enabled: true,
+      run: () => collectAgentCoreRuntimes(bedrockAgentCoreClient, accountId, region),
     },
     {
       service: 'cross-account-trust',

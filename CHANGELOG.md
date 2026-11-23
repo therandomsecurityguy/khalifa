@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI inventory collection
+
+### Added
+
+- **AI/agent inventory collection**: a `bedrock` stage collects Bedrock agents, knowledge bases (with their S3 data sources), guardrails, and custom models; an `agentcore` stage collects AgentCore agent runtimes with their execution roles. New graph vertices `AiAgent` (Bedrock agents and AgentCore runtimes, split by `platform`), `AiKnowledgeBase`, `AiGuardrail`, `AiModel`, and edges `RUNS_AS`, `HAS_KB`, `HAS_ACTION_GROUP`, `PROTECTED_BY`, `READS_FROM`, `HAS_ROLE`, `USES_MODEL`. Prompt and instruction bodies are never stored (`has_instruction` presence flag only), and every read is read-only: the member role template and the hub grants gain the `AiRead` statement. Bedrock Flows, inference profiles, and AgentCore gateways/memories are not collected yet; rules, API, and UI for the new inventory follow in later PRs.
+
 ## [Unreleased] - Tailwind 4
 
 ### Changed

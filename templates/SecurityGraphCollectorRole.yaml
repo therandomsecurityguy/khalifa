@@ -202,6 +202,23 @@ Resources:
               - securityhub:ListEnabledProductsForImport
               - states:ListStateMachines
             Resource: '*'
+          - Sid: AiRead
+            Effect: Allow
+            Action:
+              - bedrock:GetAgent
+              - bedrock:GetAgentActionGroup
+              - bedrock:GetDataSource
+              - bedrock:GetKnowledgeBase
+              - bedrock:ListAgentActionGroups
+              - bedrock:ListAgentKnowledgeBases
+              - bedrock:ListAgents
+              - bedrock:ListCustomModels
+              - bedrock:ListDataSources
+              - bedrock:ListGuardrails
+              - bedrock:ListKnowledgeBases
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListAgentRuntimes
+            Resource: '*'
 Outputs:
   CollectorRoleArn:
     Condition: ShouldCreateCollectorRole

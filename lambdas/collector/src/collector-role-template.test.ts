@@ -65,6 +65,26 @@ describe('organization collection infrastructure', () => {
     // Reads the CVEs RULE-003 and the exploitability factor consume; also
     // granted to the hub in khalifa-data/iam.tf.
     expect(roleTemplate).toContain('inspector2:ListFindings');
+    // AI/agent inventory: Bedrock agents, knowledge bases, guardrails and
+    // custom models, plus AgentCore agent runtimes. Also granted to the hub in
+    // khalifa-data/iam.tf, and read-only by construction.
+    for (const action of [
+      'bedrock:ListAgents',
+      'bedrock:GetAgent',
+      'bedrock:ListAgentActionGroups',
+      'bedrock:GetAgentActionGroup',
+      'bedrock:ListAgentKnowledgeBases',
+      'bedrock:ListKnowledgeBases',
+      'bedrock:GetKnowledgeBase',
+      'bedrock:ListDataSources',
+      'bedrock:GetDataSource',
+      'bedrock:ListGuardrails',
+      'bedrock:ListCustomModels',
+      'bedrock-agentcore:ListAgentRuntimes',
+      'bedrock-agentcore:GetAgentRuntime',
+    ]) {
+      expect(roleTemplate).toContain(action);
+    }
     expect(roleTemplate).toContain('CreateCollectorRole');
     expect(roleTemplate).toMatch(/ExternalId:[\s\S]*?MinLength: 16/);
   });

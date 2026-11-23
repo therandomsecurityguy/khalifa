@@ -84,7 +84,7 @@ flowchart LR
 
     subgraph COLLECT["Collector: per account + region, every 2h"]
         direction TB
-        STAGES["30+ service stages<br/>iam-access-keys<br/>iam-credential-report<br/>guardduty, securityhub"]
+        STAGES["30+ service stages<br/>iam-access-keys<br/>iam-credential-report<br/>guardduty, securityhub<br/>bedrock, agentcore"]
         TAGS["Tag extraction:<br/>env, data_classification,<br/>crown_jewel, canary, owner"]
         EXP["Exposure derivation:<br/>is_internet_exposed,<br/>EKS endpoint_world_open"]
     end
@@ -557,6 +557,10 @@ flowchart LR
 | `HostedZone`                | Route53             | `arn`                                                                                                                                                              |
 | `DataClassificationFinding` | DSPM Scanner        | `arn`, `pii_types`, `secret_count`, `skipped_kms`, `data_classification`, `data_class_source`, `confidence`, `classifier`                                          |
 | `Vulnerability`             | Amazon Inspector    | `cve_id`, `severity`, `cvss_base_score`, `exploit_available`, `fixed_versions`, `inspector_score`, `first_observed_at`, `last_observed_at`                         |
+| `AiAgent`                   | Bedrock / AgentCore | `arn`, `platform`, `status`, `role_arn`, `foundation_model`, `guardrail_configured`                                                                                |
+| `AiKnowledgeBase`           | Bedrock             | `arn`, `role_arn`, `storage_type`, `s3_bucket_arns`                                                                                                                |
+| `AiGuardrail`               | Bedrock             | `arn`, `status`, `version`                                                                                                                                         |
+| `AiModel`                   | Bedrock             | `arn`, `base_model_arn`, `status`                                                                                                                                  |
 | `EffectivePermission`       | Policy Evaluator    | `principal_arn`, `allowed_actions`, `denied_actions`, `is_admin`, `blast_radius`                                                                                   |
 | `EscalationPath`            | Policy Evaluator    | `source_arn`, `target_arn`, `risk_level`, `escalation_type`                                                                                                        |
 
@@ -589,6 +593,13 @@ flowchart LR
 | `HAS_CVE`                      | Instance/Lambda/ContainerImage → Vulnerability (Inspector)          |
 | `HAS_ALIAS` / `HAS_STAGE`      | Function → Alias/Stage                                              |
 | `CLASSIFIES`                   | DataClassificationFinding → S3Bucket/RdsInstance/LambdaFunction     |
+| `RUNS_AS`                      | AiAgent → IamRole (agent execution role)                            |
+| `HAS_KB`                       | AiAgent → AiKnowledgeBase                                           |
+| `HAS_ACTION_GROUP`             | AiAgent → LambdaFunction (a tool the agent can invoke)              |
+| `PROTECTED_BY`                 | AiAgent → AiGuardrail                                               |
+| `READS_FROM`                   | AiKnowledgeBase → S3Bucket (data source bucket)                     |
+| `HAS_ROLE`                     | AiKnowledgeBase → IamRole (service role)                            |
+| `USES_MODEL`                   | AiAgent → AiModel (custom model)                                    |
 
 ### Risk Rule Properties (queried by Gremlin rules)
 
@@ -618,6 +629,8 @@ flowchart LR
 | `anomaly_type`                                    | string           | CloudTrail analyzer anomaly queries                  |
 | `port_from` / `port_to`                           | number           | Security group rule                                  |
 | `flow_logs_enabled`                               | boolean          | EC2 DescribeFlowLogs                                 |
+| `guardrail_configured`                            | boolean          | Bedrock agent guardrail config                       |
+| `platform`                                        | string           | AI inventory source (`bedrock` or `agentcore`)       |
 
 ## Authentication
 
