@@ -312,6 +312,41 @@ export interface ResourceGraph {
   edges: GraphEdge[];
 }
 
+export type AiInventoryType =
+  'agents' | 'knowledgeBases' | 'guardrails' | 'models' | 'endpoints' | 'notebooks' | 'domains';
+
+export interface AiInventoryItem {
+  id: string;
+  arn: string;
+  name: string | null;
+  status: string | null;
+  account_id: string | null;
+  region: string | null;
+  platform: string | null;
+  role_arn: string | null;
+  // Curated per-type facts; scalars only.
+  facts: Record<string, string | number | boolean>;
+}
+
+export interface AiInventorySection {
+  type: AiInventoryType;
+  label: string;
+  // Null when the grouped count query failed; items are still served.
+  count: number | null;
+  items: AiInventoryItem[];
+  truncated: boolean;
+}
+
+export interface AiAgentDetail {
+  agent: GraphVertex;
+  role: GraphVertex | null;
+  knowledgeBases: GraphVertex[];
+  guardrail: GraphVertex | null;
+  tools: GraphVertex[];
+  model: GraphVertex | null;
+  issues: Issue[];
+}
+
 export interface ConditionalGrant {
   action: string;
   resource: string;

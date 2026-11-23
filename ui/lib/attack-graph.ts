@@ -100,6 +100,13 @@ const STAGE_BY_LABEL: Record<string, Stage> = {
   SecurityHubFinding: 'finding',
   DataClassificationFinding: 'finding',
   CloudTrailAnomaly: 'finding',
+  AiAgent: 'compute',
+  AiEndpoint: 'compute',
+  AiNotebook: 'compute',
+  AiDomain: 'compute',
+  AiModel: 'compute',
+  AiKnowledgeBase: 'data',
+  AiGuardrail: 'permission',
 };
 
 function stageOf(vertex: GraphVertex): Stage {
@@ -144,6 +151,8 @@ export function riskFlags(vertex: GraphVertex): RiskFlag[] {
     const endpoint = firstObservedEndpoint(p.observed_endpoints);
     add('warn', endpoint ? `Observed traffic from ${endpoint}` : 'Observed traffic');
   }
+  if (p.direct_internet_access === 'Enabled') add('risk', 'Direct internet access');
+  if (p.guardrail_configured === false) add('warn', 'No guardrail');
   if (p.data_classification === 'secret') add('risk', 'Secret data');
   if (p.data_classification === 'restricted') add('risk', 'Restricted data');
   if (p.crown_jewel === true) add('risk', 'Crown jewel');
@@ -173,6 +182,13 @@ const EDGE_SOURCES: Record<string, string[]> = {
   PART_OF: ['SecurityGroupRule'],
   PROTECTS: ['SecurityGroup'],
   HAS_RESOURCE_POLICY: ['Secret'],
+  RUNS_AS: ['AiAgent', 'AiEndpoint', 'AiNotebook', 'AiDomain'],
+  HAS_KB: ['AiAgent'],
+  HAS_ACTION_GROUP: ['AiAgent'],
+  PROTECTED_BY: ['AiAgent'],
+  READS_FROM: ['AiKnowledgeBase'],
+  HAS_ROLE: ['AiKnowledgeBase'],
+  USES_MODEL: ['AiAgent'],
 };
 const CONTAINS_RANK: Record<string, number> = {
   AwsAccount: 4,

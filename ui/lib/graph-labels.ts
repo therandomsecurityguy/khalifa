@@ -33,6 +33,13 @@ const TYPE_LABELS: Record<string, string> = {
   SecurityHub: 'Security Hub',
   CloudTrailAnomaly: 'CloudTrail anomaly',
   EksCluster: 'EKS cluster',
+  AiAgent: 'AI agent',
+  AiKnowledgeBase: 'AI knowledge base',
+  AiGuardrail: 'AI guardrail',
+  AiModel: 'AI model',
+  AiEndpoint: 'SageMaker endpoint',
+  AiNotebook: 'SageMaker notebook',
+  AiDomain: 'Studio domain',
   Missing: 'Not in graph',
 };
 

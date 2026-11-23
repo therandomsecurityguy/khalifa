@@ -1,6 +1,9 @@
 import type {
   AccountCoverage,
   AccountSummary,
+  AiAgentDetail,
+  AiInventorySection,
+  AiInventoryType,
   AttackPathSearchParams,
   AttackPathSearchResponse,
   CatalogRule,
@@ -415,6 +418,17 @@ export function getResourceGraph(
   options: RequestOptions = {}
 ): Promise<ResourceGraph> {
   return request(`/resources/graph${queryString({ arn, depth })}`, options);
+}
+
+export function getAiInventory(
+  params: { type?: AiInventoryType; limit?: number } = {},
+  options: RequestOptions = {}
+): Promise<{ types: AiInventorySection[] }> {
+  return request(`/ai/inventory${queryString(params)}`, options);
+}
+
+export function getAiAgent(arn: string, options: RequestOptions = {}): Promise<AiAgentDetail> {
+  return request(`/ai/agents/${encodeURIComponent(arn)}`, options);
 }
 
 export interface ComplianceAssessmentSummary {

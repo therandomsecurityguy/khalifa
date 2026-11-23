@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI inventory UI
+
+### Added
+
+- **AI inventory pages**: `/ai` renders every collected AI asset type — agents, SageMaker endpoints and notebooks, Studio domains, knowledge bases, custom models, and guardrails — with per-type counts, truncation notes, account names, and curated facts; agents open an `/ai/detail` page with their execution role, knowledge bases, tools, guardrail, custom model, open issues, and links to attack paths and the resource explorer. Attack-path rendering knows the AI vertex labels and edges, and graph flags cite direct internet access on notebooks and unguarded agents from collected facts only.
+
 ## [Unreleased] - AI inventory API
 
 ### Added

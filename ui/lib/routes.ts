@@ -27,6 +27,10 @@ export const APP_SECTIONS: ReadonlyArray<{ label: string; routes: readonly AppRo
     ],
   },
   {
+    label: 'AI',
+    routes: [{ href: '/ai', label: 'AI inventory' }],
+  },
+  {
     label: 'Connectors',
     routes: [
       { href: '/data-sources', label: 'Data sources' },
@@ -85,6 +89,10 @@ export function secretHref(arn: string): string {
 
 export function resourceHref(arn: string): string {
   return `/resources?arn=${encodeURIComponent(arn)}`;
+}
+
+export function aiAgentHref(arn: string): string {
+  return `/ai/detail?arn=${encodeURIComponent(arn)}`;
 }
 
 export function principalHref(path: string, principal: string): string {
