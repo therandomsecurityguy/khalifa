@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - KH-AI controls
+
+### Added
+
+- **Three Khalifa-baseline AI controls** (`KH-AI-1`..`KH-AI-3`), evaluated per account/region against collection coverage: AI workloads (Bedrock agents, AgentCore runtimes, SageMaker endpoints, notebooks, Studio domains) whose execution role the policy evaluator marked administrative; Bedrock agents without a guardrail; and knowledge bases grounding on publicly accessible S3 buckets. Each is NOT_EVALUATED until the property it reads has been collected (role `is_admin`, agent `platform`, knowledge-base `data_source_count`), so a fresh deployment does not show vacuous passes. They are the reviewed-mapping homes for the AI rules that follow; mapped-framework citations (ISO 42001 / NIST AI RMF) remain a later slice. Baseline grows 42 → 45 controls (92 total).
+
 ## [Unreleased] - AI inventory UI
 
 ### Added

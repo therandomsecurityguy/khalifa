@@ -245,12 +245,12 @@ curl "https://api.example.com/api/issues?severity=critical&status=open&limit=100
 
 ## Compliance
 
-Gremlin evaluators write pass / fail / manual evidence to DynamoDB. 89 controls: 55 evaluated by automated evaluators, 10 judged from their mapped rules, and 2 manual.
+Gremlin evaluators write pass / fail / manual evidence to DynamoDB. 92 controls: 58 evaluated by automated evaluators, 10 judged from their mapped rules, and 2 manual.
 
-| Framework                | Controls | Focus                                                                     |
-| ------------------------ | -------: | ------------------------------------------------------------------------- |
-| CIS AWS Foundations v3.0 |       47 | IAM, storage, logging, monitoring, networking, data protection            |
-| Khalifa baseline         |       42 | Detection, Kubernetes, secrets and vulnerability management, attack paths |
+| Framework                | Controls | Focus                                                                               |
+| ------------------------ | -------: | ----------------------------------------------------------------------------------- |
+| CIS AWS Foundations v3.0 |       47 | IAM, storage, logging, monitoring, networking, data protection                      |
+| Khalifa baseline         |       45 | Detection, Kubernetes, secrets and vulnerability management, attack paths, AI security |
 
 The compliance job also runs the CIS reconciliation: it reads Security Hub's CIS
 v3.0.0 control findings through the audit account's read-only reader role and

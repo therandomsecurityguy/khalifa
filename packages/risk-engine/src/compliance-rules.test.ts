@@ -439,6 +439,43 @@ describe('network ACL controls', () => {
 // Four controls that already had a risk rule reading the same property, but no
 // evaluator -- so Khalifa raised the finding while the compliance page said
 // "Not evaluated".
+// The AI controls own no rules yet (their rule mappings arrive with the AI
+// rules); these pin the covered labels, predicates and the failing path.
+describe('AI controls', () => {
+  const flat = (q: string) => q.replace(/\s+/g, ' ').trim();
+
+  async function evaluate(controlId: string, opts: Parameters<typeof graphStub>[0] = {}) {
+    const graphClient = graphStub(opts);
+    const result = await getEvaluatorForControl(controlId)!.evaluate(graphClient);
+    return { query: flat(graphClient.executeQuery.mock.calls.at(-1)![0] as string), result };
+  }
+
+  it.each([
+    ['KH-AI-1', "hasLabel('AiAgent', 'AiEndpoint', 'AiNotebook', 'AiDomain')", "out('RUNS_AS')"],
+    ['KH-AI-2', "hasLabel('AiAgent')", "has('guardrail_configured', false)"],
+    ['KH-AI-3', "hasLabel('AiKnowledgeBase')", "out('READS_FROM')"],
+  ])('%s targets the right label and predicate', async (controlId, label, predicate) => {
+    const { query } = await evaluate(controlId);
+
+    expect(query).toContain(label);
+    expect(query).toContain(predicate);
+  });
+
+  it.each(['KH-AI-1', 'KH-AI-2', 'KH-AI-3'])(
+    '%s passes on a zero count and fails when an assessed account/region violates',
+    async (controlId) => {
+      const passing = await evaluate(controlId);
+      expect(passing.result.status).toBe('PASS');
+      expect(passing.result.issues).toEqual([]);
+      expect(passing.result.evidence[0].controlId).toBe(controlId);
+
+      const failing = await evaluate(controlId, { count: 1, failing: true });
+      expect(failing.result.status).toBe('FAIL');
+      expect(failing.result.issues).toHaveLength(1);
+    }
+  );
+});
+
 describe('controls backfilled from existing rules', () => {
   const flat = (q: string) => q.replace(/\s+/g, ' ').trim();
 
