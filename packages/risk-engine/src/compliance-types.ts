@@ -1412,6 +1412,54 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
     remediationGuidance:
       'Contain the resource, rotate any credentials it holds, and resolve or archive the GuardDuty finding once investigated.',
   },
+  {
+    id: 'KH-AI-1',
+    framework: 'KHALIFA_BASELINE',
+    section: 'AI security',
+    title: 'Ensure AI workloads run as non-administrative roles',
+    description:
+      'Bedrock agents and AgentCore runtimes, SageMaker endpoints, notebooks and Studio domains whose execution role the policy evaluator marked administrative (is_admin). Conditions, permission boundaries and SCPs are not applied, so a role they block can still read as administrative; roles the evaluator has not assessed read as non-administrative, and the control is NOT_EVALUATED until any role carries is_admin.',
+    severity: 'high',
+    automated: true,
+    relatedRules: [],
+    evidenceRequirements: [
+      'AiAgent, AiEndpoint, AiNotebook and AiDomain vertices with a RUNS_AS edge to an IamRole carrying is_admin = true, per account/region.',
+    ],
+    remediationGuidance:
+      'Scope the execution role to the actions and resources the workload needs; use a separate role per workload instead of a shared administrative one.',
+  },
+  {
+    id: 'KH-AI-2',
+    framework: 'KHALIFA_BASELINE',
+    section: 'AI security',
+    title: 'Ensure Bedrock agents are protected by a guardrail',
+    description:
+      'Bedrock agents collected with guardrail_configured false. Guardrails are the provider-native input and output protections; AgentCore runtimes are out of scope because their controls live in gateway and policy configuration. A guardrail deleted after the last collection reads as configured until the next run reconciles it.',
+    severity: 'medium',
+    automated: true,
+    relatedRules: [],
+    evidenceRequirements: [
+      'AiAgent vertices with platform = bedrock and guardrail_configured = false, per account/region.',
+    ],
+    remediationGuidance:
+      'Attach a guardrail to the agent and reference a published guardrail version.',
+  },
+  {
+    id: 'KH-AI-3',
+    framework: 'KHALIFA_BASELINE',
+    section: 'AI security',
+    title: 'Ensure knowledge bases do not ground on public S3 buckets',
+    description:
+      'Bedrock knowledge bases whose S3 data sources carry the same publicness read the S3 controls use (bucket policy status and the account-level Block Public Access setting). Vector-store encryption and classification of the source objects are not evaluated here.',
+    severity: 'high',
+    automated: true,
+    relatedRules: [],
+    evidenceRequirements: [
+      'AiKnowledgeBase vertices with a READS_FROM edge to an S3Bucket carrying is_publicly_accessible = true, per account/region.',
+    ],
+    remediationGuidance:
+      'Remove public access from the source bucket, including the account-level Block Public Access setting, or move the data to a private bucket.',
+  },
 ];
 
 // Controls whose evidence comes from per-region resources. Their result only
@@ -1454,6 +1502,9 @@ export const REGIONAL_CONTROL_IDS: ReadonlySet<string> = new Set([
   'KH-5.6',
   'KH-5.7',
   'KH-EKS-1',
+  'KH-AI-1',
+  'KH-AI-2',
+  'KH-AI-3',
   'KH-PATH-1',
 ]);
 

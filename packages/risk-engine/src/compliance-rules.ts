@@ -1956,6 +1956,79 @@ export const complianceRuleEvaluators: ComplianceRuleEvaluator[] = [
       );
     },
   },
+  {
+    controlId: 'KH-AI-1',
+    evaluate: async (graphClient) => {
+      // is_admin is written by the policy evaluator, which runs on its own
+      // schedule; until it has, a zero count would be a vacuous pass.
+      if (await propertyNotYetCollected(graphClient, 'IamRole', 'is_admin')) {
+        return notEvaluated(
+          'KH-AI-1',
+          'Role administrative state (is_admin) has not been evaluated yet',
+          'ai-workloads',
+          'AiWorkload'
+        );
+      }
+      // The summary coverage stage: these workloads span the bedrock, agentcore
+      // and sagemaker stages, so an account/region is only assessed where the
+      // full resource inventory succeeded.
+      return perAccountRegionViolations(
+        graphClient,
+        'KH-AI-1',
+        { id: 'ai-workloads', type: 'AiWorkload' },
+        'resource-inventory',
+        `g.V().hasLabel('AiAgent', 'AiEndpoint', 'AiNotebook', 'AiDomain').where(out('RUNS_AS').has('is_admin', true))`,
+        (n, violations) =>
+          `${n} account/regions have an AI workload running as an administrative role (${violations} workload${violations === 1 ? '' : 's'})`
+      );
+    },
+  },
+  {
+    controlId: 'KH-AI-2',
+    evaluate: async (graphClient) => {
+      // platform is written by the AI collection stages; agents without it were
+      // collected before those stages existed and cannot be judged.
+      if (await propertyNotYetCollected(graphClient, 'AiAgent', 'platform')) {
+        return notEvaluated(
+          'KH-AI-2',
+          'Agents have not been collected with their platform yet',
+          'bedrock-agents',
+          'AiAgent'
+        );
+      }
+      return perAccountRegionViolations(
+        graphClient,
+        'KH-AI-2',
+        { id: 'bedrock-agents', type: 'AiAgent' },
+        'bedrock',
+        `g.V().hasLabel('AiAgent').has('platform', 'bedrock').has('guardrail_configured', false)`,
+        (n, violations) =>
+          `${n} account/regions have Bedrock agents without a guardrail (${violations} agent${violations === 1 ? '' : 's'})`
+      );
+    },
+  },
+  {
+    controlId: 'KH-AI-3',
+    evaluate: async (graphClient) => {
+      if (await propertyNotYetCollected(graphClient, 'AiKnowledgeBase', 'data_source_count')) {
+        return notEvaluated(
+          'KH-AI-3',
+          'Knowledge bases have not been collected with their data sources yet',
+          'ai-knowledge-bases',
+          'AiKnowledgeBase'
+        );
+      }
+      return perAccountRegionViolations(
+        graphClient,
+        'KH-AI-3',
+        { id: 'ai-knowledge-bases', type: 'AiKnowledgeBase' },
+        'bedrock',
+        `g.V().hasLabel('AiKnowledgeBase').where(out('READS_FROM').has('is_publicly_accessible', true))`,
+        (n, violations) =>
+          `${n} account/regions have knowledge bases grounding on public S3 buckets (${violations} knowledge base${violations === 1 ? '' : 's'})`
+      );
+    },
+  },
 ];
 
 export function getEvaluatorForControl(controlId: string): ComplianceRuleEvaluator | undefined {
