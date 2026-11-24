@@ -1,7 +1,8 @@
 # Khalifa UI
 
 Next.js application for the Khalifa security graph: issues and attack paths,
-resource and secret exploration, compliance frameworks, CIEM views, and trends.
+resource and secret exploration, AI inventory, compliance frameworks, CIEM
+views, and trends.
 
 The browser never calls the API directly. Requests go to the same-origin proxy
 at `app/api/[...path]`, which forwards to the API service and attaches the

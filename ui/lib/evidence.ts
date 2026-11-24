@@ -172,6 +172,48 @@ const SPECS: Record<string, Spec[]> = {
     { id: 'fixed_versions', label: 'Fixed in' },
     { id: 'inspector_score', label: 'Inspector score' },
   ],
+  AiAgent: [
+    { id: 'platform', label: 'Platform' },
+    { id: 'status', label: 'Status' },
+    { id: 'foundation_model', label: 'Foundation model' },
+    { id: 'guardrail_configured', label: 'Guardrail', format: yesNo },
+    { id: 'has_instruction', label: 'Has instruction', format: yesNo },
+    { id: 'role_arn', label: 'Execution role' },
+  ],
+  AiKnowledgeBase: [
+    { id: 'storage_type', label: 'Storage' },
+    { id: 'data_source_count', label: 'Data sources' },
+    { id: 'role_arn', label: 'Service role' },
+  ],
+  AiGuardrail: [
+    { id: 'version', label: 'Version' },
+    { id: 'status', label: 'Status' },
+  ],
+  AiModel: [
+    { id: 'base_model_name', label: 'Base model' },
+    { id: 'customization_type', label: 'Customization' },
+    { id: 'status', label: 'Status' },
+  ],
+  AiEndpoint: [
+    { id: 'status', label: 'Status' },
+    { id: 'data_capture_enabled', label: 'Data capture', format: yesNo },
+    { id: 'network_isolation', label: 'Network isolation', format: yesNo },
+    { id: 'in_vpc', label: 'In a VPC', format: yesNo },
+    { id: 'role_arn', label: 'Execution role' },
+  ],
+  AiNotebook: [
+    { id: 'status', label: 'Status' },
+    { id: 'direct_internet_access', label: 'Direct internet access' },
+    { id: 'root_access', label: 'Root access' },
+    { id: 'role_arn', label: 'Execution role' },
+  ],
+  AiDomain: [
+    { id: 'status', label: 'Status' },
+    { id: 'auth_mode', label: 'Auth mode' },
+    { id: 'app_network_access_type', label: 'App network' },
+    { id: 'vpc_id', label: 'VPC' },
+    { id: 'role_arn', label: 'Execution role' },
+  ],
 };
 
 // Fact ids each rule's query matches on.

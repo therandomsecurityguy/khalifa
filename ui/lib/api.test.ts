@@ -1,6 +1,8 @@
 import {
   ApiError,
   describeError,
+  getAiAgent,
+  getAiInventory,
   getEffectivePermissions,
   getEscalationPaths,
   getIntegrationsStatus,
@@ -60,6 +62,8 @@ describe('UI API client', () => {
     await listTrendMetrics();
     await getTrend('openIssuesBySeverity', 30);
     await getIntegrationsStatus();
+    await getAiInventory({ type: 'agents', limit: 10 });
+    await getAiAgent('arn:aws:bedrock:us-west-2:111122223333:agent/agent-1');
     await suppressIssue('issue-1', 'accepted risk', '2026-10-30T00:00:00.000Z');
     await reopenIssue('issue-1');
 
@@ -77,6 +81,8 @@ describe('UI API client', () => {
       '/api/trends',
       '/api/trends/openIssuesBySeverity?days=30',
       '/api/integrations/status',
+      '/api/ai/inventory?type=agents&limit=10',
+      '/api/ai/agents/arn%3Aaws%3Abedrock%3Aus-west-2%3A111122223333%3Aagent%2Fagent-1',
       '/api/issues/issue-1/suppress',
       '/api/issues/issue-1/reopen',
     ]);

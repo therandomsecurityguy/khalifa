@@ -66,6 +66,20 @@ describe('riskFlags', () => {
     expect(riskFlags(withoutDetail)).toEqual([{ level: 'warn', text: 'Observed traffic' }]);
   });
 
+  it('flags AI estate facts the collector records', () => {
+    const notebook = v(
+      'arn:aws:sagemaker:us-west-2:111122223333:notebook-instance/lab',
+      'AiNotebook',
+      { direct_internet_access: 'Enabled' }
+    );
+    expect(riskFlags(notebook)).toEqual([{ level: 'risk', text: 'Direct internet access' }]);
+
+    const agent = v('arn:aws:bedrock:us-west-2:111122223333:agent/a', 'AiAgent', {
+      guardrail_configured: false,
+    });
+    expect(riskFlags(agent)).toEqual([{ level: 'warn', text: 'No guardrail' }]);
+  });
+
   it('flags only properties the collector records', () => {
     expect(riskFlags(ec2)).toEqual([{ level: 'risk', text: 'Internet exposed' }]);
     expect(riskFlags(v('b', 'S3Bucket', { data_classification: 'public' }))).toEqual([]);

@@ -7,6 +7,9 @@ describe('graph labels', () => {
     expect(formatNodeLabel('Ec2Instance')).toBe('EC2 instance');
     expect(formatNodeLabel('IamRole')).toBe('IAM role');
     expect(formatNodeLabel('S3Bucket')).toBe('S3 bucket');
+    expect(formatNodeLabel('AiAgent')).toBe('AI agent');
+    expect(formatNodeLabel('AiKnowledgeBase')).toBe('AI knowledge base');
+    expect(formatNodeLabel('AiEndpoint')).toBe('SageMaker endpoint');
   });
 
   it('splits unknown PascalCase labels', () => {
