@@ -885,6 +885,73 @@ export const riskRules: RiskRule[] = [
       enabled: false,
     },
   },
+  {
+    id: 'RULE-038',
+    name: 'Bedrock Agent Without a Guardrail',
+    description:
+      'Detects Bedrock agents collected with guardrail_configured false. An agent whose input and output are unmoderated can be steered by prompt injection into the actions its role allows; guardrail state is the provider-native signal the collector reads, so agents that configure one are left out even when the guardrail vertex itself was not collected',
+    severityHint: 'medium',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('AiAgent')
+        .has('platform', 'bedrock')
+        .has('guardrail_configured', false)
+        .as('agent')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'cloud-security',
+    enabled: true,
+    // No tickets until the firing rate has been observed on real data.
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
+  {
+    id: 'RULE-039',
+    name: 'Knowledge Base Grounded on a Public S3 Bucket',
+    description:
+      'Detects Bedrock knowledge bases whose S3 data source bucket is publicly accessible. The bucket holds the grounding content the model retrieves, so public access exposes it directly, outside any agent permission',
+    severityHint: 'high',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('AiKnowledgeBase')
+        .as('knowledgeBase')
+        .outE('READS_FROM').inV().hasLabel('S3Bucket')
+        .has('is_publicly_accessible', true)
+        .as('bucket')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'cloud-security',
+    enabled: true,
+    // No tickets until the firing rate has been observed on real data.
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
+  {
+    id: 'RULE-040',
+    name: 'SageMaker Notebook with Direct Internet Access and an Admin Role',
+    description:
+      'Detects notebook instances that allow direct internet access while running as an administrative role. A reachable notebook is an exploitation surface, and its role is what makes compromising it worthwhile; a private notebook, an unprivileged role, or a deleted notebook is left out',
+    severityHint: 'high',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('AiNotebook')
+        .has('direct_internet_access', 'Enabled')
+        .not(has('status', within('Deleting', 'Failed')))
+        .as('notebook')
+        .outE('RUNS_AS').inV().hasLabel('IamRole')
+        .has('is_admin', true)
+        .as('role')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'iam-security',
+    enabled: true,
+    // No tickets until its firing rate has been observed on real data.
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
 ];
 
 export function getEnabledRules(): RiskRule[] {

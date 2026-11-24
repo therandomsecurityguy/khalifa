@@ -249,6 +249,12 @@ export function getRemediationHint(ruleId: string, _context: Record<string, any>
       "Scope the principal's iam:PassRole to the specific non-admin roles its workloads use, and add an iam:PassedToService condition. If it must pass this role, narrow the role instead.",
     'RULE-030':
       "Narrow the target role's trust policy to the specific roles that need it, not the account root, and add conditions (sts:ExternalId, aws:PrincipalArn). If the access is intended, suppress with the reason.",
+    'RULE-038':
+      'Attach a guardrail to the agent (input and output protections) and reference a published guardrail version.',
+    'RULE-039':
+      "Remove public access from the knowledge base's source bucket, including account-level Block Public Access, or move the data to a private bucket.",
+    'RULE-040':
+      'Disable direct internet access on the notebook (aws sagemaker update-notebook-instance --direct-internet-access Disabled) and scope its role to what the work needs.',
   };
 
   return (

@@ -711,6 +711,47 @@ describe('detection and posture rules', () => {
   });
 });
 
+// The AI inventory vertex and edge shapes the collector writes.
+describe('AI rules', () => {
+  it('RULE-038 matches a Bedrock agent without a guardrail', async () => {
+    await vertex('AiAgent', 'unguarded', { platform: 'bedrock', guardrail_configured: false });
+    await vertex('AiAgent', 'guarded', { platform: 'bedrock', guardrail_configured: true });
+    // AgentCore runtimes are out of scope: their protections live in gateway
+    // and policy configuration, not guardrails.
+    await vertex('AiAgent', 'runtime', { platform: 'agentcore' });
+    expect(starts(await run('RULE-038'))).toEqual(['unguarded']);
+  });
+
+  it('RULE-039 matches a knowledge base whose data source bucket is public', async () => {
+    await vertex('AiKnowledgeBase', 'kb-public');
+    await vertex('S3Bucket', 'bucket-public', { is_publicly_accessible: true });
+    await edge('kb-public', 'READS_FROM', 'bucket-public');
+
+    await vertex('AiKnowledgeBase', 'kb-private');
+    await vertex('S3Bucket', 'bucket-private', { is_publicly_accessible: false });
+    await edge('kb-private', 'READS_FROM', 'bucket-private');
+
+    // A public bucket nothing grounds on is not this rule's finding.
+    await vertex('S3Bucket', 'bucket-unused', { is_publicly_accessible: true });
+
+    expect(starts(await run('RULE-039'))).toEqual(['kb-public']);
+  });
+
+  it('RULE-040 matches a directly reachable notebook running an admin role', async () => {
+    for (const [notebook, internet, admin, status] of [
+      ['hit', 'Enabled', true, 'InService'],
+      ['private', 'Disabled', true, 'InService'],
+      ['scoped-role', 'Enabled', false, 'InService'],
+      ['deleting', 'Enabled', true, 'Deleting'],
+    ] as const) {
+      await vertex('AiNotebook', notebook, { direct_internet_access: internet, status });
+      await vertex('IamRole', `${notebook}-role`, { is_admin: admin });
+      await edge(notebook, 'RUNS_AS', `${notebook}-role`);
+    }
+    expect(starts(await run('RULE-040'))).toEqual(['hit']);
+  });
+});
+
 // Compliance evaluators whose query shape needs a real Gremlin engine.
 describe('CIS 3.4 on Gremlin Server', () => {
   const evaluate = () =>
