@@ -4,8 +4,8 @@ import { ADMIN_PORT_RANGE_PREDICATE } from './admin-ports';
 const MANAGED_HOP = "optional(outE('CONTAINS').inV().hasLabel('IamPolicyDocument'))";
 
 describe('riskRules', () => {
-  test('should have exactly 39 rules', () => {
-    expect(riskRules.length).toBe(39);
+  test('should have exactly 41 rules', () => {
+    expect(riskRules.length).toBe(41);
   });
 
   test('each rule should have required fields', () => {
@@ -66,9 +66,9 @@ describe('getEnabledRules', () => {
     }
   });
 
-  test('should return 39 enabled rules', () => {
+  test('should return 41 enabled rules', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(39);
+    expect(enabledRules.length).toBe(41);
   });
 });
 
@@ -170,6 +170,16 @@ describe('getRuleById', () => {
         "outE('RUNS_AS').inV()",
         "has('is_admin', true)",
       ],
+    ],
+    [
+      'RULE-037',
+      'Administrative Role',
+      ['AiAgent', "outE('RUNS_AS').inV()", "has('is_admin', true)"],
+    ],
+    [
+      'RULE-041',
+      'Agent Tool Lambda',
+      ['HAS_ACTION_GROUP', 'LambdaFunction', "outE('HAS_IAM_ROLE').inV()", "has('is_admin', true)"],
     ],
   ])('returns %s with its expected graph contract', (id, name, queryTokens) => {
     const rule = getRuleById(id);

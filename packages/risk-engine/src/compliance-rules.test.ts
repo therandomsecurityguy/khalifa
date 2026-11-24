@@ -461,6 +461,13 @@ describe('AI controls', () => {
     expect(query).toContain(predicate);
   });
 
+  it('KH-AI-1 also measures admin roles on agent tools', async () => {
+    const { query } = await evaluate('KH-AI-1');
+
+    expect(query).toContain("in('HAS_ACTION_GROUP')");
+    expect(query).toContain("out('HAS_IAM_ROLE')");
+  });
+
   it.each(['KH-AI-1', 'KH-AI-2', 'KH-AI-3'])(
     '%s passes on a zero count and fails when an assessed account/region violates',
     async (controlId) => {

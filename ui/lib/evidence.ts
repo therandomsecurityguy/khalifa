@@ -260,6 +260,8 @@ const DECISIVE: Record<string, string[]> = {
   'RULE-038': ['platform', 'guardrail_configured'],
   'RULE-039': ['is_publicly_accessible'],
   'RULE-040': ['direct_internet_access', 'is_admin'],
+  'RULE-037': ['is_admin', 'platform'],
+  'RULE-041': ['is_admin'],
 };
 
 // Properties that identify or bookkeep a vertex rather than describe it.

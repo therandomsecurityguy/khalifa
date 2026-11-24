@@ -255,6 +255,10 @@ export function getRemediationHint(ruleId: string, _context: Record<string, any>
       "Remove public access from the knowledge base's source bucket, including account-level Block Public Access, or move the data to a private bucket.",
     'RULE-040':
       'Disable direct internet access on the notebook (aws sagemaker update-notebook-instance --direct-internet-access Disabled) and scope its role to what the work needs.',
+    'RULE-037':
+      "Scope the agent's execution role to the actions and resources its tasks need; most agents run fine on read-only, resource-scoped roles.",
+    'RULE-041':
+      "Scope the tool Lambda's role to the actions the tool performs; an identity an agent can invoke should never be administrative.",
   };
 
   return (
