@@ -135,6 +135,18 @@ const REVIEWED_MAPPING: Record<string, { controls: string[]; why: string }> = {
     controls: ['KH-IAM-2'],
     why: 'principal that can pass an admin role to compute it creates',
   },
+  'RULE-038': {
+    controls: ['KH-AI-2'],
+    why: 'a Bedrock agent without a guardrail is exactly the violation the control measures',
+  },
+  'RULE-039': {
+    controls: ['KH-AI-3'],
+    why: 'a knowledge base grounded on a public bucket is exactly the violation the control measures',
+  },
+  'RULE-040': {
+    controls: ['KH-AI-1', 'KH-IAM-1'],
+    why: 'admin role on an internet-reachable AI workload: a narrower slice of both controls',
+  },
 };
 
 // Mapping is per rule, so every finding a rule raises lands on every control it

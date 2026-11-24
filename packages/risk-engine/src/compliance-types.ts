@@ -1224,9 +1224,9 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
       'A broadly privileged role is most dangerous where something outside the account can reach it: attached to an internet-reachable workload, or trusted by another principal.',
     severity: 'high',
     automated: true,
-    relatedRules: ['RULE-004', 'RULE-006'],
+    relatedRules: ['RULE-004', 'RULE-006', 'RULE-040'],
     evidenceRequirements: [
-      'RULE-004: an admin role on an internet-reachable EC2 instance or Lambda. RULE-006: a role trusted by another principal holding an Allow on a wildcard resource.',
+      'RULE-004: an admin role on an internet-reachable EC2 instance or Lambda. RULE-006: a role trusted by another principal holding an Allow on a wildcard resource. RULE-040: an admin role on a SageMaker notebook with direct internet access.',
     ],
     remediationGuidance:
       'Scope the role to the actions and resources the workload uses; split roles that serve several purposes.',
@@ -1421,9 +1421,9 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
       'Bedrock agents and AgentCore runtimes, SageMaker endpoints, notebooks and Studio domains whose execution role the policy evaluator marked administrative (is_admin). Conditions, permission boundaries and SCPs are not applied, so a role they block can still read as administrative; roles the evaluator has not assessed read as non-administrative, and the control is NOT_EVALUATED until any role carries is_admin.',
     severity: 'high',
     automated: true,
-    relatedRules: [],
+    relatedRules: ['RULE-040'],
     evidenceRequirements: [
-      'AiAgent, AiEndpoint, AiNotebook and AiDomain vertices with a RUNS_AS edge to an IamRole carrying is_admin = true, per account/region.',
+      'AiAgent, AiEndpoint, AiNotebook and AiDomain vertices with a RUNS_AS edge to an IamRole carrying is_admin = true, per account/region. RULE-040 is the directly internet-reachable notebook slice of the same check.',
     ],
     remediationGuidance:
       'Scope the execution role to the actions and resources the workload needs; use a separate role per workload instead of a shared administrative one.',
@@ -1437,9 +1437,9 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
       'Bedrock agents collected with guardrail_configured false. Guardrails are the provider-native input and output protections; AgentCore runtimes are out of scope because their controls live in gateway and policy configuration. A guardrail deleted after the last collection reads as configured until the next run reconciles it.',
     severity: 'medium',
     automated: true,
-    relatedRules: [],
+    relatedRules: ['RULE-038'],
     evidenceRequirements: [
-      'AiAgent vertices with platform = bedrock and guardrail_configured = false, per account/region.',
+      'AiAgent vertices with platform = bedrock and guardrail_configured = false, per account/region. RULE-038 matches the same agents.',
     ],
     remediationGuidance:
       'Attach a guardrail to the agent and reference a published guardrail version.',
@@ -1453,9 +1453,9 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
       'Bedrock knowledge bases whose S3 data sources carry the same publicness read the S3 controls use (bucket policy status and the account-level Block Public Access setting). Vector-store encryption and classification of the source objects are not evaluated here.',
     severity: 'high',
     automated: true,
-    relatedRules: [],
+    relatedRules: ['RULE-039'],
     evidenceRequirements: [
-      'AiKnowledgeBase vertices with a READS_FROM edge to an S3Bucket carrying is_publicly_accessible = true, per account/region.',
+      'AiKnowledgeBase vertices with a READS_FROM edge to an S3Bucket carrying is_publicly_accessible = true, per account/region. RULE-039 matches the same knowledge bases.',
     ],
     remediationGuidance:
       'Remove public access from the source bucket, including the account-level Block Public Access setting, or move the data to a private bucket.',

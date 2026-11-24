@@ -257,6 +257,9 @@ const DECISIVE: Record<string, string[]> = {
   'RULE-032': ['env', 'principal_account_ids', 'principal_is_anyone'],
   'RULE-033': ['principal_account_ids', 'principal_is_anyone'],
   'RULE-034': ['is_admin', 'is_admin_role'],
+  'RULE-038': ['platform', 'guardrail_configured'],
+  'RULE-039': ['is_publicly_accessible'],
+  'RULE-040': ['direct_internet_access', 'is_admin'],
 };
 
 // Properties that identify or bookkeep a vertex rather than describe it.

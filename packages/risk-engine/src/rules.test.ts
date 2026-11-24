@@ -4,8 +4,8 @@ import { ADMIN_PORT_RANGE_PREDICATE } from './admin-ports';
 const MANAGED_HOP = "optional(outE('CONTAINS').inV().hasLabel('IamPolicyDocument'))";
 
 describe('riskRules', () => {
-  test('should have exactly 36 rules', () => {
-    expect(riskRules.length).toBe(36);
+  test('should have exactly 39 rules', () => {
+    expect(riskRules.length).toBe(39);
   });
 
   test('each rule should have required fields', () => {
@@ -66,9 +66,9 @@ describe('getEnabledRules', () => {
     }
   });
 
-  test('should return 34 enabled rules', () => {
+  test('should return 39 enabled rules', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(36);
+    expect(enabledRules.length).toBe(39);
   });
 });
 
@@ -151,6 +151,26 @@ describe('getRuleById', () => {
     ['RULE-032', 'Prod Secret', ["has('env', 'prod')", "has('is_prod', false)"]],
     ['RULE-033', 'Another Collected Account', ['HAS_RESOURCE_POLICY', 'SHARES_WITH']],
     ['RULE-034', 'Pass an Admin Role', ['CAN_ESCALATE_TO', "has('escalation_type', 'pass_role')"]],
+    [
+      'RULE-038',
+      'Without a Guardrail',
+      ['AiAgent', "has('platform', 'bedrock')", "has('guardrail_configured', false)"],
+    ],
+    [
+      'RULE-039',
+      'Public S3 Bucket',
+      ['AiKnowledgeBase', "outE('READS_FROM').inV()", 'is_publicly_accessible'],
+    ],
+    [
+      'RULE-040',
+      'Direct Internet Access',
+      [
+        'AiNotebook',
+        "has('direct_internet_access', 'Enabled')",
+        "outE('RUNS_AS').inV()",
+        "has('is_admin', true)",
+      ],
+    ],
   ])('returns %s with its expected graph contract', (id, name, queryTokens) => {
     const rule = getRuleById(id);
     expect(rule?.id).toBe(id);

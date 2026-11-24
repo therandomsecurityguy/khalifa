@@ -2,6 +2,13 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI config-gap rules
+
+### Added
+
+- **Three AI risk rules** (catalogue 36 → 39, all auto-ticketing off until their firing rates are observed): `RULE-038` Bedrock agents collected without a guardrail (`guardrail_configured = false`; AgentCore runtimes are out of scope); `RULE-039` Bedrock knowledge bases whose S3 data source bucket is publicly accessible; `RULE-040` SageMaker notebooks with direct internet access running an administrative role, the same shape as RULE-004 for a new workload. Curated ATT&CK mappings (`RULE-038` T1190/T1078.004, `RULE-039` T1530, `RULE-040` T1190/T1552.005), remediation hints, decisive-fact entries, and Gremlin Server fixture tests for every rule.
+- **Reviewed control mappings**: `RULE-038` → `KH-AI-2`, `RULE-039` → `KH-AI-3`, `RULE-040` → `KH-AI-1` and `KH-IAM-1` (an admin role on an internet-reachable AI workload is a narrower slice of both), with the controls' `relatedRules` and evidence requirements updated to match.
+
 ## [Unreleased] - KH-AI controls
 
 ### Added

@@ -95,6 +95,9 @@ export const RULE_TECHNIQUES: Record<string, string[]> = {
   'RULE-034': ['T1078.004', 'T1098'],
   'RULE-035': ['T1078'],
   'RULE-036': ['T1078'],
+  'RULE-038': ['T1190', 'T1078.004'],
+  'RULE-039': ['T1530'],
+  'RULE-040': ['T1190', 'T1552.005'],
 };
 
 export function techniquesForRule(ruleId: string): AttackTechnique[] {
