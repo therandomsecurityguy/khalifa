@@ -1221,12 +1221,12 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
     section: '1. Identity and Access Management',
     title: 'Ensure internet-reachable and externally trusted roles are not broadly privileged',
     description:
-      'A broadly privileged role is most dangerous where something outside the account can reach it: attached to an internet-reachable workload, or trusted by another principal.',
+      "A broadly privileged role is most dangerous where something outside the account can reach it: attached to an internet-reachable workload, trusted by another account, or trusted by an AWS service that runs AI workloads on the account's behalf.",
     severity: 'high',
     automated: true,
-    relatedRules: ['RULE-004', 'RULE-006', 'RULE-040'],
+    relatedRules: ['RULE-004', 'RULE-006', 'RULE-040', 'RULE-042'],
     evidenceRequirements: [
-      'RULE-004: an admin role on an internet-reachable EC2 instance or Lambda. RULE-006: a role trusted by another principal holding an Allow on a wildcard resource. RULE-040: an admin role on a SageMaker notebook with direct internet access.',
+      'RULE-004: an admin role on an internet-reachable EC2 instance or Lambda. RULE-006: a role trusted by another principal holding an Allow on a wildcard resource. RULE-040: an admin role on a SageMaker notebook with direct internet access. RULE-042: a role an AI service principal (Bedrock, SageMaker, AgentCore) can assume holding an Allow on a wildcard resource.',
     ],
     remediationGuidance:
       'Scope the role to the actions and resources the workload uses; split roles that serve several purposes.',

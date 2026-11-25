@@ -4,8 +4,8 @@ import { ADMIN_PORT_RANGE_PREDICATE } from './admin-ports';
 const MANAGED_HOP = "optional(outE('CONTAINS').inV().hasLabel('IamPolicyDocument'))";
 
 describe('riskRules', () => {
-  test('should have exactly 41 rules', () => {
-    expect(riskRules.length).toBe(41);
+  test('should have exactly 42 rules', () => {
+    expect(riskRules.length).toBe(42);
   });
 
   test('each rule should have required fields', () => {
@@ -66,9 +66,9 @@ describe('getEnabledRules', () => {
     }
   });
 
-  test('should return 41 enabled rules', () => {
+  test('should return 42 enabled rules', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(41);
+    expect(enabledRules.length).toBe(42);
   });
 });
 
@@ -180,6 +180,16 @@ describe('getRuleById', () => {
       'RULE-041',
       'Agent Tool Lambda',
       ['HAS_ACTION_GROUP', 'LambdaFunction', "outE('HAS_IAM_ROLE').inV()", "has('is_admin', true)"],
+    ],
+    [
+      'RULE-042',
+      'AI Service',
+      [
+        "has('trusts_ai_service', true)",
+        "outE('ATTACHED_TO').inV()",
+        MANAGED_HOP,
+        "has('has_wildcard_resource', true)",
+      ],
     ],
   ])('returns %s with its expected graph contract', (id, name, queryTokens) => {
     const rule = getRuleById(id);

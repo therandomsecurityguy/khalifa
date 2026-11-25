@@ -998,6 +998,33 @@ export const riskRules: RiskRule[] = [
       enabled: false,
     },
   },
+  {
+    id: 'RULE-042',
+    name: 'AI Service Can Assume a Wildcard-Privileged Role',
+    description:
+      'Detects roles whose trust policy lets an AI service principal (Bedrock, SageMaker, AgentCore) assume them while an Allow statement grants Resource: *. Any agent, model or notebook the service runs in this account acts through that role, so the wildcard sets the blast radius for every AI workflow added later. A scoped role, or one no AI service can assume, is left out',
+    severityHint: 'high',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('IamRole')
+        .has('trusts_ai_service', true)
+        .as('role')
+        .outE('ATTACHED_TO').inV()
+        .optional(outE('CONTAINS').inV().hasLabel('IamPolicyDocument'))
+        .hasLabel('IamPolicyDocument')
+        .outE('CONTAINS').inV().hasLabel('IamPolicyStatement')
+        .has('effect', 'Allow')
+        .has('has_wildcard_resource', true)
+        .as('statement')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'iam-security',
+    enabled: true,
+    // No tickets until its firing rate has been observed on real data.
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
 ];
 
 export function getEnabledRules(): RiskRule[] {

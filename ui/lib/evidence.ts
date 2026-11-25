@@ -262,6 +262,7 @@ const DECISIVE: Record<string, string[]> = {
   'RULE-040': ['direct_internet_access', 'is_admin'],
   'RULE-037': ['is_admin', 'platform'],
   'RULE-041': ['is_admin'],
+  'RULE-042': ['trusts_ai_service', 'has_wildcard_resource'],
 };
 
 // Properties that identify or bookkeep a vertex rather than describe it.

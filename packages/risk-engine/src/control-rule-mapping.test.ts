@@ -155,6 +155,10 @@ const REVIEWED_MAPPING: Record<string, { controls: string[]; why: string }> = {
     controls: ['KH-AI-1'],
     why: 'agent tool running as an admin role: the control now measures agent tools alongside workloads',
   },
+  'RULE-042': {
+    controls: ['KH-IAM-1'],
+    why: 'AI-service-trusted role holding a wildcard-resource Allow: externally trusted and broadly privileged',
+  },
 };
 
 // Mapping is per rule, so every finding a rule raises lands on every control it
