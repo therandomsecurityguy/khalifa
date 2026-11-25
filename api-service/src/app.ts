@@ -12,6 +12,7 @@ import {
 import { listAccounts, searchAttackPaths, simulateAttackPaths } from './routes/attack-paths';
 import { listAttackScenarios, runAttackScenario } from './routes/attack-scenarios';
 import { getDataSources } from './routes/data-sources';
+import { createServiceToken, listServiceTokens, revokeServiceToken } from './routes/service-tokens';
 import { getAiAgent, getAiInventory } from './routes/ai';
 import {
   createAiUseCase,
@@ -39,7 +40,12 @@ import {
 } from './routes/compliance';
 import { validateGremlinSelectors, validateArnPathParam } from './middleware/gremlin-validator';
 import { authenticate } from './middleware/auth';
-import { requireViewer, requireAnalyst, requireTrustCenterSync } from './middleware/rbac';
+import {
+  requireViewer,
+  requireAnalyst,
+  requireAdmin,
+  requireTrustCenterSync,
+} from './middleware/rbac';
 import { apiRateLimiter, expensiveRateLimiter } from './middleware/rate-limit';
 import { metricsMiddleware, renderMetrics, buildInfo } from './observability/metrics';
 import compression from 'compression';
@@ -228,6 +234,9 @@ app.get('/trends', requireViewer, listTrendMetrics);
 app.get('/trends/:metric', requireViewer, getTrend);
 
 app.get('/integrations/status', requireViewer, getIntegrationsStatus);
+app.get('/service-tokens', requireAdmin, listServiceTokens);
+app.post('/service-tokens', requireAdmin, createServiceToken);
+app.delete('/service-tokens/:id', requireAdmin, revokeServiceToken);
 app.post('/issues/:id/suppress', requireAnalyst, suppressIssue);
 app.post('/issues/:id/reopen', requireAnalyst, reopenIssue);
 

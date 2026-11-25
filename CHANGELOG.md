@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Service tokens
+
+### Added
+
+- **Scoped service tokens** (Administration, Admin+): migration step for automation that cannot hold a human Cognito session — CI pipelines, scripts, MCP clients. `POST /service-tokens` mints a `khalifa_<uuid>_<64 hex>` token against a name, a `viewer` or `analyst` role (admin cannot be minted) and a mandatory expiry (1–90 days, default 30); the plaintext is returned exactly once and only its SHA-256 hash is stored in a new `service-tokens` DynamoDB table (PITR, CMK encryption, deletion protection; API-only IAM, no collector/rule-runner access). `GET /service-tokens` lists metadata (never token material), `DELETE /service-tokens/:id` revokes immediately. The auth middleware recognises the `khalifa_` prefix before any JWT path, verifies shape/existence/revocation/expiry plus a constant-time secret comparison, maps the role through the same RBAC groups as human identities, records a throttled last-used timestamp (a lost usage stamp never fails a verified request), and answers `AUTH_UNAVAILABLE` (503) when the store cannot be reached so a store outage fails closed. Service tokens do not carry the trust-center sync's `serviceToken` flag, so the publishable endpoint stays closed to them. Wired through the Terraform data module (`serviceTokensTable` Helm value) and the chart (values + schema + configmap); 3 new OpenAPI operations with route↔spec parity, and tests for token parsing/hashing, the token store's fail-closed paths, the management routes, and the middleware branch including the 503 and RBAC floor.
+
 ## [Unreleased] - Outbound webhooks
 
 ### Added

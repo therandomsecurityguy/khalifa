@@ -89,6 +89,7 @@ config:
   threatIntelTtlDays: 90
   leastPrivilegeTable: ''
   aiUseCasesTable: ''
+  serviceTokensTable: ''
   cognitoUserPoolId: ''
   cognitoClientId: ''
   cognitoRegion: ''

@@ -24,6 +24,7 @@ data:
   THREAT_INTEL_TTL_DAYS: {{ .Values.config.threatIntelTtlDays | quote }}
   LEAST_PRIVILEGE_TABLE: {{ .Values.config.leastPrivilegeTable | quote }}
   AI_USE_CASES_TABLE: {{ .Values.config.aiUseCasesTable | quote }}
+  SERVICE_TOKENS_TABLE: {{ .Values.config.serviceTokensTable | quote }}
   COGNITO_USER_POOL_ID: {{ .Values.config.cognitoUserPoolId | quote }}
   COGNITO_CLIENT_ID: {{ .Values.config.cognitoClientId | quote }}
   COGNITO_REGION: {{ default .Values.config.awsRegion .Values.config.cognitoRegion | quote }}

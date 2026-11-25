@@ -643,6 +643,7 @@ flowchart LR
 - **Cognito User Pool** authenticates users; **Cognito Groups** (`khalifa-admin`, `khalifa-analyst`, `khalifa-viewer`) drive RBAC
 - **Cloudflare Access** (optional): when `CLOUDFLARE_ACCESS_TEAM_DOMAIN` and `CLOUDFLARE_ACCESS_AUD` are set, the API verifies the `cf-access-jwt-assertion` JWT against the team's Access JWKS and maps verified identities from the configured trusted email domain to Viewer/Analyst (never Admin without a Cognito `khalifa-admin` group)
 - **JWKS verification** in api-service via `jose`; email-only headers are never trusted and unauthenticated requests fail closed (`AUTH_NOT_CONFIGURED` when neither provider is configured)
+- **Service tokens** (Administration): admins mint `khalifa_<uuid>_<secret>` automation credentials through `POST /service-tokens`; only a SHA-256 hash is stored in the `ServiceTokens` table, the plaintext is shown once, roles are restricted to viewer/analyst (admin cannot be minted), expiry is mandatory (1–90 days), and revocation is immediate. The auth middleware branches on the `khalifa_` prefix before the JWT paths, maps the token's role through the same RBAC groups as human identities, and answers `AUTH_UNAVAILABLE` (503) when the token store cannot be reached — a store outage never degrades into an unauthenticated accept. Service tokens never carry the trust-center sync's `serviceToken` flag, so the publishable endpoint stays closed to them
 - **ALB OIDC** (EKS deployment) for browser-based UI auth; API service enforces JWT independently
 
 ## Deployment Topologies
