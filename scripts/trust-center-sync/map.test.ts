@@ -49,6 +49,8 @@ describe('buildTrustFragment', () => {
       ['ISO27001', 'planned'],
       ['PCI_DSS', 'planned'],
       ['NIST_800_53', 'planned'],
+      ['ISO_42001', 'planned'],
+      ['NIST_AI_RMF', 'planned'],
     ]);
     expect(fragment.controls.every((domain) => domain.framework === 'CIS_AWS_FOUNDATIONS')).toBe(
       true
@@ -80,6 +82,8 @@ describe('buildTrustFragment', () => {
       'in-progress',
       'in-progress',
       'in-progress',
+      'planned',
+      'planned',
       'planned',
       'planned',
     ]);

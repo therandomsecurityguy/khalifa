@@ -29,7 +29,8 @@ Outputs, written atomically only when the record is `OK`:
 
 - `trust.config.json` — `{ frameworks, controls }`; the endpoint's CIS
   requirements plus any publishable mapped-framework requirements (SOC 2 /
-  ISO 27001 / PCI DSS / NIST SP 800-53), with each control domain tagged by
+  ISO 27001 / PCI DSS / NIST SP 800-53 / ISO 42001 / NIST AI RMF), with each
+  control domain tagged by
   `framework`. Same shape as the
   public Fimil trust-center schema, so the output stays portable; the site's
   hand-edited `trust-center/site.config.json` keeps company, contact, and theme

@@ -62,6 +62,15 @@ describe('FRAMEWORK_CITATIONS', () => {
       'NIST_800_53:SC-13',
       'NIST_800_53:SI-2',
       'NIST_800_53:SI-4',
+      'ISO_42001:A.6.2.4',
+      'ISO_42001:A.6.2.6',
+      'ISO_42001:A.6.2.8',
+      'ISO_42001:A.9.2',
+      'NIST_AI_RMF:GOVERN 4.3',
+      'NIST_AI_RMF:MEASURE 2.4',
+      'NIST_AI_RMF:MEASURE 2.7',
+      'NIST_AI_RMF:MEASURE 2.10',
+      'NIST_AI_RMF:MANAGE 4.1',
     ]);
   });
 
@@ -94,6 +103,8 @@ describe('FRAMEWORK_CITATIONS', () => {
     expect(isMappedFramework('ISO27001')).toBe(true);
     expect(isMappedFramework('PCI_DSS')).toBe(true);
     expect(isMappedFramework('NIST_800_53')).toBe(true);
+    expect(isMappedFramework('ISO_42001')).toBe(true);
+    expect(isMappedFramework('NIST_AI_RMF')).toBe(true);
     expect(isMappedFramework('CIS_AWS_FOUNDATIONS')).toBe(false);
     expect(isMappedFramework('KHALIFA_BASELINE')).toBe(false);
   });
@@ -103,11 +114,22 @@ describe('FRAMEWORK_CITATIONS', () => {
     expect(citationsByFramework('ISO27001')).toHaveLength(17);
     expect(citationsByFramework('PCI_DSS')).toHaveLength(11);
     expect(citationsByFramework('NIST_800_53')).toHaveLength(15);
+    expect(citationsByFramework('ISO_42001')).toHaveLength(4);
+    expect(citationsByFramework('NIST_AI_RMF')).toHaveLength(5);
     const citing = citationsForControl('1.5').map((c) => `${c.framework}:${c.requirement}`);
     expect(citing).toContain('SOC2:CC6.1');
     expect(citing).toContain('ISO27001:A.5.17');
     expect(citing).toContain('PCI_DSS:8.3');
     expect(citing).toContain('NIST_800_53:IA-2');
+  });
+
+  it('resolves the AI controls to their AI-framework requirements', () => {
+    const citing = citationsForControl('KH-AI-2').map((c) => `${c.framework}:${c.requirement}`);
+    expect(citing).toContain('ISO_42001:A.6.2.4');
+    expect(citing).toContain('ISO_42001:A.9.2');
+    expect(citing).toContain('NIST_AI_RMF:MEASURE 2.4');
+    const privacy = citationsForControl('KH-AI-3').map((c) => `${c.framework}:${c.requirement}`);
+    expect(privacy).toContain('NIST_AI_RMF:MEASURE 2.10');
   });
 });
 

@@ -3,7 +3,14 @@
 // cite canonical controls (see framework-citations.ts) and derive their
 // status from those controls' assessments.
 export type ComplianceFramework =
-  'CIS_AWS_FOUNDATIONS' | 'KHALIFA_BASELINE' | 'SOC2' | 'ISO27001' | 'PCI_DSS' | 'NIST_800_53';
+  | 'CIS_AWS_FOUNDATIONS'
+  | 'KHALIFA_BASELINE'
+  | 'SOC2'
+  | 'ISO27001'
+  | 'PCI_DSS'
+  | 'NIST_800_53'
+  | 'ISO_42001'
+  | 'NIST_AI_RMF';
 
 export type ComplianceControlStatus =
   'PASS' | 'FAIL' | 'MANUAL' | 'NOT_APPLICABLE' | 'NOT_EVALUATED';
@@ -1538,6 +1545,8 @@ export function getControlsByFramework(framework: ComplianceFramework): Complian
     case 'ISO27001':
     case 'PCI_DSS':
     case 'NIST_800_53':
+    case 'ISO_42001':
+    case 'NIST_AI_RMF':
       // Mapped frameworks cite canonical controls instead of owning a catalog.
       return [];
   }

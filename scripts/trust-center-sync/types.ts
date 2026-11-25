@@ -8,7 +8,13 @@ export interface PublishableRequirement {
 }
 
 export type PublishedFramework =
-  'CIS_AWS_FOUNDATIONS' | 'SOC2' | 'ISO27001' | 'PCI_DSS' | 'NIST_800_53';
+  | 'CIS_AWS_FOUNDATIONS'
+  | 'SOC2'
+  | 'ISO27001'
+  | 'PCI_DSS'
+  | 'NIST_800_53'
+  | 'ISO_42001'
+  | 'NIST_AI_RMF';
 
 /** Canonical first, then the mapped frameworks in display order. */
 export const PUBLISHED_FRAMEWORKS: PublishedFramework[] = [
@@ -17,11 +23,13 @@ export const PUBLISHED_FRAMEWORKS: PublishedFramework[] = [
   'ISO27001',
   'PCI_DSS',
   'NIST_800_53',
+  'ISO_42001',
+  'NIST_AI_RMF',
 ];
 
 export const MAPPED_PUBLISHED_FRAMEWORKS: Array<
   Exclude<PublishedFramework, 'CIS_AWS_FOUNDATIONS'>
-> = ['SOC2', 'ISO27001', 'PCI_DSS', 'NIST_800_53'];
+> = ['SOC2', 'ISO27001', 'PCI_DSS', 'NIST_800_53', 'ISO_42001', 'NIST_AI_RMF'];
 
 export interface PublishableMappedRequirement extends PublishableRequirement {
   framework: Exclude<PublishedFramework, 'CIS_AWS_FOUNDATIONS'>;

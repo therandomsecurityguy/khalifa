@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI governance frameworks
+
+### Added
+
+- **ISO/IEC 42001 and NIST AI RMF as mapped frameworks**: nine curated requirements cited to canonical controls — ISO 42001 `A.6.2.4` (verification and validation), `A.6.2.6` (operation and monitoring), `A.6.2.8` (event logs), `A.9.2` (responsible use), and NIST AI RMF `GOVERN 4.3`, `MEASURE 2.4`, `MEASURE 2.7`, `MEASURE 2.10`, `MANAGE 4.1` — concentrated on the KH-AI controls plus the logging, vulnerability and detection controls they legitimately share, with the reviewed `why` recorded per requirement. They derive from the same canonical assessment pass as the other mapped frameworks (no new evaluators, no new evidence rows) and reach the trust center only while every cited control is publishable or assessed PASS/FAIL, so the AI sections stay fail-closed on installs where the AI properties are not yet collected. Mapped requirements total 52 → 61; `/compliance/frameworks` now lists eight frameworks; the trust-center sync, questionnaire, and UI framework names carry the two new sections.
+
 ## [Unreleased] - AI service-trust rule
 
 ### Added

@@ -154,6 +154,8 @@ describe('ComplianceEngine mapped frameworks', () => {
       'ISO27001',
       'PCI_DSS',
       'NIST_800_53',
+      'ISO_42001',
+      'NIST_AI_RMF',
     ]);
     const soc2 = await store.getLatestReport('SOC2');
     expect(soc2?.controls.length).toBe(9);

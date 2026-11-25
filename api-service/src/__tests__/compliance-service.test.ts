@@ -13,6 +13,8 @@ describe('ComplianceService', () => {
       'ISO27001',
       'PCI_DSS',
       'NIST_800_53',
+      'ISO_42001',
+      'NIST_AI_RMF',
     ]);
     // Mapped frameworks report their requirement counts, not canonical controls.
     const soc2 = summaries.find((s) => s.framework === 'SOC2');
@@ -20,6 +22,8 @@ describe('ComplianceService', () => {
     expect(soc2?.version).toBe('2017');
     expect(summaries.find((s) => s.framework === 'PCI_DSS')?.totalControls).toBe(11);
     expect(summaries.find((s) => s.framework === 'NIST_800_53')?.totalControls).toBe(15);
+    expect(summaries.find((s) => s.framework === 'ISO_42001')?.totalControls).toBe(4);
+    expect(summaries.find((s) => s.framework === 'NIST_AI_RMF')?.totalControls).toBe(5);
   });
 
   it('returns framework summary with control counts', async () => {
