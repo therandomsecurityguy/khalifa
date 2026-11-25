@@ -88,6 +88,7 @@ config:
   threatIntelAccountListS3Uri: ''
   threatIntelTtlDays: 90
   leastPrivilegeTable: ''
+  aiUseCasesTable: ''
   cognitoUserPoolId: ''
   cognitoClientId: ''
   cognitoRegion: ''

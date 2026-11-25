@@ -1437,6 +1437,257 @@
         }
       }
     },
+    "/ai/use-cases": {
+      "get": {
+        "tags": ["AI governance"],
+        "operationId": "listAiUseCases",
+        "summary": "AI use-case registry",
+        "description": "Requires **Viewer**. Hand-maintained governance entries linking use cases to collected AI assets.",
+        "responses": {
+          "200": {
+            "description": "Use cases and a truncation flag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": ["AI governance"],
+        "operationId": "createAiUseCase",
+        "summary": "Create a use case",
+        "description": "Requires **Analyst**. `id` (slug) is optional; it is derived from the name when absent. A colliding id answers 409.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "name": { "type": "string", "maxLength": 200 },
+                  "description": { "type": "string", "maxLength": 2000 },
+                  "owner": { "type": "string", "maxLength": 120 },
+                  "status": {
+                    "type": "string",
+                    "enum": ["draft", "approved", "retired"]
+                  },
+                  "assets": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": { "type": "string", "description": "Collected asset ARN." }
+                  },
+                  "dataClasses": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": { "type": "string", "maxLength": 64 }
+                  },
+                  "assessment": {
+                    "type": "object",
+                    "nullable": true,
+                    "description": "Lite AI impact assessment: status, riskTier, owner, humanOversight, impacts, notes, reviewedAt."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created use case.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/ai/use-cases/coverage": {
+      "get": {
+        "tags": ["AI governance"],
+        "operationId": "getAiUseCaseCoverage",
+        "summary": "Registry against the collected AI estate (expensive query)",
+        "description": "Requires **Viewer**. Unregistered collected assets and registered assets missing from the graph; both lists are bounded and truncation is flagged.",
+        "responses": {
+          "200": {
+            "description": "Coverage counts and asset lists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/ai/use-cases/{id}": {
+      "get": {
+        "tags": ["AI governance"],
+        "operationId": "getAiUseCase",
+        "summary": "One use case",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Use-case id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Use case.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": ["AI governance"],
+        "operationId": "updateAiUseCase",
+        "summary": "Update a use case",
+        "description": "Requires **Analyst**. Replaces the editable fields; identity and timestamps stay server-owned.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Use-case id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated use case.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["AI governance"],
+        "operationId": "deleteAiUseCase",
+        "summary": "Delete a use case",
+        "description": "Requires **Analyst**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Use-case id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deletion confirmation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/compliance/frameworks": {
       "get": {
         "tags": ["Compliance"],
