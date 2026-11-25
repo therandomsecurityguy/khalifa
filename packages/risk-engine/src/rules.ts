@@ -952,6 +952,52 @@ export const riskRules: RiskRule[] = [
       enabled: false,
     },
   },
+  {
+    id: 'RULE-037',
+    name: 'AI Agent Running as an Administrative Role',
+    description:
+      'Detects Bedrock agents and AgentCore runtimes whose execution role the policy evaluator found administrative (is_admin). An agent that can be steered into actions runs them with its role, so an administrative role makes the agent a full-account principal. SCPs and permission boundaries are not applied, so a path they block still shows',
+    severityHint: 'high',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('AiAgent')
+        .as('agent')
+        .outE('RUNS_AS').inV().hasLabel('IamRole')
+        .has('is_admin', true)
+        .as('role')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'iam-security',
+    enabled: true,
+    // No tickets until the firing rate has been observed on real data.
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
+  {
+    id: 'RULE-041',
+    name: 'Agent Tool Lambda Running as an Administrative Role',
+    description:
+      'Detects agent action-group Lambda functions whose execution role is administrative. The tool is what an agent can actually invoke, so an admin-role tool turns any prompt-driven or injected tool call into full-account actions; escalation paths on the tool role itself (iam:PassRole) remain RULE-034 territory',
+    severityHint: 'high',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('AiAgent')
+        .as('agent')
+        .outE('HAS_ACTION_GROUP').inV().hasLabel('LambdaFunction')
+        .as('tool')
+        .outE('HAS_IAM_ROLE').inV().hasLabel('IamRole')
+        .has('is_admin', true)
+        .as('role')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'iam-security',
+    enabled: true,
+    // No tickets until the firing rate has been observed on real data.
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
 ];
 
 export function getEnabledRules(): RiskRule[] {

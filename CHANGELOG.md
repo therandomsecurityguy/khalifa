@@ -2,6 +2,13 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI privilege rules
+
+### Added
+
+- **Two AI privilege rules** (catalogue 39 → 41, auto-ticketing off until firing rates are observed): `RULE-037` Bedrock agents and AgentCore runtimes whose execution role the policy evaluator found administrative; `RULE-041` agent action-group Lambda functions whose role is administrative (escalation paths on tool roles stay RULE-034's territory). Asked-for `RULE-042` (roles trusted by AI service principals) is deliberately deferred: the collector parses only cross-account account ids from role trust policies, so the rule would read an empty graph today; service-principal trust collection lands in its own slice first.
+- **`KH-AI-1` scope extended** to the Lambda tools behind agent action groups: its description, evidence requirements, and evaluator now measure both an AI workload's own execution role and a reachable tool's role, so the new rules' findings are violations the control actually assesses. Reviewed mappings: `RULE-037` → `KH-AI-1`, `RULE-041` → `KH-AI-1`.
+
 ## [Unreleased] - AI config-gap rules
 
 ### Added

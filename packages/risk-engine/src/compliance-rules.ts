@@ -1969,17 +1969,23 @@ export const complianceRuleEvaluators: ComplianceRuleEvaluator[] = [
           'AiWorkload'
         );
       }
-      // The summary coverage stage: these workloads span the bedrock, agentcore
-      // and sagemaker stages, so an account/region is only assessed where the
-      // full resource inventory succeeded.
+      // Two offending shapes: an AI workload's own execution role, and the
+      // role of a Lambda tool behind an agent action group. The summary
+      // coverage stage: these span the bedrock, agentcore and sagemaker
+      // stages, so an account/region is only assessed where the full resource
+      // inventory succeeded.
       return perAccountRegionViolations(
         graphClient,
         'KH-AI-1',
         { id: 'ai-workloads', type: 'AiWorkload' },
         'resource-inventory',
-        `g.V().hasLabel('AiAgent', 'AiEndpoint', 'AiNotebook', 'AiDomain').where(out('RUNS_AS').has('is_admin', true))`,
+        `g.V().hasLabel('AiAgent', 'AiEndpoint', 'AiNotebook', 'AiDomain', 'LambdaFunction')
+          .or(
+            hasLabel('AiAgent', 'AiEndpoint', 'AiNotebook', 'AiDomain').where(out('RUNS_AS').has('is_admin', true)),
+            hasLabel('LambdaFunction').where(in('HAS_ACTION_GROUP').hasLabel('AiAgent')).where(out('HAS_IAM_ROLE').has('is_admin', true))
+          )`,
         (n, violations) =>
-          `${n} account/regions have an AI workload running as an administrative role (${violations} workload${violations === 1 ? '' : 's'})`
+          `${n} account/regions have an AI workload or agent tool running as an administrative role (${violations} resource${violations === 1 ? '' : 's'})`
       );
     },
   },

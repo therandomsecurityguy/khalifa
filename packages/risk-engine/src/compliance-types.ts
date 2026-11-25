@@ -1418,12 +1418,12 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
     section: 'AI security',
     title: 'Ensure AI workloads run as non-administrative roles',
     description:
-      'Bedrock agents and AgentCore runtimes, SageMaker endpoints, notebooks and Studio domains whose execution role the policy evaluator marked administrative (is_admin). Conditions, permission boundaries and SCPs are not applied, so a role they block can still read as administrative; roles the evaluator has not assessed read as non-administrative, and the control is NOT_EVALUATED until any role carries is_admin.',
+      'Bedrock agents and AgentCore runtimes, SageMaker endpoints, notebooks and Studio domains whose execution role the policy evaluator marked administrative (is_admin), and the Lambda functions behind agent action groups whose role is administrative. Conditions, permission boundaries and SCPs are not applied, so a role they block can still read as administrative; roles the evaluator has not assessed read as non-administrative, and the control is NOT_EVALUATED until any role carries is_admin.',
     severity: 'high',
     automated: true,
-    relatedRules: ['RULE-040'],
+    relatedRules: ['RULE-037', 'RULE-040', 'RULE-041'],
     evidenceRequirements: [
-      'AiAgent, AiEndpoint, AiNotebook and AiDomain vertices with a RUNS_AS edge to an IamRole carrying is_admin = true, per account/region. RULE-040 is the directly internet-reachable notebook slice of the same check.',
+      'AiAgent, AiEndpoint, AiNotebook and AiDomain vertices with a RUNS_AS edge to an IamRole carrying is_admin = true, and LambdaFunction vertices behind an agent action group whose HAS_IAM_ROLE role carries is_admin = true, per account/region. RULE-040 is the directly internet-reachable notebook slice; RULE-037 and RULE-041 are the agent, runtime and tool slices.',
     ],
     remediationGuidance:
       'Scope the execution role to the actions and resources the workload needs; use a separate role per workload instead of a shared administrative one.',

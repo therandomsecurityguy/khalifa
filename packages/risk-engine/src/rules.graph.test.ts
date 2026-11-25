@@ -750,6 +750,45 @@ describe('AI rules', () => {
     }
     expect(starts(await run('RULE-040'))).toEqual(['hit']);
   });
+
+  it('RULE-037 matches an agent or runtime running as an admin role', async () => {
+    for (const [agent, platform, admin] of [
+      ['agent-admin', 'bedrock', true],
+      ['agent-scoped', 'bedrock', false],
+      ['runtime-admin', 'agentcore', true],
+    ] as const) {
+      await vertex('AiAgent', agent, { platform });
+      await vertex('IamRole', `${agent}-role`, { is_admin: admin });
+      await edge(agent, 'RUNS_AS', `${agent}-role`);
+    }
+    expect(starts(await run('RULE-037'))).toEqual(['agent-admin', 'runtime-admin']);
+  });
+
+  it('RULE-041 matches an admin-role tool behind an agent action group', async () => {
+    await vertex('AiAgent', 'agent');
+    await vertex('LambdaFunction', 'admin-tool');
+    await vertex('IamRole', 'admin-tool-role', { is_admin: true });
+    await edge('agent', 'HAS_ACTION_GROUP', 'admin-tool');
+    await edge('admin-tool', 'HAS_IAM_ROLE', 'admin-tool-role');
+
+    // A scoped tool and a tool with no role are not this rule's finding.
+    await vertex('AiAgent', 'agent-2');
+    await vertex('LambdaFunction', 'scoped-tool');
+    await vertex('IamRole', 'scoped-tool-role', { is_admin: false });
+    await edge('agent-2', 'HAS_ACTION_GROUP', 'scoped-tool');
+    await edge('scoped-tool', 'HAS_IAM_ROLE', 'scoped-tool-role');
+
+    await vertex('AiAgent', 'agent-3');
+    await vertex('LambdaFunction', 'roleless-tool');
+    await edge('agent-3', 'HAS_ACTION_GROUP', 'roleless-tool');
+
+    // An admin-role Lambda no agent wires in is not agent reachable.
+    await vertex('LambdaFunction', 'unlinked-tool');
+    await vertex('IamRole', 'unlinked-tool-role', { is_admin: true });
+    await edge('unlinked-tool', 'HAS_IAM_ROLE', 'unlinked-tool-role');
+
+    expect(starts(await run('RULE-041'))).toEqual(['agent']);
+  });
 });
 
 // Compliance evaluators whose query shape needs a real Gremlin engine.

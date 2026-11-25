@@ -39,7 +39,7 @@
               ┌──────────────────────────────────────────────────────┐
               │  Risk Engine Lambda    │  │  Compliance Evaluators   │
               │  (every 1h)            │  │  (CIS + baseline)        │
-               │  - 39 Gremlin rules    │  │  - per-control evaluators│
+               │  - 41 Gremlin rules    │  │  - per-control evaluators│
               │  - Risk scoring        │  │  - DynamoDB persistence  │
               └────────────┬───────────┘  └─────────────┬────────────┘
                            ▼                            ▼
@@ -99,7 +99,7 @@ flowchart LR
         direction TB
         PE["Policy Evaluator (6h):<br/>effective permissions,<br/>escalation + pass-role paths"]
         LPS["Least-Privilege Sweep (daily):<br/>rightsizing vs CloudTrail usage"]
-        RE["Risk Engine (hourly):<br/>39 rules, attack paths, scoring"]
+        RE["Risk Engine (hourly):<br/>41 rules, attack paths, scoring"]
         COMP["Compliance:<br/>CIS v3.0.0 + Khalifa baseline<br/>(Security Hub reconciliation)"]
     end
 
@@ -141,7 +141,7 @@ flowchart LR
     NEPTUNE --> LPS
     LPS -->|"LeastPrivilegeFindings"| ISSUES
 
-    NEPTUNE -->|"Gremlin rules RULE-001..040"| RE
+    NEPTUNE -->|"Gremlin rules RULE-001..041"| RE
     NEPTUNE -->|"control evaluators"| COMP
     RE -->|"issues + attack paths"| ISSUES
     COMP -->|"evidence + reports"| ISSUES
