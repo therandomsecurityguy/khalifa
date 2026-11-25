@@ -37,6 +37,40 @@ function parsePolicyDocument(policyDocument: string): Record<string, unknown> {
   return JSON.parse(document) as Record<string, unknown>;
 }
 
+// AWS service principals that run AI workloads on a customer's behalf: the
+// service assumes the role to act for agents, models and notebooks in the
+// account. A role trusted by one of them is reachable by every AI workflow the
+// account (or anyone who can create one) adds, so its blast radius matters
+// even when no agent vertex links to it.
+export const AI_SERVICE_PRINCIPALS = [
+  'bedrock.amazonaws.com',
+  'sagemaker.amazonaws.com',
+  'bedrock-agentcore.amazonaws.com',
+] as const;
+
+export function extractTrustedAiServices(trustPolicy: string | undefined): string[] {
+  if (!trustPolicy) return [];
+  const parsed = parsePolicyDocument(trustPolicy);
+  const statements = Array.isArray(parsed.Statement) ? parsed.Statement : [parsed.Statement];
+  const services = new Set<string>();
+  for (const statement of statements || []) {
+    if (!statement || typeof statement !== 'object') continue;
+    const item = statement as Record<string, unknown>;
+    if (item.Effect !== 'Allow' || !item.Principal) continue;
+    const principal = item.Principal as Record<string, unknown>;
+    const values = Array.isArray(principal.Service) ? principal.Service : [principal.Service];
+    for (const value of values) {
+      if (
+        typeof value === 'string' &&
+        (AI_SERVICE_PRINCIPALS as readonly string[]).includes(value)
+      ) {
+        services.add(value);
+      }
+    }
+  }
+  return [...services].sort();
+}
+
 export function extractTrustAccountIds(trustPolicy: string | undefined): string[] {
   if (!trustPolicy) return [];
   const parsed = parsePolicyDocument(trustPolicy);

@@ -2,6 +2,13 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI service-trust rule
+
+### Added
+
+- **AI service-principal trust collection**: the IAM stage now parses each role's trust policy for the AI service principals that run workloads on the account's behalf (`bedrock.amazonaws.com`, `sagemaker.amazonaws.com`, `bedrock-agentcore.amazonaws.com`) and writes `trusts_ai_service` plus the `trusted_ai_services` list on every role every run — the flag cannot go stale, and the list is explicitly cleared when a trust disappears. This is what the deferred RULE-042 slice needed: the collector previously parsed only cross-account account ids from trust policies, so the rule would have read an empty graph.
+- **`RULE-042` — AI Service Can Assume a Wildcard-Privileged Role** (high, catalogue 41 → 42, auto-ticketing off): a role an AI service principal can assume holding an Allow on `Resource: *`. Mapped to `KH-IAM-1` (externally trusted and broadly privileged), whose rule-backed assessment now reads this rule too. ATT&CK `T1199`/`T1078.004` (mirrors RULE-006), remediation hint, decisive facts, Gremlin Server fixtures with scoped/denied/untrusted negatives, and trust-parsing unit tests (string and list principals, encoded documents, single-statement objects, deny statements, non-AI services).
+
 ## [Unreleased] - AI privilege rules
 
 ### Added

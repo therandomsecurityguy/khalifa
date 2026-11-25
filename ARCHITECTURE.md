@@ -39,7 +39,7 @@
               ┌──────────────────────────────────────────────────────┐
               │  Risk Engine Lambda    │  │  Compliance Evaluators   │
               │  (every 1h)            │  │  (CIS + baseline)        │
-               │  - 41 Gremlin rules    │  │  - per-control evaluators│
+               │  - 42 Gremlin rules    │  │  - per-control evaluators│
               │  - Risk scoring        │  │  - DynamoDB persistence  │
               └────────────┬───────────┘  └─────────────┬────────────┘
                            ▼                            ▼
@@ -99,7 +99,7 @@ flowchart LR
         direction TB
         PE["Policy Evaluator (6h):<br/>effective permissions,<br/>escalation + pass-role paths"]
         LPS["Least-Privilege Sweep (daily):<br/>rightsizing vs CloudTrail usage"]
-        RE["Risk Engine (hourly):<br/>41 rules, attack paths, scoring"]
+        RE["Risk Engine (hourly):<br/>42 rules, attack paths, scoring"]
         COMP["Compliance:<br/>CIS v3.0.0 + Khalifa baseline<br/>(Security Hub reconciliation)"]
     end
 
@@ -141,7 +141,7 @@ flowchart LR
     NEPTUNE --> LPS
     LPS -->|"LeastPrivilegeFindings"| ISSUES
 
-    NEPTUNE -->|"Gremlin rules RULE-001..041"| RE
+    NEPTUNE -->|"Gremlin rules RULE-001..042"| RE
     NEPTUNE -->|"control evaluators"| COMP
     RE -->|"issues + attack paths"| ISSUES
     COMP -->|"evidence + reports"| ISSUES
@@ -518,7 +518,7 @@ flowchart LR
 | `TransitGateway`            | EC2                 | `arn`                                                                                                                                                              |
 | `S3Bucket`                  | S3                  | `arn`, `is_publicly_accessible`, `versioning_enabled`                                                                                                              |
 | `IamUser`                   | IAM                 | `arn`, `password_enabled`, `mfa_enabled`, `likely_workload_identity_candidate`                                                                                     |
-| `IamRole`                   | IAM                 | `arn`, `has_cross_account_trust`, `is_admin_role`                                                                                                                  |
+| `IamRole`                   | IAM                 | `arn`, `has_cross_account_trust`, `is_admin_role`, `trusts_ai_service`, `trusted_ai_services`                                                                      |
 | `IamPolicy`                 | IAM                 | `arn`                                                                                                                                                              |
 | `IamPolicyDocument`         | IAM                 | `arn`, `policy_arn`, `document_json`, `policy_type`                                                                                                                |
 | `IamPolicyStatement`        | IAM                 | `arn`, `effect`, `actions`, `resources`, `has_wildcard_resource`, `has_wildcard_action`, `grants_secret_read`, `secret_grant_scope`, `has_cross_account_principal` |
@@ -634,6 +634,7 @@ flowchart LR
 | `flow_logs_enabled`                               | boolean          | EC2 DescribeFlowLogs                                 |
 | `guardrail_configured`                            | boolean          | Bedrock agent guardrail config                       |
 | `direct_internet_access`                          | string           | SageMaker notebook config                            |
+| `trusts_ai_service`                               | boolean          | Role trust-policy analysis (AI service principals)   |
 | `platform`                                        | string           | AI inventory source (`bedrock` or `agentcore`)       |
 
 ## Authentication

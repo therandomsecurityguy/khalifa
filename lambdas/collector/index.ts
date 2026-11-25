@@ -133,7 +133,7 @@ import { summarizeEventSelectors } from './src/cloudtrail-selectors';
 import { summarizePublicAccessBlock } from './src/bucket-public-access';
 import { collectAgentCoreRuntimes, collectBedrock } from './src/ai';
 import { collectContainerImages } from './src/containers';
-import { collectCrossAccountTrust } from './src/cross-account';
+import { collectCrossAccountTrust, extractTrustedAiServices } from './src/cross-account';
 import { collectSageMaker } from './src/sagemaker';
 import { collectIamAccessKeys, collectIamCredentialReport } from './src/iam-posture';
 import { secretAgeProperties } from './src/secret-ages';
@@ -1317,6 +1317,10 @@ async function collectIam(client: IAMClient, accountId: string) {
   );
   for (const role of roles) {
     const roleArn = roleVertexId(accountId, role.RoleName!);
+    // Recorded on every role every run, so a trust that goes away cannot leave
+    // a stale flag or service list behind (the list is cleared explicitly when
+    // the trust no longer exists).
+    const trustedAiServices = extractTrustedAiServices(role.AssumeRolePolicyDocument);
     nodes.push({
       id: roleArn,
       label: 'IamRole',
@@ -1329,7 +1333,10 @@ async function collectIam(client: IAMClient, accountId: string) {
         assume_role_policy_document: role.AssumeRolePolicyDocument
           ? decodeURIComponent(role.AssumeRolePolicyDocument)
           : undefined,
+        trusts_ai_service: trustedAiServices.length > 0,
+        ...(trustedAiServices.length > 0 ? { trusted_ai_services: trustedAiServices } : {}),
       },
+      ...(trustedAiServices.length === 0 ? { clearProperties: ['trusted_ai_services'] } : {}),
     });
     edges.push({ from: `arn:aws:iam::${accountId}:root`, to: roleArn, label: 'OWNS' });
 

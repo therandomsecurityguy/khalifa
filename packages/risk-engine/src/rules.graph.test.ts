@@ -789,6 +789,41 @@ describe('AI rules', () => {
 
     expect(starts(await run('RULE-041'))).toEqual(['agent']);
   });
+
+  it('RULE-042 matches an AI-service-trusted role with a wildcard Allow', async () => {
+    await vertex('IamRole', 'ai-trusted', { trusts_ai_service: true });
+    await vertex('IamPolicyDocument', 'ai-trusted/inline');
+    await vertex('IamPolicyStatement', 'ai-trusted/inline/0', {
+      effect: 'Allow',
+      has_wildcard_resource: true,
+    });
+    await edge('ai-trusted', 'ATTACHED_TO', 'ai-trusted/inline');
+    await edge('ai-trusted/inline', 'CONTAINS', 'ai-trusted/inline/0');
+
+    // A scoped statement on an AI-trusted role, a wildcard role no AI service
+    // can assume, and a Deny on the wildcard are not this rule's finding.
+    await vertex('IamRole', 'ai-trusted-scoped', { trusts_ai_service: true });
+    await vertex('IamPolicyDocument', 'ai-trusted-scoped/inline');
+    await vertex('IamPolicyStatement', 'ai-trusted-scoped/inline/0', {
+      effect: 'Allow',
+      has_wildcard_resource: false,
+    });
+    await edge('ai-trusted-scoped', 'ATTACHED_TO', 'ai-trusted-scoped/inline');
+    await edge('ai-trusted-scoped/inline', 'CONTAINS', 'ai-trusted-scoped/inline/0');
+
+    await inlinePolicy('wildcard-untrusted', { has_wildcard_resource: true });
+
+    await vertex('IamRole', 'ai-trusted-deny', { trusts_ai_service: true });
+    await vertex('IamPolicyDocument', 'ai-trusted-deny/inline');
+    await vertex('IamPolicyStatement', 'ai-trusted-deny/inline/0', {
+      effect: 'Deny',
+      has_wildcard_resource: true,
+    });
+    await edge('ai-trusted-deny', 'ATTACHED_TO', 'ai-trusted-deny/inline');
+    await edge('ai-trusted-deny/inline', 'CONTAINS', 'ai-trusted-deny/inline/0');
+
+    expect(starts(await run('RULE-042'))).toEqual(['ai-trusted']);
+  });
 });
 
 // Compliance evaluators whose query shape needs a real Gremlin engine.

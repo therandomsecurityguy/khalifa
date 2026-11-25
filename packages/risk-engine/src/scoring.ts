@@ -259,6 +259,8 @@ export function getRemediationHint(ruleId: string, _context: Record<string, any>
       "Scope the agent's execution role to the actions and resources its tasks need; most agents run fine on read-only, resource-scoped roles.",
     'RULE-041':
       "Scope the tool Lambda's role to the actions the tool performs; an identity an agent can invoke should never be administrative.",
+    'RULE-042':
+      "Scope the role's wildcard-resource statements to the specific ARNs the AI workloads need, and give each workload its own role instead of one the AI services share.",
   };
 
   return (
