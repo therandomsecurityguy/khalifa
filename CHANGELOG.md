@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Outbound webhooks
+
+### Added
+
+- **Generic webhook issue sink** (`webhook` in `ISSUE_SINKS`, alongside `sns` and `slack`): issue events POST as HMAC-SHA256-signed JSON (`X-Khalifa-Signature: sha256=<hex>` over `<timestamp>.<raw body>`, so receivers can verify over the raw bytes and enforce a replay window), with `X-Khalifa-Event` (`issue.created` on the first delivery for an issue, `issue.updated` on refreshes — resolved/suppressed transitions do not flow through the sink framework yet), a unique delivery id for idempotency, and a compact payload (core issue fields, rule identity, and a UI link; paths and metadata stay behind the link). Deliveries retry with backoff on 5xx/429/network failures (bounded attempts, per-attempt timeout) and fail fast on other 4xx. Configuration: `WEBHOOK_URL` or `WEBHOOK_URL_SECRET_ARN` for the destination (credential-bearing URLs belong in Secrets Manager), `WEBHOOK_SIGNING_SECRET_ARN` (or the plaintext development fallback) for the key; a URL without a signing secret refuses to deliver. Wired through the Helm chart (values + schema, whose `issueSinks` enum now also accepts `slack` and `webhook`) and the CDK stack (signing key stored in `khalifa/webhook-signing`, read granted to the risk engine); `/integrations/status` reports its health.
+
 ## [Unreleased] - Bearer parsing without backtracking
 
 ### Fixed

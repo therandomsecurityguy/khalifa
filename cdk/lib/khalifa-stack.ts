@@ -809,6 +809,17 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         })
       : undefined;
 
+    // The generic webhook's signing key is a credential: deploy-time value in,
+    // Secrets Manager at rest, ARN on the function. The destination URL is not
+    // a credential in the general case and rides the environment; operators
+    // whose URL embeds a token should use WEBHOOK_URL_SECRET_ARN instead.
+    const webhookSigningSecret = process.env.WEBHOOK_SIGNING_SECRET
+      ? new secretsmanager.Secret(this, 'WebhookSigningSecret', {
+          secretName: 'khalifa/webhook-signing',
+          secretStringValue: cdk.SecretValue.unsafePlainText(process.env.WEBHOOK_SIGNING_SECRET),
+        })
+      : undefined;
+
     const riskEngineFn = new lambda.Function(this, 'RiskEngineFn', {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
@@ -823,6 +834,8 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         ISSUE_SINKS: process.env.ISSUE_SINKS || 'sns',
         SLACK_WEBHOOK_SECRET_ARN: slackWebhookSecret?.secretArn ?? '',
         SLACK_MIN_SEVERITY: process.env.SLACK_MIN_SEVERITY || 'high',
+        WEBHOOK_URL: process.env.WEBHOOK_URL || '',
+        WEBHOOK_SIGNING_SECRET_ARN: webhookSigningSecret?.secretArn ?? '',
         UI_BASE_URL: process.env.UI_BASE_URL || '',
       },
     });
@@ -841,6 +854,9 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
     );
     if (slackWebhookSecret) {
       slackWebhookSecret.grantRead(riskEngineFn);
+    }
+    if (webhookSigningSecret) {
+      webhookSigningSecret.grantRead(riskEngineFn);
     }
     riskEngineFn.addToRolePolicy(
       new iam.PolicyStatement({

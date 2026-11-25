@@ -98,6 +98,12 @@ config:
   corsAllowedOrigins: []
   issueSinks: []
   issuesTopicArn: ''
+  # Generic webhook sink (put "webhook" in issueSinks). The signing secret
+  # lives in Secrets Manager; the URL may too, for credential-bearing
+  # destinations. Deliveries are HMAC-signed and retried with backoff.
+  webhookUrl: ''
+  webhookUrlSecretArn: ''
+  webhookSigningSecretArn: ''
   uiBaseUrl: ''
   athenaDatabase: ''
   athenaWorkgroup: ''
