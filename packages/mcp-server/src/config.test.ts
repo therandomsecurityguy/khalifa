@@ -3,7 +3,7 @@ import { readConfig } from './config';
 describe('readConfig', () => {
   it('reads a Bearer token and trims the API url', () => {
     const config = readConfig({
-      KHALIFA_API_URL: 'http://localhost:8080/',
+      KHALIFA_API_URL: 'http://localhost:8080////',
       KHALIFA_TOKEN: 'token-1',
     } as NodeJS.ProcessEnv);
 

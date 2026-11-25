@@ -9,6 +9,14 @@ export interface KhalifaConfig {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+// A linear scan, not a regex: CodeQL flags `/\/+$/` as polynomial on
+// operator-controlled input, and the fix is trivially cheaper.
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47 /* '/' */) end -= 1;
+  return value.slice(0, end);
+}
+
 /**
  * Configuration comes from the environment so the server holds no state and
  * the operator's existing token is the only credential. Exactly one of
@@ -16,7 +24,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
  * token wins when both are set.
  */
 export function readConfig(environment: NodeJS.ProcessEnv = process.env): KhalifaConfig {
-  const apiUrl = (environment.KHALIFA_API_URL || '').trim().replace(/\/+$/, '');
+  const apiUrl = stripTrailingSlashes((environment.KHALIFA_API_URL || '').trim());
   if (!apiUrl) {
     throw new Error('KHALIFA_API_URL is required (for example http://localhost:8080)');
   }
