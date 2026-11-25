@@ -1,0 +1,35 @@
+{
+  "name": "@khalifa/mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Read-only Model Context Protocol server exposing the Khalifa security graph to AI tools",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "start": "node dist/cli.js",
+    "dev": "ts-node src/cli.ts",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.6.6",
+    "@typescript-eslint/eslint-plugin": "^8.73.0",
+    "@typescript-eslint/parser": "^8.72.2",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.7",
+    "jest": "^30.5.2",
+    "prettier": "^3.10.1",
+    "ts-jest": "^29.4.15",
+    "typescript": "^5.0.0"
+  }
+}

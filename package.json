@@ -27,7 +27,7 @@
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present && tsc --noEmit -p scripts/risk-plan && tsc --noEmit -p scripts/trust-center-sync && tsc --noEmit -p trust-center",
     "test": "npm run build:packages && jest --runInBand",
     "build": "npm run build:packages && npm run build:lambdas && npm run build:applications",
-    "build:packages": "npm run build -w packages/integrations && npm run build -w packages/risk-engine",
+    "build:packages": "npm run build -w packages/integrations && npm run build -w packages/risk-engine && npm run build -w packages/mcp-server",
     "build:applications": "npm run build -w api-service -w cdk -w ui",
     "build:api": "npm run build:packages && npm run build -w api-service",
     "build:cdk": "npm run build:packages && npm run build:lambdas && npm run build -w cdk",
