@@ -11,6 +11,7 @@ COPY api-service/package.json ./api-service/
 COPY cdk/package.json ./cdk/
 COPY packages/integrations/package.json ./packages/integrations/
 COPY packages/risk-engine/package.json ./packages/risk-engine/
+COPY packages/mcp-server/package.json ./packages/mcp-server/
 COPY ui/package.json ./ui/
 COPY lambdas/cloudtrail-analyzer/package.json ./lambdas/cloudtrail-analyzer/
 COPY lambdas/collector/package.json ./lambdas/collector/

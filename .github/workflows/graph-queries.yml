@@ -75,7 +75,10 @@ jobs:
         run: npm ci --workspace packages/integrations --workspace packages/risk-engine --include-workspace-root --ignore-scripts
 
       - name: Build packages
-        run: npm run build:packages
+        # Only the workspaces this job installs: the full build:packages chain
+        # also builds packages/mcp-server, whose dependencies are deliberately
+        # not installed here.
+        run: npm run build -w packages/integrations -w packages/risk-engine
 
       - name: Log in to GHCR
         env:
