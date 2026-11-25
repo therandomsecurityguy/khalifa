@@ -28,6 +28,16 @@ export const FRAMEWORKS: Record<string, { label: string; description: string }> 
     description:
       'NIST SP 800-53 Rev. 5 controls mapped to the controls Khalifa evaluates; nothing here is certified',
   },
+  ISO_42001: {
+    label: 'ISO 42001',
+    description:
+      'ISO/IEC 42001:2023 Annex A requirements mapped to the controls Khalifa evaluates; nothing here is certified',
+  },
+  NIST_AI_RMF: {
+    label: 'NIST AI RMF',
+    description:
+      'NIST AI RMF 1.0 subcategories mapped to the controls Khalifa evaluates; nothing here is certified',
+  },
 };
 
 export function frameworkLabel(id: string): string {

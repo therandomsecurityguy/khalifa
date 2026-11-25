@@ -154,7 +154,8 @@ Prerequisites: the install above is healthy and reconciliation has produced an
    over). It fails closed — `STALE`/`MISSING` records leave the previous
    deployment live.
 6. Verify the deployed page: framework cards (CIS and the mapped SOC 2 /
-   ISO 27001 / PCI DSS / NIST SP 800-53 requirements that are publishable), the
+   ISO 27001 / PCI DSS / NIST SP 800-53 / ISO 42001 / NIST AI RMF requirements
+   that are publishable), the
    continuous-monitoring section, `/.well-known/security.txt` (emitted when a
    security email is configured), and `/questionnaire.json`.
 7. Deployment-owned content in `trust-center/site.config.json`: practices,
@@ -166,8 +167,9 @@ Prerequisites: the install above is healthy and reconciliation has produced an
 
 - `bash scripts/validate-deployment-modules.sh` (where helm/kubeconform exist)
 - all pods `Ready`; CronJobs in the intended suspend state
-- after the first compliance run: `/compliance/frameworks` lists six
-  frameworks (CIS, Khalifa baseline, SOC 2, ISO 27001, PCI DSS, NIST 800-53);
+- after the first compliance run: `/compliance/frameworks` lists eight
+  frameworks (CIS, Khalifa baseline, SOC 2, ISO 27001, PCI DSS, NIST 800-53,
+  ISO 42001, NIST AI RMF);
   the CIS reconciliation record (`CIS_RECONCILIATION`) is `OK`
 - trust center (when configured): the workflow's step summary, the deployed
   page's sections, and `/.well-known/security.txt`

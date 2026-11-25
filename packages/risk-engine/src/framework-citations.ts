@@ -16,9 +16,17 @@ import { getControlById } from './compliance-types';
  * requirement, and `why` records the reasoning. `framework-citations.test.ts`
  * pins both the golden requirement list and that every cited id resolves.
  */
-export type MappedFramework = 'SOC2' | 'ISO27001' | 'PCI_DSS' | 'NIST_800_53';
+export type MappedFramework =
+  'SOC2' | 'ISO27001' | 'PCI_DSS' | 'NIST_800_53' | 'ISO_42001' | 'NIST_AI_RMF';
 
-export const MAPPED_FRAMEWORKS: MappedFramework[] = ['SOC2', 'ISO27001', 'PCI_DSS', 'NIST_800_53'];
+export const MAPPED_FRAMEWORKS: MappedFramework[] = [
+  'SOC2',
+  'ISO27001',
+  'PCI_DSS',
+  'NIST_800_53',
+  'ISO_42001',
+  'NIST_AI_RMF',
+];
 
 /** Canonical frameworks first, then the mapped ones. */
 export const ALL_FRAMEWORKS: ComplianceFramework[] = [
@@ -47,6 +55,8 @@ export const FRAMEWORK_VERSIONS: Record<ComplianceFramework, string> = {
   ISO27001: '2022',
   PCI_DSS: '4.0',
   NIST_800_53: 'Rev. 5',
+  ISO_42001: '2023',
+  NIST_AI_RMF: '1.0',
 };
 
 export function isMappedFramework(framework: ComplianceFramework): framework is MappedFramework {
@@ -688,6 +698,102 @@ export const FRAMEWORK_CITATIONS: FrameworkCitation[] = [
       'Security Hub and GuardDuty are enabled, and credential, canary, and attack-finding detections monitor the environment.',
     controls: ['4.16', 'KH-4.1', 'KH-DET-1', 'KH-DET-2', 'KH-DET-3', 'KH-SH-1'],
     why: 'Detection enablement and outcomes evidence system monitoring.',
+  },
+
+  // ---- ISO/IEC 42001:2023 Annex A (AI management system) ----
+  {
+    framework: 'ISO_42001',
+    requirement: 'A.6.2.4',
+    section: 'AI system life cycle',
+    title: 'AI systems are verified and validated',
+    description:
+      'Guardrails enforce provider-native input and output protections on Bedrock agents, and the images backing AI workloads are checked for critical vulnerabilities.',
+    controls: ['KH-AI-2', 'KH-VULN-1'],
+    why: 'Guardrail enforcement and vulnerability findings are the verification and validation this environment can observe from configuration.',
+  },
+  {
+    framework: 'ISO_42001',
+    requirement: 'A.6.2.6',
+    section: 'AI system life cycle',
+    title: 'AI systems are operated with monitoring',
+    description:
+      'AI workloads run as non-administrative roles, and Bedrock agents carry guardrail protections while in operation.',
+    controls: ['KH-AI-1', 'KH-AI-2'],
+    why: 'Least-privilege operation and runtime guardrails evidence the controlled operation of the AI estate.',
+  },
+  {
+    framework: 'ISO_42001',
+    requirement: 'A.6.2.8',
+    section: 'AI system life cycle',
+    title: 'AI system event logs are recorded',
+    description:
+      'CloudTrail records management events in all regions, the trail bucket keeps access logging, and trail logs reach CloudWatch Logs, so AI service API activity is recorded.',
+    controls: ['3.1', '3.4', 'KH-3.4'],
+    why: 'Trail, bucket-logging, and log-delivery controls evidence the recording of events, including the AI services’ API activity.',
+    severity: 'medium',
+  },
+  {
+    framework: 'ISO_42001',
+    requirement: 'A.9.2',
+    section: 'Use of AI systems',
+    title: 'AI systems are used responsibly',
+    description:
+      'AI identities are not administrative, Bedrock agents are guardrail-protected, and knowledge bases do not ground on publicly accessible data.',
+    controls: ['KH-AI-1', 'KH-AI-2', 'KH-AI-3'],
+    why: 'The AI posture controls are the observable responsible-use evidence from configuration.',
+  },
+
+  // ---- NIST AI RMF 1.0 (GOVERN, MEASURE, MANAGE) ----
+  {
+    framework: 'NIST_AI_RMF',
+    requirement: 'GOVERN 4.3',
+    section: 'GOVERN',
+    title: 'AI testing and incident identification practices',
+    description:
+      'The images backing AI workloads are checked for critical vulnerabilities, and attack findings on internet-exposed resources are raised as incidents.',
+    controls: ['KH-VULN-1', 'KH-DET-3'],
+    why: 'Vulnerability testing and attack-finding identification are the observable testing and incident slice.',
+    severity: 'medium',
+  },
+  {
+    framework: 'NIST_AI_RMF',
+    requirement: 'MEASURE 2.4',
+    section: 'MEASURE',
+    title: 'Deployed AI behavior is monitored in production',
+    description:
+      'Bedrock agents carry provider-native guardrails that enforce input and output protections at runtime.',
+    controls: ['KH-AI-2'],
+    why: 'Guardrail enforcement is the runtime behavior monitoring visible from the collected configuration.',
+  },
+  {
+    framework: 'NIST_AI_RMF',
+    requirement: 'MEASURE 2.7',
+    section: 'MEASURE',
+    title: 'AI security and resilience are evaluated',
+    description:
+      'AI workloads run as non-administrative roles, roles reachable by AI service principals are not wildcard-privileged, and knowledge bases do not ground on publicly accessible data.',
+    controls: ['KH-AI-1', 'KH-AI-3', 'KH-IAM-1'],
+    why: 'Least-privilege identities, trust scoping, and data-boundary controls evidence the security evaluation.',
+  },
+  {
+    framework: 'NIST_AI_RMF',
+    requirement: 'MEASURE 2.10',
+    section: 'MEASURE',
+    title: 'AI privacy risk is examined',
+    description:
+      'Knowledge bases do not ground on publicly accessible buckets, and secret reads are scoped to explicit ARNs.',
+    controls: ['KH-AI-3', 'KH-SEC-1'],
+    why: 'Data-boundary and secret-scoping controls evidence the privacy-risk slice Khalifa can observe.',
+  },
+  {
+    framework: 'NIST_AI_RMF',
+    requirement: 'MANAGE 4.1',
+    section: 'MANAGE',
+    title: 'Post-deployment monitoring and incident response',
+    description:
+      'Unresolved identity anomalies and GuardDuty attack findings on internet-exposed resources are raised as findings.',
+    controls: ['KH-DET-1', 'KH-DET-3'],
+    why: 'Detection outcomes evidence the monitoring and incident-response slice of post-deployment management.',
   },
 ];
 

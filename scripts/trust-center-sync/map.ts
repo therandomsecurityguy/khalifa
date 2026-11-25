@@ -14,6 +14,8 @@ export const SOC2_NAME = 'SOC 2 Trust Services Criteria';
 export const ISO27001_NAME = 'ISO/IEC 27001:2022 Annex A';
 export const PCI_DSS_NAME = 'PCI DSS v4.0';
 export const NIST_800_53_NAME = 'NIST SP 800-53 Rev. 5';
+export const ISO_42001_NAME = 'ISO/IEC 42001:2023 Annex A';
+export const NIST_AI_RMF_NAME = 'NIST AI RMF 1.0';
 
 const MAPPED_FRAMEWORK_META: Record<
   Exclude<PublishedFramework, 'CIS_AWS_FOUNDATIONS'>,
@@ -38,6 +40,16 @@ const MAPPED_FRAMEWORK_META: Record<
     name: NIST_800_53_NAME,
     description:
       'NIST SP 800-53 Rev. 5 controls mapped to the controls Khalifa evaluates. Continuous posture, not a certification.',
+  },
+  ISO_42001: {
+    name: ISO_42001_NAME,
+    description:
+      'Annex A requirements for AI management mapped to the controls Khalifa evaluates. Continuous posture, not a certification.',
+  },
+  NIST_AI_RMF: {
+    name: NIST_AI_RMF_NAME,
+    description:
+      'AI RMF 1.0 subcategories mapped to the controls Khalifa evaluates. Continuous posture, not a certification.',
   },
 };
 

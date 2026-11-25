@@ -407,8 +407,9 @@ and builds the static site in `trust-center/` (plain HTML/CSS, statuses only),
 which is deployed to Cloudflare Pages. See
 [OPERATIONAL.md](OPERATIONAL.md) section J.
 
-Mapped frameworks (SOC 2, ISO 27001, PCI DSS v4.0, NIST SP 800-53 Rev. 5) do
-not define their own catalogs: 52 curated requirements cite the canonical controls
+Mapped frameworks (SOC 2, ISO 27001, PCI DSS v4.0, NIST SP 800-53 Rev. 5,
+ISO/IEC 42001, NIST AI RMF) do not define their own catalogs: 61 curated
+requirements cite the canonical controls
 (`packages/risk-engine/src/framework-citations.ts`), and their reports derive
 from a single canonical assessment pass (no duplicate evaluators, no separate
 evidence rows). The publishable endpoint publishes a mapped requirement only

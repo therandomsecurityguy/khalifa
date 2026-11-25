@@ -89,6 +89,8 @@ describe('ComplianceEngine failure visibility', () => {
       'ISO27001',
       'PCI_DSS',
       'NIST_800_53',
+      'ISO_42001',
+      'NIST_AI_RMF',
     ]);
     expect(run.failures).toEqual([
       'CIS_AWS_FOUNDATIONS CIS_AWS_FOUNDATIONS-1: Neptune query timeout',
