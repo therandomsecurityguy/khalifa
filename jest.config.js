@@ -29,6 +29,14 @@ module.exports = {
       testMatch: ['<rootDir>/src/**/*.test.ts'],
     },
     {
+      displayName: 'mcp-server',
+      rootDir: '<rootDir>/packages/mcp-server',
+      preset: 'ts-jest',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/src/**/*.test.ts'],
+      modulePathIgnorePatterns: ['<rootDir>/dist/'],
+    },
+    {
       displayName: 'api-service',
       rootDir: '<rootDir>/api-service',
       preset: 'ts-jest',

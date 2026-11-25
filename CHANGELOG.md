@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - MCP server
+
+### Added
+
+- **Read-only MCP server** (`packages/mcp-server`, new workspace): eleven tools over the existing REST API — issues (list/get), resources (search/get), attack-path search, compliance summaries and control detail, AI inventory and agent detail, and the AI use-case registry plus its coverage join. stdio transport via `@modelcontextprotocol/sdk`; configuration is `KHALIFA_API_URL` plus either a Cognito Bearer token or a Cloudflare Access JWT, and `--check` validates the configuration and the API's `/livez` probe. Tools register with `readOnlyHint`, no write endpoints are exposed, argument values are never logged, and each call writes an audit line to stderr (tool, argument names, outcome, duration). Tests cover config validation, URL/header/error behavior, every tool's request shape and bounds, an SDK-level handshake over the linked in-memory transport, and an explicit no-write-surface assertion. `build:packages`, the jest projects, and the README index now include the package; nothing changes in the deployment — the server runs wherever an operator runs it.
+
 ## [Unreleased] - AI use-case registry
 
 ### Added
