@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 
 const listUseCases = jest.fn();
 const getUseCase = jest.fn();
