@@ -363,3 +363,46 @@ describe('authenticate middleware', () => {
     expect(req.user!.groups).toEqual(['khalifa-admin', 'khalifa-viewer']);
   });
 });
+
+// The old `^Bearer\s+(.+)$/` regex is a polynomial ReDoS on long whitespace
+// runs (CodeQL js/polynomial-redos); these pin the linear replacement to the
+// regex's exact capture semantics.
+describe('bearerToken', () => {
+  it.each([
+    ['Bearer abc', 'abc'],
+    ['Bearer   abc', 'abc'],
+    ['Bearer\tabc', 'abc'],
+    ['Bearer abc def', 'abc def'],
+    // The regex captured trailing characters verbatim; so does the scan.
+    ['Bearer abc ', 'abc '],
+  ])('extracts the token from %j', async (header, expected) => {
+    const { bearerToken } = await import('../middleware/auth');
+
+    expect(bearerToken(header)).toBe(expected);
+  });
+
+  it.each([
+    [undefined],
+    [''],
+    ['Bearer'],
+    ['Bearer '],
+    ['Bearer    '],
+    ['bearer abc'],
+    ['Basic abc'],
+    ['XBearer abc'],
+  ])('rejects %j', async (header) => {
+    const { bearerToken } = await import('../middleware/auth');
+
+    expect(bearerToken(header)).toBeNull();
+  });
+
+  it('stays linear on a long whitespace run', async () => {
+    const { bearerToken } = await import('../middleware/auth');
+    const header = `Bearer ${' '.repeat(100_000)}token`;
+
+    const started = Date.now();
+
+    expect(bearerToken(header)).toBe('token');
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+});
