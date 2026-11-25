@@ -182,6 +182,9 @@ EKS uses [`deploy/helm/khalifa/values.yaml`](deploy/helm/khalifa/values.yaml). T
 | `CANARY_PRINCIPAL_ARNS`            | Comma-separated canary IAM user ARNs; any CloudTrail activity becomes RULE-023             | —                               |
 | `PROD_ACCOUNT_IDS`                 | Collected accounts that hold production; RULE-032 flags prod secrets shared with the rest  | —                               |
 | `SLACK_WEBHOOK_SECRET_ARN`         | Secrets Manager secret with the Slack webhook URL (bare URL or `{"SLACK_WEBHOOK_URL": …}`) | —                               |
+| `WEBHOOK_URL` / `WEBHOOK_URL_SECRET_ARN` | Generic webhook destination (URL, or the secret holding it — bare or `{"WEBHOOK_URL": …}`) | —                           |
+| `WEBHOOK_SIGNING_SECRET_ARN`       | Secrets Manager secret with the HMAC signing key (bare or `{"WEBHOOK_SIGNING_SECRET": …}`) | —                               |
+| `WEBHOOK_MAX_ATTEMPTS` / `WEBHOOK_TIMEOUT_MS` | Delivery attempts (1-5) and per-attempt timeout (1000-60000 ms)                 | 3 / 10000                       |
 | `RATE_LIMIT_PER_MINUTE`            | Per-identity API request limit per minute                                                  | 600                             |
 | `RATE_LIMIT_EXPENSIVE_PER_MINUTE`  | Per-identity limit on expensive endpoints (attack paths, resource graph, reports)          | 60                              |
 | `DSPM_CLASSIFY_BUDGET_MS`          | Hard CPU budget (ms) for classifying untrusted S3 content per scan                         | 30000                           |
@@ -192,6 +195,8 @@ EKS uses [`deploy/helm/khalifa/values.yaml`](deploy/helm/khalifa/values.yaml). T
 Canary credentials are deployed with `ENABLE_CANARIES=true` in the CDK environment (`cdk/bin/khalifa.ts`): two permission-less IAM users (`khalifa-canary-1/2`) whose access keys are stored in Secrets Manager (`khalifa-canary/credentials-1/2`). The keys have no legitimate use, so any CloudTrail activity from them is treated as a security incident. Off by default.
 
 The Slack sink prefers `SLACK_WEBHOOK_SECRET_ARN` (a bearer-equivalent credential should not ride along as a plaintext Lambda environment variable): the CDK stack stores `SLACK_WEBHOOK_URL` in `khalifa/slack-webhook` at deploy time and grants the risk engine read. The plaintext `SLACK_WEBHOOK_URL` remains only as a local-development fallback.
+
+The generic webhook sink (`webhook` in `ISSUE_SINKS`) POSTs issue events as HMAC-signed JSON: `X-Khalifa-Signature: sha256=<hex>` over `<timestamp>.<raw body>`, with `X-Khalifa-Event` (`issue.created` on first delivery, `issue.updated` on refreshes), a delivery id for receiver-side idempotency, and bounded retries with backoff (5xx/429/network only; 4xx fails fast). A configured URL without a signing secret refuses to deliver — unsigned payloads would invite receivers to trust unauthenticated content — and `/integrations/status` reports the sink's health.
 
 On EKS, the Helm value `collection.prodAccountIds` renders the same `PROD_ACCOUNT_IDS` for the collectors, and `reconciliation.securityHubRegion` pins the Region the compliance role assumes into for Security Hub reads.
 

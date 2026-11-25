@@ -2,6 +2,7 @@ import type { IssueActionSink, IssueLike, RuleLike, ExternalRef } from './types'
 import { getSink } from './types';
 import './sinks/sns-sink';
 import './sinks/slack-sink';
+import './sinks/webhook-sink';
 
 export interface EmitResult {
   externalRefs: ExternalRef[];

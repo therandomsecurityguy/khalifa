@@ -144,11 +144,20 @@
         "issueSinks": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "enum": ["sns"] }
+          "items": { "type": "string", "enum": ["sns", "slack", "webhook"] }
         },
         "issuesTopicArn": {
           "type": "string",
           "pattern": "^$|^arn:(aws|aws-us-gov):sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$"
+        },
+        "webhookUrl": { "type": "string", "pattern": "^$|^https?://.+$" },
+        "webhookUrlSecretArn": {
+          "type": "string",
+          "pattern": "^$|^arn:(aws|aws-us-gov):secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$"
+        },
+        "webhookSigningSecretArn": {
+          "type": "string",
+          "pattern": "^$|^arn:(aws|aws-us-gov):secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$"
         },
         "uiBaseUrl": { "type": "string", "pattern": "^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$" },
         "athenaDatabase": { "type": "string" },

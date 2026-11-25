@@ -32,6 +32,9 @@ data:
   CORS_ALLOWED_ORIGINS: {{ join "," .Values.config.corsAllowedOrigins | quote }}
   ISSUE_SINKS: {{ join "," .Values.config.issueSinks | quote }}
   ISSUES_TOPIC_ARN: {{ .Values.config.issuesTopicArn | quote }}
+  WEBHOOK_URL: {{ .Values.config.webhookUrl | quote }}
+  WEBHOOK_URL_SECRET_ARN: {{ .Values.config.webhookUrlSecretArn | quote }}
+  WEBHOOK_SIGNING_SECRET_ARN: {{ .Values.config.webhookSigningSecretArn | quote }}
   UI_BASE_URL: {{ .Values.config.uiBaseUrl | quote }}
   COMPLIANCE_EVIDENCE_TABLE: {{ .Values.config.evidenceTable | quote }}
   COMPLIANCE_REPORTS_TABLE: {{ .Values.config.reportsTable | quote }}
