@@ -14,6 +14,14 @@ import { listAttackScenarios, runAttackScenario } from './routes/attack-scenario
 import { getDataSources } from './routes/data-sources';
 import { getAiAgent, getAiInventory } from './routes/ai';
 import {
+  createAiUseCase,
+  deleteAiUseCase,
+  getAiUseCase,
+  getAiUseCaseCoverage,
+  listAiUseCases,
+  updateAiUseCase,
+} from './routes/ai-use-cases';
+import {
   getResource,
   searchResources,
   getResourceGraph,
@@ -160,6 +168,13 @@ app.get('/resources/*arn', validateArnPathParam('arn'), requireViewer, getResour
 
 app.get('/ai/inventory', requireViewer, expensiveRateLimiter, getAiInventory);
 app.get('/ai/agents/*arn', validateArnPathParam('arn'), requireViewer, getAiAgent);
+
+app.get('/ai/use-cases', requireViewer, listAiUseCases);
+app.get('/ai/use-cases/coverage', requireViewer, expensiveRateLimiter, getAiUseCaseCoverage);
+app.post('/ai/use-cases', requireAnalyst, createAiUseCase);
+app.get('/ai/use-cases/:id', requireViewer, getAiUseCase);
+app.put('/ai/use-cases/:id', requireAnalyst, updateAiUseCase);
+app.delete('/ai/use-cases/:id', requireAnalyst, deleteAiUseCase);
 
 app.get('/compliance/frameworks', requireViewer, listFrameworks);
 app.get('/compliance/frameworks/:framework/controls', requireViewer, getFrameworkControls);

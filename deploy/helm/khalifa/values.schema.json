@@ -95,6 +95,7 @@
         "threatIntelAccountListS3Uri",
         "threatIntelTtlDays",
         "leastPrivilegeTable",
+        "aiUseCasesTable",
         "cognitoUserPoolId",
         "cognitoClientId",
         "cognitoRegion",
@@ -125,6 +126,7 @@
         "threatIntelAccountListS3Uri": { "type": "string", "pattern": "^(|s3://.+/.+)$" },
         "threatIntelTtlDays": { "type": "integer", "minimum": 1, "maximum": 365 },
         "leastPrivilegeTable": { "type": "string", "minLength": 1 },
+        "aiUseCasesTable": { "type": "string", "minLength": 1 },
         "cognitoUserPoolId": {
           "type": "string",
           "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+_[A-Za-z0-9]+$"

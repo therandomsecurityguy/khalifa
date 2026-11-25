@@ -424,7 +424,7 @@ fail-closed behavior, not a bug.
 | Data                                    | Mechanism                                                                                              | Window                       |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------- |
 | Neptune graph                           | Automated cluster snapshots (`backup_retention_period = 7` in `khalifa-data`) plus a final snapshot on cluster deletion | 7 days         |
-| DynamoDB (all eight tables)             | Point-in-time recovery enabled per table (`dynamodb.tf`)                                                | 35 days                      |
+| DynamoDB (all nine tables)              | Point-in-time recovery enabled per table (`dynamodb.tf`)                                                | 35 days                      |
 | Secrets Manager (`<name_prefix>-khalifa/runtime`, `<name_prefix>-khalifa/neptune-auth`) | Secret recovery window                                                                  | 30 days after deletion       |
 | Athena results / access logs (S3)       | Lifecycle-expired (query results after 7 days) and regenerated on demand                                | n/a                          |
 | Trust center site                       | Regenerated nightly from the publishable endpoint                                                       | n/a — stateless              |

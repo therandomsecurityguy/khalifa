@@ -3,7 +3,7 @@ import openapi from '../openapi.json';
 
 type Item = Record<string, { security?: unknown[] }>;
 
-const HTTP_METHODS = new Set(['get', 'post']);
+const HTTP_METHODS = new Set(['get', 'post', 'put', 'delete']);
 
 // Express path syntax -> OpenAPI path template: `:id` and `*arn` both become
 // `{id}` / `{arn}`.

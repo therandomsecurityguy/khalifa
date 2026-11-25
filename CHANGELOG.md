@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI use-case registry
+
+### Added
+
+- **AI governance objects**: a deployment-owned use-case registry with lite impact assessments (AI AIIA-lite), stored in a new `ai-use-cases` DynamoDB table (PITR, CMK encryption, deletion protection; API-only IAM) and served by `GET/POST /ai/use-cases`, `GET/PUT/DELETE /ai/use-cases/:id` (read Viewer+, write Analyst+ with the actor from the verified token). Entries carry a slug id, owner, status, covered asset ARNs, data classes, and an assessment (status, risk tier, oversight, impacts, notes, reviewer); every field is bounded and validated, both on write and again on read. `GET /ai/use-cases/coverage` joins the registry against the collected AI estate and names unregistered assets and registered assets missing from the graph, with truncation flagged rather than hidden. First write API surface outside issue lifecycle, so the OpenAPI parity test now covers PUT/DELETE too.
+
 ## [Unreleased] - AI governance frameworks
 
 ### Added

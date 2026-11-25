@@ -102,6 +102,7 @@ output "helm_values" {
       threatIntelAccountListS3Uri = var.threat_intel_account_list_s3_uri
       threatIntelTtlDays          = var.threat_intel_ttl_days
       leastPrivilegeTable         = aws_dynamodb_table.least_privilege.name
+      aiUseCasesTable             = aws_dynamodb_table.ai_use_cases.name
       cognitoUserPoolId           = aws_cognito_user_pool.this.id
       cognitoClientId             = aws_cognito_user_pool_client.this.id
       cognitoRegion               = data.aws_region.current.region

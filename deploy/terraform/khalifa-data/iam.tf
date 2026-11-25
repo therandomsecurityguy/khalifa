@@ -21,6 +21,7 @@ locals {
     aws_dynamodb_table.posture_trends.arn,
     aws_dynamodb_table.access_analyzer.arn,
     aws_dynamodb_table.least_privilege.arn,
+    aws_dynamodb_table.ai_use_cases.arn,
   ]
   dynamodb_full_actions = [
     "dynamodb:BatchGetItem",

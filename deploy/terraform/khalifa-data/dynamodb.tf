@@ -315,3 +315,30 @@ resource "aws_dynamodb_table" "threat_indicators" {
 
   tags = merge(var.tags, { Name = "${local.name}-threat-indicators" })
 }
+
+# AI governance objects: the deployment-owned use-case registry and its lite
+# impact assessments. API-only (no collector or rule-runner access); a
+# hand-maintained table, so it stays small and needs no indexes.
+resource "aws_dynamodb_table" "ai_use_cases" {
+  name         = "${local.name}-ai-use-cases"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  deletion_protection_enabled = true
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.this.arn
+  }
+
+  tags = merge(var.tags, { Name = "${local.name}-ai-use-cases" })
+}

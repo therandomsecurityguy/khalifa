@@ -46,6 +46,7 @@ config:
   postureTrendsTable: validation-khalifa-posture-trends
   accessAnalyzerTable: validation-khalifa-access-analyzer
   leastPrivilegeTable: validation-khalifa-least-privilege
+  aiUseCasesTable: validation-khalifa-ai-use-cases
   cognitoUserPoolId: us-west-2_validation
   cognitoClientId: validationclient
   cognitoRegion: us-west-2
