@@ -316,6 +316,33 @@ resource "aws_dynamodb_table" "threat_indicators" {
   tags = merge(var.tags, { Name = "${local.name}-threat-indicators" })
 }
 
+# Scoped service tokens: machine credentials for automation, minted and
+# revoked through the API. Only a SHA-256 hash of each secret is stored; a
+# hand-maintained table, so no indexes are needed. API-only.
+resource "aws_dynamodb_table" "service_tokens" {
+  name         = "${local.name}-service-tokens"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  deletion_protection_enabled = true
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.this.arn
+  }
+
+  tags = merge(var.tags, { Name = "${local.name}-service-tokens" })
+}
+
 # AI governance objects: the deployment-owned use-case registry and its lite
 # impact assessments. API-only (no collector or rule-runner access); a
 # hand-maintained table, so it stays small and needs no indexes.

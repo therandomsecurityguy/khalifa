@@ -35,7 +35,7 @@ is a certification.
 | Variable             | Default | Purpose                                                                                                                           |
 | -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `KHALIFA_API_URL`    | —       | API origin. With the reference deployment: `kubectl -n khalifa port-forward svc/khalifa-api 8080:80` then `http://localhost:8080` |
-| `KHALIFA_TOKEN`      | —       | Cognito access token, sent as `Authorization: Bearer`                                                                             |
+| `KHALIFA_TOKEN`      | —       | Cognito access token or a Khalifa service token (`khalifa_…`), sent as `Authorization: Bearer`                                    |
 | `KHALIFA_ACCESS_JWT` | —       | Cloudflare Access JWT, sent as `cf-access-jwt-assertion` (used when no Bearer token is set)                                       |
 | `KHALIFA_TIMEOUT_MS` | `15000` | Request timeout, 1000–120000                                                                                                      |
 

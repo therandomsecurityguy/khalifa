@@ -68,6 +68,10 @@
     {
       "name": "Integrations",
       "description": "Issue sinks."
+    },
+    {
+      "name": "Administration",
+      "description": "Automation credentials (service tokens)."
     }
   ],
   "paths": {
@@ -1668,6 +1672,122 @@
         "responses": {
           "200": {
             "description": "Deletion confirmation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/service-tokens": {
+      "get": {
+        "tags": ["Administration"],
+        "operationId": "listServiceTokens",
+        "summary": "Automation tokens (metadata only)",
+        "description": "Requires **Admin**. Never returns token material: the secret exists only in the create response.",
+        "responses": {
+          "200": {
+            "description": "Token metadata (id, name, role, expiry, last use, revocation).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Administration"],
+        "operationId": "createServiceToken",
+        "summary": "Mint an automation token",
+        "description": "Requires **Admin**. Returns the plaintext token once; only its hash is stored. Roles are viewer or analyst — administrative roles cannot be minted. Expiry is mandatory (1-90 days).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "maxLength": 120 },
+                  "role": {
+                    "type": "string",
+                    "enum": ["viewer", "analyst"]
+                  },
+                  "expiresInDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 90
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`token` (plaintext, shown once) and `tokenRecord` (metadata).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/service-tokens/{id}": {
+      "delete": {
+        "tags": ["Administration"],
+        "operationId": "revokeServiceToken",
+        "summary": "Revoke an automation token",
+        "description": "Requires **Admin**. Revocation takes effect on the next request.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Token id (UUID).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revocation confirmation.",
             "content": {
               "application/json": {
                 "schema": {

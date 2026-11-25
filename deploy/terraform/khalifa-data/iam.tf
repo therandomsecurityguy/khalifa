@@ -22,6 +22,7 @@ locals {
     aws_dynamodb_table.access_analyzer.arn,
     aws_dynamodb_table.least_privilege.arn,
     aws_dynamodb_table.ai_use_cases.arn,
+    aws_dynamodb_table.service_tokens.arn,
   ]
   dynamodb_full_actions = [
     "dynamodb:BatchGetItem",

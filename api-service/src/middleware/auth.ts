@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { jwtVerify, createRemoteJWKSet, type JWTPayload } from 'jose';
+import { verifyServiceToken } from '../services/service-token-store';
 
 export const ACCESS_JWT_HEADER = 'cf-access-jwt-assertion';
 
@@ -43,10 +44,14 @@ export interface AuthenticatedUser {
   sub: string;
   email?: string;
   groups: string[];
-  tokenUse: 'id' | 'access';
+  tokenUse: 'id' | 'access' | 'service';
   // Set only for the trust-center sync's Cloudflare Access service token. It
   // carries no email or groups, so hasRole() denies it every staff route.
   serviceToken?: boolean;
+  // Set for a Khalifa automation token (see service-token-store.ts): the
+  // token's id and the role it carries. Administrative roles cannot be
+  // minted, so automation can never reach admin-only routes.
+  automation?: { tokenId: string; role: 'viewer' | 'analyst' };
 }
 
 declare module 'express-serve-static-core' {
@@ -193,6 +198,34 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   const token = bearerToken(req.headers.authorization);
   const cognito = getCognitoConfig();
   const access = getAccessConfig();
+
+  // A Khalifa automation token is self-describing and self-contained: it is
+  // verified against its own store before any JWT path (it is never a JWT, and
+  // the store — not Cognito — is its authenticator).
+  if (token && token.startsWith('khalifa_')) {
+    let verified;
+    try {
+      verified = await verifyServiceToken(token);
+    } catch (error) {
+      console.error('Service token verification failed:', error);
+      res
+        .status(503)
+        .json({ code: 'AUTH_UNAVAILABLE', message: 'Authentication store unavailable' });
+      return;
+    }
+    if (!verified) {
+      rejectUnauthorized(res);
+      return;
+    }
+    req.user = {
+      sub: `automation:${verified.id}`,
+      groups: [`khalifa-${verified.role}`],
+      tokenUse: 'service',
+      automation: { tokenId: verified.id, role: verified.role },
+    };
+    next();
+    return;
+  }
 
   if (token && cognito) {
     await verifyCognitoBearer(req, res, next, token, cognito);
