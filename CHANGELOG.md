@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Bearer parsing without backtracking
+
+### Fixed
+
+- **The auth middleware no longer parses `Authorization: Bearer` with `^Bearer\s+(.+)$/`**, the pattern behind two pre-existing CodeQL `js/polynomial-redos` alerts on `api-service/src/middleware/auth.ts` (quadratic backtracking on long whitespace runs). A linear scan now extracts the token with identical capture semantics — case-sensitive `Bearer` prefix, at least one whitespace character, non-empty token, leading whitespace skipped, trailing characters kept verbatim — and tests pin every branch (multiple spaces, tab, empty token, wrong scheme, case) plus a 100k-space run that must finish in well under a second. Nothing else in the middleware changes.
+
 ## [Unreleased] - MCP server
 
 ### Added

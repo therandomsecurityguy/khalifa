@@ -3,6 +3,42 @@ import { jwtVerify, createRemoteJWKSet, type JWTPayload } from 'jose';
 
 export const ACCESS_JWT_HEADER = 'cf-access-jwt-assertion';
 
+const BEARER_PREFIX = 'Bearer';
+
+// Header whitespace per RFC 9110 (SP / HTAB); the other `\s` characters cannot
+// appear in a Node header value, but accepting them keeps this equivalent to
+// the regex it replaces.
+function isWhitespaceCharacter(character: string): boolean {
+  return (
+    character === ' ' ||
+    character === '\t' ||
+    character === '\n' ||
+    character === '\r' ||
+    character === '\f' ||
+    character === '\v'
+  );
+}
+
+/**
+ * The token from an `Authorization: Bearer <token>` header, or null when the
+ * header does not match. Extracted with a linear scan instead of
+ * `/^Bearer\s+(.+)$/`: CodeQL flags that pattern (js/polynomial-redos) because
+ * `\s+` and `.+` both match whitespace, so a long whitespace run makes the
+ * engine backtrack quadratically. Semantics are unchanged: the value must
+ * start with `Bearer` (case-sensitive), carry at least one whitespace
+ * character, and a non-empty token; leading whitespace is skipped and the
+ * token keeps any trailing characters verbatim.
+ */
+export function bearerToken(headerValue: string | undefined): string | null {
+  const value = headerValue || '';
+  if (!value.startsWith(BEARER_PREFIX)) return null;
+  let start = BEARER_PREFIX.length;
+  if (!isWhitespaceCharacter(value[start] ?? '')) return null;
+  while (start < value.length && isWhitespaceCharacter(value[start])) start += 1;
+  const token = value.slice(start);
+  return token.length > 0 ? token : null;
+}
+
 export interface AuthenticatedUser {
   sub: string;
   email?: string;
@@ -154,13 +190,12 @@ function rejectNotConfigured(res: Response): void {
 }
 
 export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const auth = req.headers.authorization || '';
-  const match = auth.match(/^Bearer\s+(.+)$/);
+  const token = bearerToken(req.headers.authorization);
   const cognito = getCognitoConfig();
   const access = getAccessConfig();
 
-  if (match && cognito) {
-    await verifyCognitoBearer(req, res, next, match[1], cognito);
+  if (token && cognito) {
+    await verifyCognitoBearer(req, res, next, token, cognito);
     return;
   }
 
@@ -226,9 +261,7 @@ export function optionalAuthenticate(req: Request, _res: Response, next: NextFun
     next();
     return;
   }
-  const auth = req.headers.authorization || '';
-  const match = auth.match(/^Bearer\s+(.+)$/);
-  if (!match) {
+  if (!bearerToken(req.headers.authorization)) {
     next();
     return;
   }
