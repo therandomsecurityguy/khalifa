@@ -54,6 +54,8 @@ config:
   cloudflareAccessTeamDomain: example-team.cloudflareaccess.com
   cloudflareAccessAud: validation-khalifa-access-aud
   accessTrustedEmailDomain: example.com
+  aiPrincipalAllowlist:
+    - arn:aws:iam::111122223333:role/validation-ai-team
   corsAllowedOrigins:
     - https://khalifa.validation.invalid
   issueSinks:

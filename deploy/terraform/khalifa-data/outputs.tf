@@ -108,6 +108,7 @@ output "helm_values" {
       cognitoClientId             = aws_cognito_user_pool_client.this.id
       cognitoRegion               = data.aws_region.current.region
       accessTrustedEmailDomain    = var.access_trusted_email_domain
+      aiPrincipalAllowlist        = distinct(concat([aws_iam_role.workloads["organization-collector"].arn, aws_iam_role.workloads["incremental-collector"].arn], var.ai_principal_allowlist))
       corsAllowedOrigins          = [var.ui_base_url]
       issueSinks                  = ["sns"]
       issuesTopicArn              = aws_sns_topic.issues.arn

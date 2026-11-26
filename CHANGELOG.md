@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Shadow-AI detection (Phase 2)
+
+### Added
+
+- **`SHADOW_AI_USAGE` CloudTrail anomaly (RULE-043) and the KH-AI-4 control**: the analyzer evaluates the last 7 days of Bedrock and SageMaker management-plane API calls (bedrock, bedrock-agent, bedrock-agent-runtime, sagemaker, sagemaker-runtime event sources), groups them by canonical principal — role sessions collapse to their role, so one allowlist entry covers every session — and source IP, and flags every principal outside `AI_PRINCIPAL_ALLOWLIST`; the anomaly detail carries the API calls seen. The data module and the CDK stack always seed the allowlist with the home collector roles (their own reads never flag), and an empty allowlist deliberately flags every principal. RULE-043 is a lead (auto-ticketing off; calibration reads `/rules/quality`) and KH-AI-4 judges the posture from its open findings (rule-backed control, cited from ISO 42001 A.6.2.6). Coverage is stated on every surface: model-invocation (data-plane) calls — `InvokeModel`, `InvokeAgent`, `InvokeEndpoint` — appear only when CloudTrail data events are enabled, so with them off this detection sees the management plane only and says so. Wiring: `ai_principal_allowlist` (Terraform variable → `helm_values`) and the chart's `config.aiPrincipalAllowlist` (schema-validated IAM user/role ARNs) render `AI_PRINCIPAL_ALLOWLIST` into the analyzer's configmap. Tests cover the allowlist parser, session-to-role canonicalization, the detection filter, the query shape, the pipeline path, RULE-043's graph matching, the reviewed control mapping, and the pinned rule/control counts.
+
 ## [Unreleased] - Security hardening (batch 2)
 
 ### Security

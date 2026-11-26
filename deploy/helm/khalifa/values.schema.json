@@ -182,6 +182,14 @@
             "type": "string",
             "pattern": "^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:user/[A-Za-z0-9+=,.@_/-]+$"
           }
+        },
+        "aiPrincipalAllowlist": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:(user|role)/[A-Za-z0-9+=,.@_/-]+$"
+          }
         }
       }
     },

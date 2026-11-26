@@ -15,7 +15,8 @@ export type AnomalyType =
   | 'ACCESS_DENIED_SPIKE'
   | 'CANARY_USED'
   | 'NEW_API_FOR_PRINCIPAL'
-  | 'UNUSUAL_HOUR_ACTIVITY';
+  | 'UNUSUAL_HOUR_ACTIVITY'
+  | 'SHADOW_AI_USAGE';
 
 export interface AnomalyRecord {
   type: AnomalyType;
@@ -56,8 +57,23 @@ export const MAX_ANOMALY_DETAIL = 200;
 const QUERY_TYPES_WITH_DETAIL = new Set<AnomalyType>([
   'NEW_API_FOR_PRINCIPAL',
   'UNUSUAL_HOUR_ACTIVITY',
+  'SHADOW_AI_USAGE',
 ]);
 const MAX_QUERY_DAYS = 365;
+
+// Bedrock and SageMaker event sources: the managed AI services whose
+// management-plane calls appear in CloudTrail by default. Model-invocation
+// (data-plane) calls — InvokeModel, InvokeAgent, InvokeEndpoint — appear only
+// when the operator enables CloudTrail data events; when they are off, this
+// detection sees management-plane usage only and every surface built on it
+// must say so.
+export const AI_SERVICE_EVENT_SOURCES = [
+  'bedrock.amazonaws.com',
+  'bedrock-agent.amazonaws.com',
+  'bedrock-agent-runtime.amazonaws.com',
+  'sagemaker.amazonaws.com',
+  'sagemaker-runtime.amazonaws.com',
+];
 
 export function assertAthenaDatabase(value: string): string {
   if (!/^[A-Za-z_][A-Za-z0-9_]{0,254}$/.test(value.trim()) || value !== value.trim()) {
@@ -94,6 +110,50 @@ export function parseCanaryPrincipalArns(value: string | undefined): string[] {
     }
   }
   return arns;
+}
+
+// Allowlisted AI principals are canonical IAM user or role ARNs. Role entries
+// cover their assumed-role sessions through the canonicalization below, so the
+// allowlist does not churn with session names.
+const AI_PRINCIPAL_ARN_PATTERN =
+  /^arn:aws(?:-us-gov|-cn)?:iam::\d{12}:(?:user|role)\/[A-Za-z0-9+=,.@_/-]+$/;
+
+export function parseAiPrincipalAllowlist(value: string | undefined): string[] {
+  if (!value?.trim()) return [];
+  const arns = value
+    .split(',')
+    .map((arn) => arn.trim())
+    .filter(Boolean);
+  for (const arn of arns) {
+    if (!AI_PRINCIPAL_ARN_PATTERN.test(arn)) {
+      throw new Error(`AI_PRINCIPAL_ALLOWLIST contains an invalid IAM user or role ARN: ${arn}`);
+    }
+  }
+  return arns;
+}
+
+/** Canonical IAM role ARN for a (possibly session-scoped) assumed-role ARN. */
+export function assumedRoleToIamArn(arn: string): string | null {
+  const match = arn.match(/^arn:(aws[a-z-]*):sts::(\d{12}):assumed-role\/([^/]+)(?:\/.*)?$/);
+  return match ? `arn:${match[1]}:iam::${match[2]}:role/${match[3]}` : null;
+}
+
+// The allowlist filter runs here rather than in SQL so a role entry matches
+// both the canonical assumed-role principal and any session-scoped form. An
+// empty allowlist flags every principal: the deployment has not declared which
+// AI usage is sanctioned, and the finding — not the silence — is the honest
+// state.
+export function detectShadowAiUsage(
+  records: AnomalyRecord[],
+  allowlist: string[] = []
+): AnomalyRecord[] {
+  if (allowlist.length === 0) return records;
+  const allowed = new Set(allowlist);
+  return records.filter((record) => {
+    if (allowed.has(record.principalArn)) return false;
+    const roleArn = assumedRoleToIamArn(record.principalArn);
+    return roleArn === null || !allowed.has(roleArn);
+  });
 }
 
 export function buildAnomalyQueries(
@@ -259,6 +319,36 @@ export function buildAnomalyQueries(
       AND reads.activity_hour = baseline_hours.activity_hour
     WHERE baseline_hours.principal_arn IS NULL
     GROUP BY reads.principal_arn, reads.source_ip
+  `,
+    },
+    {
+      type: 'SHADOW_AI_USAGE',
+      // Bedrock/SageMaker management-plane usage over the behavioural window,
+      // grouped by canonical principal (role sessions collapse to their role)
+      // and source IP. The AI_PRINCIPAL_ALLOWLIST filter runs in TypeScript
+      // (detectShadowAiUsage) so one role entry covers every session; an empty
+      // allowlist deliberately flags every principal, and the finding's
+      // coverage notes the data-plane gap when CloudTrail data events are off.
+      sql: `
+    SELECT
+      CASE
+        WHEN useridentity.arn LIKE 'arn:aws%:sts::%:assumed-role/%'
+          THEN regexp_replace(useridentity.arn, '^(arn:aws[a-z-]*:sts::[0-9]{12}:assumed-role/[^/]+)/.+$', '$1')
+        ELSE useridentity.arn
+      END AS principal_arn,
+      sourceipaddress AS source_ip,
+      COUNT(*) AS event_count,
+      from_iso8601_timestamp(MIN(eventtime)) AS first_seen,
+      from_iso8601_timestamp(MAX(eventtime)) AS last_seen,
+      array_join(array_agg(DISTINCT eventname), ', ') AS detail
+    FROM ${database}.cloudtrail_logs
+    WHERE ${partitionWindow(UEBA_WINDOW_DAYS)}
+      AND from_iso8601_timestamp(eventtime) >= current_timestamp - interval '${UEBA_WINDOW_DAYS}' day
+      AND useridentity.arn IS NOT NULL
+      AND useridentity.arn != ''
+      AND sourceipaddress IS NOT NULL
+      AND eventsource IN (${AI_SERVICE_EVENT_SOURCES.map((source) => `'${source}'`).join(', ')})
+    GROUP BY 1, 2
   `,
     },
     {

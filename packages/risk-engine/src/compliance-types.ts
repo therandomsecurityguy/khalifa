@@ -1467,6 +1467,22 @@ export const KHALIFA_BASELINE_CONTROLS: ComplianceControl[] = [
     remediationGuidance:
       'Remove public access from the source bucket, including the account-level Block Public Access setting, or move the data to a private bucket.',
   },
+  {
+    id: 'KH-AI-4',
+    framework: 'KHALIFA_BASELINE',
+    section: 'AI security',
+    title: 'Ensure AI services are used only by approved principals',
+    description:
+      "Open shadow-AI anomalies: Bedrock or SageMaker management-plane API calls by a principal outside the deployment's AI_PRINCIPAL_ALLOWLIST. Coverage is the collected CloudTrail management plane — model-invocation (data-plane) calls appear only when CloudTrail data events are enabled, so a passing status does not clear data-plane usage. Judged from RULE-043: any open finding fails the control until the usage is sanctioned or stops.",
+    severity: 'medium',
+    automated: true,
+    relatedRules: ['RULE-043'],
+    evidenceRequirements: [
+      'Open CloudTrailAnomaly findings of type SHADOW_AI_USAGE (RULE-043), per account/region; the anomaly detail carries the API calls seen.',
+    ],
+    remediationGuidance:
+      'Add the sanctioned service principals to ai_principal_allowlist (AI_PRINCIPAL_ALLOWLIST), or stop the unapproved usage; investigate when the identity had no reason to call AI services.',
+  },
 ];
 
 // Controls whose evidence comes from per-region resources. Their result only

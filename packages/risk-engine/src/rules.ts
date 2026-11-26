@@ -1025,6 +1025,26 @@ export const riskRules: RiskRule[] = [
       enabled: false,
     },
   },
+  {
+    id: 'RULE-043',
+    name: 'AI Service Used by an Unapproved Principal',
+    description:
+      "Detects Bedrock or SageMaker management-plane API calls by a principal that is not in the deployment's AI_PRINCIPAL_ALLOWLIST (an empty allowlist flags every principal). An unapproved identity or application using managed AI services is shadow AI: usage nobody sanctioned, bills nobody owns and data flows nobody reviewed. Model-invocation (data-plane) calls appear only when CloudTrail data events are enabled, so the absence of this finding is not proof of the absence of AI usage; the finding is a lead, so auto-ticketing stays off",
+    severityHint: 'medium',
+    riskFactors: [...baseRiskFactors],
+    gremlinQueryTemplate: `
+      g.V().hasLabel('CloudTrailAnomaly')
+        .has('anomaly_type', 'SHADOW_AI_USAGE')
+        .as('anomaly')
+        .${PATH_PROJECTION}
+    `,
+    ownerTeam: 'detection-response',
+    enabled: true,
+    // No tickets until the firing rate has been observed on real data.
+    autoTicketConfig: {
+      enabled: false,
+    },
+  },
 ];
 
 export function getEnabledRules(): RiskRule[] {

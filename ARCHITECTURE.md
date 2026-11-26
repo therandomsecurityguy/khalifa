@@ -91,7 +91,7 @@ flowchart LR
 
     subgraph DETECT["Detection pipelines"]
         direction TB
-        CTA["CloudTrail Analyzer (daily)<br/>usage profile + anomaly queries:<br/>ROOT_USAGE, SECRET_READ_NEW_SOURCE_IP,<br/>ACCESS_DENIED_SPIKE, CANARY_USED,<br/>NEW_API_FOR_PRINCIPAL, UNUSUAL_HOUR_ACTIVITY"]
+        CTA["CloudTrail Analyzer (daily)<br/>usage profile + anomaly queries:<br/>ROOT_USAGE, SECRET_READ_NEW_SOURCE_IP,<br/>ACCESS_DENIED_SPIKE, CANARY_USED,<br/>NEW_API_FOR_PRINCIPAL, UNUSUAL_HOUR_ACTIVITY,<br/>SHADOW_AI_USAGE"]
         DSPM["DSPM Scanner<br/>S3 objects + Lambda env vars<br/>(in-memory classification)"]
     end
 
@@ -99,7 +99,7 @@ flowchart LR
         direction TB
         PE["Policy Evaluator (6h):<br/>effective permissions,<br/>escalation + pass-role paths"]
         LPS["Least-Privilege Sweep (daily):<br/>rightsizing vs CloudTrail usage"]
-        RE["Risk Engine (hourly):<br/>42 rules, attack paths, scoring"]
+        RE["Risk Engine (hourly):<br/>43 rules, attack paths, scoring"]
         COMP["Compliance:<br/>CIS v3.0.0 + Khalifa baseline<br/>(Security Hub reconciliation)"]
     end
 
@@ -161,6 +161,7 @@ A scheduled Lambda (`lambdas/cloudtrail-analyzer`) runs daily (02:00 UTC) and ex
 - **Usage profile:** per-principal event counts joined with IAM effective permissions by the least-privilege sweep (persisted to `AccessAnalyzerCache` with a 90-day TTL).
 - **Anomaly queries (baseline deviations):** root-identity activity; Secrets Manager reads from a source IP absent from the principal's own 30-day source-IP baseline (an IP dormant for the baseline and used again counts as new); and AccessDenied spikes judged per principal and IP against that pair's daily-count baseline — mean + 3 standard deviations (with 10% of the mean as a floor on the spread, and a floor of 10 events), falling back to the previous fixed 20-per-lookback threshold while fewer than 7 baseline days exist (cold start). Each spike records `baseline_mean`, `baseline_stddev`, `baseline_days`, `basis` and `deviation` so the ranking is explainable; the principal's blast radius then ranks it in scoring like any other finding. Anomalies are written as `CloudTrailAnomaly` vertices through the graph writer under the `cloudtrail-anomalies` reconcile scope, so each run removes anomalies that stop appearing. Detection feeds RULE-020, RULE-021, and RULE-022.
 - **Canary tripwire:** when `CANARY_PRINCIPAL_ARNS` is set (populated automatically when the CDK stack deploys with `enableCanaries`), any CloudTrail activity from those principals produces a `CANARY_USED` anomaly. Canary keys are permission-less decoys stored in Secrets Manager (`khalifa-canary/credentials-1/2`) and tagged `canary: true`; their only purpose is to appear in CloudTrail when an attacker tries them. RULE-023 treats any use as a critical incident.
+- **Shadow-AI usage:** Bedrock and SageMaker management-plane API calls in the behavioural window (7 days), grouped by canonical principal (role sessions collapse to their role) and source IP, produce a `SHADOW_AI_USAGE` anomaly for every principal outside `AI_PRINCIPAL_ALLOWLIST`. The deployment always seeds the list with the home collector roles (the module and the CDK stack do this); an empty allowlist deliberately flags every principal, and the anomaly's detail carries the API calls seen. Model-invocation (data-plane) calls — `InvokeModel`, `InvokeAgent`, `InvokeEndpoint` — appear only when CloudTrail data events are enabled, so with them off the detection sees the management plane only and says so. RULE-043 raises the finding as a lead (no auto-ticketing), KH-AI-4 judges the posture from it, and the finding resolves when the usage stops or the principal is allowlisted.
 
 ## Least-Privilege Sweep
 

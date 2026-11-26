@@ -140,6 +140,19 @@ variable "access_trusted_email_domain" {
   }
 }
 
+variable "ai_principal_allowlist" {
+  description = "Additional IAM user or role ARNs whose Bedrock/SageMaker usage is sanctioned. The home-account collector roles are always included; with none listed, every other principal using those APIs is flagged as shadow AI."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for arn in var.ai_principal_allowlist : can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:(user|role)/[A-Za-z0-9+=,.@_/-]+$", arn))
+    ])
+    error_message = "ai_principal_allowlist must contain IAM user or role ARNs."
+  }
+}
+
 variable "dspm_bucket_allowlist" {
   description = "Buckets the DSPM scanner may read object content from. Empty keeps the historical all-buckets grant."
   type        = list(string)

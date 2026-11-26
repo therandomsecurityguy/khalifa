@@ -261,6 +261,8 @@ export function getRemediationHint(ruleId: string, _context: Record<string, any>
       "Scope the tool Lambda's role to the actions the tool performs; an identity an agent can invoke should never be administrative.",
     'RULE-042':
       "Scope the role's wildcard-resource statements to the specific ARNs the AI workloads need, and give each workload its own role instead of one the AI services share.",
+    'RULE-043':
+      'Add the sanctioned service principals to ai_principal_allowlist (or stop the usage), and investigate when the identity had no reason to call Bedrock or SageMaker.',
   };
 
   return (

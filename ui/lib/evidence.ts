@@ -247,6 +247,7 @@ const DECISIVE: Record<string, string[]> = {
   'RULE-022': ['anomaly_type'],
   'RULE-023': ['anomaly_type'],
   'RULE-024': ['metadata_http_tokens', 'state'],
+  'RULE-043': ['anomaly_type', 'principal_arn', 'event_count'],
   'RULE-025': ['status'],
   'RULE-026': ['key_manager', 'key_state', 'rotation_enabled'],
   'RULE-027': ['flow_logs_enabled'],

@@ -14,10 +14,13 @@ import {
   assertAthenaDatabase,
   buildAnomalyQueries,
   buildAnomalyNodes,
+  detectShadowAiUsage,
+  parseAiPrincipalAllowlist,
   parseAnomalyRow,
   parseCanaryPrincipalArns,
   partitionWindow,
   reconcileAnomalies,
+  type AnomalyRecord,
 } from './src/anomalies';
 import { detectDeniedSpikes, parseDeniedCountRow } from './src/baseline';
 
@@ -47,6 +50,7 @@ interface AnalyzerConfig {
   graphWriterFunctionName: string;
   graphWriterUrl: string;
   canaryPrincipalArns: string[];
+  aiPrincipalAllowlist: string[];
 }
 
 interface AnomalyBatch {
@@ -194,6 +198,7 @@ function loadConfig(environment: NodeJS.ProcessEnv): AnalyzerConfig {
     graphWriterFunctionName: environment.GRAPH_WRITER_FUNCTION_NAME || '',
     graphWriterUrl: environment.GRAPH_WRITER_URL?.trim() || '',
     canaryPrincipalArns: parseCanaryPrincipalArns(environment.CANARY_PRINCIPAL_ARNS),
+    aiPrincipalAllowlist: parseAiPrincipalAllowlist(environment.AI_PRINCIPAL_ALLOWLIST),
   };
 }
 
@@ -350,13 +355,23 @@ async function detectAnomalies(
     // The denied-spike query returns daily counts, not finished anomalies:
     // the deviation decision (baseline mean and spread, floor, cold-start
     // fallback) runs here so it is testable against historical windows.
-    const records =
-      anomalyQuery.type === 'ACCESS_DENIED_SPIKE'
-        ? detectDeniedSpikes(
-            rows.map((row, index) => parseDeniedCountRow(row.Data || [], index + 2)),
-            new Date(observedAt)
-          )
-        : rows.map((row, index) => parseAnomalyRow(anomalyQuery.type, row.Data || [], index + 2));
+    let records: AnomalyRecord[];
+    if (anomalyQuery.type === 'ACCESS_DENIED_SPIKE') {
+      records = detectDeniedSpikes(
+        rows.map((row, index) => parseDeniedCountRow(row.Data || [], index + 2)),
+        new Date(observedAt)
+      );
+    } else {
+      const parsed = rows.map((row, index) =>
+        parseAnomalyRow(anomalyQuery.type, row.Data || [], index + 2)
+      );
+      // Shadow-AI allowlisting runs here so a role entry covers its
+      // assumed-role sessions; the SQL groups those sessions canonically.
+      records =
+        anomalyQuery.type === 'SHADOW_AI_USAGE'
+          ? detectShadowAiUsage(parsed, config.aiPrincipalAllowlist)
+          : parsed;
+    }
     logger.info(`Anomaly query ${anomalyQuery.type} returned ${records.length} records`);
     if (records.length === 0) continue;
 

@@ -45,6 +45,7 @@ data:
   ATHENA_RESULTS_S3_LOCATION: {{ .Values.config.athenaResultsLocation | quote }}
   ANALYSIS_DAYS: {{ .Values.config.analysisDays | quote }}
   CANARY_PRINCIPAL_ARNS: {{ join "," .Values.config.canaryPrincipalArns | quote }}
+  AI_PRINCIPAL_ALLOWLIST: {{ join "," .Values.config.aiPrincipalAllowlist | quote }}
   DSPM_SCAN_MODE: {{ .Values.config.dspmScanMode | quote }}
   RULE_RUNNER_SCHEDULE: {{ .Values.ruleRunner.schedule | quote }}
   RULE_RUNNER_TIMEZONE: {{ default "UTC" .Values.ruleRunner.timeZone | quote }}
