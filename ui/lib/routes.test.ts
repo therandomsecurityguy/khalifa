@@ -24,6 +24,8 @@ describe('UI routes', () => {
     expect(activeRoute('/issues/RULE-013-v2-abc')?.label).toBe('Issues');
     expect(activeRoute('/identity/trust-graph')?.label).toBe('Identity');
     expect(activeRoute('/least-privilege')?.label).toBe('Identity');
+    expect(activeRoute('/ai')?.label).toBe('AI inventory');
+    expect(activeRoute('/ai/shadow')?.label).toBe('Shadow AI');
     expect(activeRoute('/issuesx')).toBeUndefined();
   });
 

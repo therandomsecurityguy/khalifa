@@ -34,7 +34,7 @@ describe('MCP server over linked transports', () => {
     const { server, client } = await connect(jsonResponse(200, { items: [{ id: 'issue-1' }] }));
 
     const listed = await client.listTools();
-    expect(listed.tools).toHaveLength(11);
+    expect(listed.tools).toHaveLength(12);
     expect(listed.tools.map((entry) => entry.name)).toContain('list_issues');
     expect(listed.tools.every((entry) => entry.annotations?.readOnlyHint === true)).toBe(true);
 

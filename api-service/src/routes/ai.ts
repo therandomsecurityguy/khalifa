@@ -87,6 +87,91 @@ export async function getAiBom(_req: Request, res: Response): Promise<void> {
   }
 }
 
+export const AI_SHADOW_DEFAULT_LIMIT = 50;
+const AI_SHADOW_MAX_LIMIT = 200;
+// The analyzer runs daily, so freshness is graded against its cadence — two
+// runs' worth is still fresh — not the collector's 8-hour window.
+export const SHADOW_FRESH_HOURS = 48;
+export const SHADOW_STALE_HOURS = 96;
+
+export type ShadowFreshness = 'fresh' | 'aging' | 'stale' | 'unknown';
+
+export function freshnessFor(ageHours: number | null): ShadowFreshness {
+  if (ageHours === null || !Number.isFinite(ageHours)) return 'unknown';
+  if (ageHours <= SHADOW_FRESH_HOURS) return 'fresh';
+  if (ageHours <= SHADOW_STALE_HOURS) return 'aging';
+  return 'stale';
+}
+
+function text(value: unknown): string {
+  return typeof value === 'string'
+    ? value
+    : value === undefined || value === null
+      ? ''
+      : String(value);
+}
+
+// Active shadow-AI anomalies with an explicit coverage statement: the
+// management plane is what CloudTrail records by default, and Khalifa cannot
+// verify whether the operator enabled data events, so the response says which
+// plane it saw rather than implying completeness. `lastAnomalyObservedAt` is
+// the analyzer's last recorded marker; it writes vertices only when it finds
+// something, so null means "unknown", never "clean".
+export async function getShadowAiAnomalies(req: Request, res: Response): Promise<void> {
+  try {
+    const limit = parseBoundedInteger(
+      req.query.limit,
+      AI_SHADOW_DEFAULT_LIMIT,
+      1,
+      AI_SHADOW_MAX_LIMIT,
+      'limit'
+    );
+    const [vertices, lastObservedAt] = await Promise.all([
+      neptuneClient.listShadowAiAnomalies(limit),
+      neptuneClient.lastCloudTrailAnomalyObservedAt(),
+    ]);
+
+    const anomalies = vertices.map((vertex) => {
+      const properties = vertex.properties ?? {};
+      return {
+        arn: vertex.id,
+        principalArn: text(properties.principal_arn),
+        accountId: text(properties.account_id),
+        sourceIp: text(properties.source_ip),
+        eventCount: typeof properties.event_count === 'number' ? properties.event_count : null,
+        firstSeen: text(properties.first_seen),
+        lastSeen: text(properties.last_seen),
+        detail: text(properties.detail),
+        observedAt: text(properties.source_updated_at),
+      };
+    });
+
+    const ageHours =
+      lastObservedAt && Number.isFinite(Date.parse(lastObservedAt))
+        ? (Date.now() - Date.parse(lastObservedAt)) / 3_600_000
+        : null;
+
+    res.json({
+      anomalies,
+      coverage: {
+        plane: 'management',
+        windowDays: 7,
+        detail:
+          'Bedrock and SageMaker management-plane API calls recorded in CloudTrail. Model-invocation (data-plane) events — InvokeModel, InvokeAgent, InvokeEndpoint — are visible only when CloudTrail data events are enabled; Khalifa cannot verify that setting, so treat this as the management-plane view.',
+        lastAnomalyObservedAt: lastObservedAt,
+        freshness: freshnessFor(ageHours),
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('limit must be')) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: error.message });
+      return;
+    }
+    console.error('Error listing shadow AI anomalies:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to list shadow AI anomalies' });
+  }
+}
+
 export async function getAiAgent(
   req: Request<{ arn: string | string[] }>,
   res: Response

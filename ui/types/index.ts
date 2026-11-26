@@ -337,6 +337,29 @@ export interface AiInventorySection {
   truncated: boolean;
 }
 
+export interface ShadowAiAnomaly {
+  arn: string;
+  principalArn: string;
+  accountId: string;
+  sourceIp: string;
+  eventCount: number | null;
+  firstSeen: string;
+  lastSeen: string;
+  detail: string;
+  observedAt: string;
+}
+
+export interface ShadowAiResponse {
+  anomalies: ShadowAiAnomaly[];
+  coverage: {
+    plane: string;
+    windowDays: number;
+    detail: string;
+    lastAnomalyObservedAt: string | null;
+    freshness: 'fresh' | 'aging' | 'stale' | 'unknown';
+  };
+}
+
 export interface AiAgentDetail {
   agent: GraphVertex;
   role: GraphVertex | null;

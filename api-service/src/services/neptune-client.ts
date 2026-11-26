@@ -436,6 +436,38 @@ export class NeptuneClient {
     }));
   }
 
+  // Active shadow-AI anomalies: the analyzer reconciles the
+  // cloudtrail-anomalies scope on every run, so a present vertex means the
+  // usage was seen in the last evaluation window.
+  async listShadowAiAnomalies(limit: number): Promise<GraphVertex[]> {
+    const results = await this.executeTraversal((g) =>
+      g
+        .V()
+        .hasLabel('CloudTrailAnomaly')
+        .has('anomaly_type', 'SHADOW_AI_USAGE')
+        .order()
+        .by(t.id)
+        .limit(limit)
+        .elementMap()
+    );
+    return results.filter(isRawMap).map(extractVertex);
+  }
+
+  // When the analyzer last recorded any anomaly (the vertex carries the run's
+  // observed time as source_updated_at). It writes vertices only for what it
+  // finds, so null means "no marker", not "clean".
+  async lastCloudTrailAnomalyObservedAt(): Promise<string | null> {
+    const results = await this.executeTraversal((g) =>
+      g.V().hasLabel('CloudTrailAnomaly').limit(MAX_COVERAGE_RECORDS).values('source_updated_at')
+    );
+    let newest: string | null = null;
+    for (const row of results) {
+      const value = stringValue(row);
+      if (value && (newest === null || value > newest)) newest = value;
+    }
+    return newest;
+  }
+
   // One index lookup for many ids; ids not in the graph are simply absent.
   async getResources(ids: string[]): Promise<GraphVertex[]> {
     if (ids.length === 0) return [];

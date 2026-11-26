@@ -186,5 +186,12 @@ export function buildTools(client: KhalifaApiClient): KhalifaTool[] {
       {},
       () => ({ path: '/ai/use-cases/coverage' })
     ),
+    read(
+      'shadow_ai',
+      'Shadow AI usage',
+      'Active shadow-AI anomalies: Bedrock/SageMaker management-plane usage by principals outside the deployment allowlist, with the API calls seen. The response carries a coverage statement — data-plane (model-invocation) events are visible only when CloudTrail data events are enabled, and an empty list is not proof that no AI usage exists.',
+      { limit: z.number().int().min(1).max(200).default(50) },
+      (args) => ({ path: '/ai/shadow', params: args })
+    ),
   ];
 }

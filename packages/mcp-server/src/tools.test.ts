@@ -34,8 +34,8 @@ describe('buildTools', () => {
     const { client } = fakeClient();
     const tools = buildTools(client);
 
-    expect(tools).toHaveLength(11);
-    expect(new Set(tools.map((entry) => entry.name)).size).toBe(11);
+    expect(tools).toHaveLength(12);
+    expect(new Set(tools.map((entry) => entry.name)).size).toBe(12);
     for (const entry of tools) {
       expect(entry.description.length).toBeGreaterThan(20);
       expect(Object.keys(entry.inputSchema).length).toBeGreaterThanOrEqual(0);
@@ -85,6 +85,7 @@ describe('buildTools', () => {
     ],
     ['ai_use_cases', {}, '/ai/use-cases', undefined],
     ['ai_use_case_coverage', {}, '/ai/use-cases/coverage', undefined],
+    ['shadow_ai', {}, '/ai/shadow', { limit: 50 }],
   ])('%s calls %s with its bounded parameters', async (name, args, path, params) => {
     const { client, calls } = fakeClient({ items: [] });
 

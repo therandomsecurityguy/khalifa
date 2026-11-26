@@ -2,6 +2,19 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Shadow-AI surfaces (Phase 2)
+
+### Added
+
+- **`GET /ai/shadow`** (Viewer+): the active `SHADOW_AI_USAGE` anomalies from the graph — principal, account, source IP, the API calls seen, event count, first/last seen, and the analyzer's observed time — with an explicit `coverage` block: the plane (`management`), the evaluation window, a plain-language data-plane gap statement, the analyzer's last recorded marker (`lastAnomalyObservedAt`, `null` when it has recorded none — unknown freshness, never "clean"), and a `freshness` grade computed against the analyzer's daily cadence (fresh ≤ 2 days, stale > 4). Bounded (default 50, max 200) behind the expensive-endpoint limiter.
+- **Shadow AI page** (`/ai/shadow`) beside the inventory: coverage card with the freshness note, anomaly table, and an empty state that repeats the management-plane caveat instead of implying a clean estate.
+- **MCP tool `shadow_ai`** (the twelfth, still read-only): exposes the same payload, coverage statement included, to agent tools.
+- Navigation picks the most specific matching route, so `/ai/shadow` highlights itself rather than the inventory beneath it.
+
+### Changed
+
+- README (feature table, API table) and the MCP server README document the new surface.
+
 ## [Unreleased] - Shadow-AI detection (Phase 2)
 
 ### Added

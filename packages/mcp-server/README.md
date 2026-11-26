@@ -25,6 +25,7 @@ duration — never argument values, which name customer resources.
 | `get_ai_agent`         | One Bedrock agent or AgentCore runtime: role, knowledge bases, guardrail, tools, model, issues                                         |
 | `ai_use_cases`         | The governance registry: owners, statuses, covered assets, and lite impact assessments                                                 |
 | `ai_use_case_coverage` | Registry against the graph: assets no use case covers, and registrations missing from the graph                                        |
+| `shadow_ai`            | Active shadow-AI anomalies (Bedrock/SageMaker usage outside the deployment allowlist) with the API calls seen and a coverage statement |
 
 Results are the API's own payloads, including its honesty markers: coverage
 statements on predictive surfaces and explicit truncation flags. Nothing here
