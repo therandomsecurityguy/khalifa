@@ -69,3 +69,33 @@ export function createExpensiveRateLimiter(
 
 export const apiRateLimiter = createRateLimiter(600);
 export const expensiveRateLimiter = createExpensiveRateLimiter(60);
+
+// Probes are unauthenticated (kubelet cannot hold a bearer token), so the
+// identity key above cannot apply. Key by the direct socket address instead:
+// kubelet reaches /readyz from the node, distinct from any ingress path, so a
+// noisy external caller cannot exhaust kubelet's bucket; X-Forwarded-For is
+// never trusted, so a spoofed header cannot change buckets either.
+export function createProbeRateLimiter(
+  fallbackLimit: number,
+  environment: NodeJS.ProcessEnv = process.env
+) {
+  return rateLimit({
+    windowMs: WINDOW_MS,
+    limit: positiveInteger(
+      environment.PROBE_RATE_LIMIT_PER_MINUTE,
+      fallbackLimit,
+      'PROBE_RATE_LIMIT_PER_MINUTE'
+    ),
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator: (req: Request) => req.ip ?? 'probes',
+    validate: { xForwardedForHeader: false },
+    handler: (_req: Request, res: Response) => {
+      res
+        .status(429)
+        .json({ code: 'RATE_LIMITED', message: 'Too many probe requests; retry later' });
+    },
+  });
+}
+
+export const probeRateLimiter = createProbeRateLimiter(600);

@@ -46,7 +46,8 @@ import {
   requireAdmin,
   requireTrustCenterSync,
 } from './middleware/rbac';
-import { apiRateLimiter, expensiveRateLimiter } from './middleware/rate-limit';
+import { apiRateLimiter, expensiveRateLimiter, probeRateLimiter } from './middleware/rate-limit';
+import { corsMiddleware, originGuard } from './middleware/origin-guard';
 import { metricsMiddleware, renderMetrics, buildInfo } from './observability/metrics';
 import compression from 'compression';
 import helmet from 'helmet';
@@ -81,24 +82,7 @@ app.use(
 );
 app.use(compression());
 
-app.use((_req: Request, res: Response, next: NextFunction) => {
-  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const origin = _req.headers.origin;
-  if (origin && (allowedOrigins.length === 0 || allowedOrigins.includes(origin))) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
-  if (_req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
-  }
-  next();
-});
+app.use(corsMiddleware);
 
 const liveness = (_req: Request, res: Response): void => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -106,11 +90,23 @@ const liveness = (_req: Request, res: Response): void => {
 app.get('/health', liveness);
 app.get('/livez', liveness);
 
-app.get('/readyz', async (_req: Request, res: Response) => {
+// Readiness performs a Neptune query and a DynamoDB read, so the result is
+// cached for a few seconds: a scrape loop must not become backend load, and a
+// transient failure still surfaces on the next window.
+const READINESS_CACHE_MS = 5_000;
+let readinessCache: {
+  at: number;
+  result: Awaited<ReturnType<ReturnType<typeof getReadinessService>['check']>>;
+} | null = null;
+
+app.get('/readyz', probeRateLimiter, async (_req: Request, res: Response) => {
   try {
-    const result = await getReadinessService().check();
-    res.status(result.status === 'ready' ? 200 : 503).json({
-      ...result,
+    const now = Date.now();
+    if (!readinessCache || now - readinessCache.at >= READINESS_CACHE_MS) {
+      readinessCache = { at: now, result: await getReadinessService().check() };
+    }
+    res.status(readinessCache.result.status === 'ready' ? 200 : 503).json({
+      ...readinessCache.result,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -119,7 +115,7 @@ app.get('/readyz', async (_req: Request, res: Response) => {
   }
 });
 
-app.get('/metrics', (_req: Request, res: Response) => {
+app.get('/metrics', probeRateLimiter, (_req: Request, res: Response) => {
   res.type('text/plain; version=0.0.4; charset=utf-8').send(renderMetrics());
 });
 
@@ -136,6 +132,7 @@ app.get('/version', (_req: Request, res: Response) => {
 app.use(authenticate);
 app.use(express.json({ limit: '32kb' }));
 app.use(apiRateLimiter);
+app.use(originGuard);
 app.use(validateGremlinSelectors);
 
 app.get('/session', requireViewer, getSession);
@@ -144,7 +141,7 @@ app.get('/rules/quality', requireViewer, getRuleQuality);
 app.get('/rules/:id', requireViewer, getRule);
 app.get('/issues', requireViewer, listIssues);
 app.get('/issues/counts', requireViewer, getIssueCounts);
-app.get('/issues/stats', requireViewer, getIssueStats);
+app.get('/issues/stats', requireViewer, expensiveRateLimiter, getIssueStats);
 app.get('/issues/summary', requireViewer, getIssueSummary);
 app.get('/issues/schedule', requireViewer, getIssueSchedule);
 app.get('/issues/:id', requireViewer, getIssue);
@@ -170,11 +167,23 @@ app.get('/resources/labels', requireViewer, expensiveRateLimiter, listResourceLa
 app.get('/resources/properties', requireViewer, expensiveRateLimiter, listResourceProperties);
 app.get('/resources/values', requireViewer, expensiveRateLimiter, listPropertyValues);
 app.get('/resources/graph', requireViewer, expensiveRateLimiter, getResourceGraph);
-app.get('/resources/*arn', validateArnPathParam('arn'), requireViewer, getResource);
+app.get(
+  '/resources/*arn',
+  validateArnPathParam('arn'),
+  requireViewer,
+  expensiveRateLimiter,
+  getResource
+);
 
 app.get('/ai/inventory', requireViewer, expensiveRateLimiter, getAiInventory);
 app.get('/ai/bom', requireViewer, expensiveRateLimiter, getAiBom);
-app.get('/ai/agents/*arn', validateArnPathParam('arn'), requireViewer, getAiAgent);
+app.get(
+  '/ai/agents/*arn',
+  validateArnPathParam('arn'),
+  requireViewer,
+  expensiveRateLimiter,
+  getAiAgent
+);
 
 app.get('/ai/use-cases', requireViewer, listAiUseCases);
 app.get('/ai/use-cases/coverage', requireViewer, expensiveRateLimiter, getAiUseCaseCoverage);
@@ -209,7 +218,12 @@ app.get('/identity/escalation-paths', requireViewer, getEscalationPaths);
 app.get('/identity/unused-permissions', requireViewer, getUnusedPermissions);
 app.get('/identity/trust-graph', requireViewer, getTrustGraph);
 app.get('/identity/least-privilege', requireViewer, getLeastPrivilegeFindings);
-app.get('/identity/least-privilege/summary', requireViewer, getLeastPrivilegeSummary);
+app.get(
+  '/identity/least-privilege/summary',
+  requireViewer,
+  expensiveRateLimiter,
+  getLeastPrivilegeSummary
+);
 app.get(
   '/identity/least-privilege/:accountId/*principalArn',
   validateArnPathParam('principalArn'),

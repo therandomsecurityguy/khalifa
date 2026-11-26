@@ -15,19 +15,19 @@ resource "aws_vpc_security_group_ingress_rule" "neptune_nodes" {
   description                  = "EKS nodes"
 }
 
-resource "aws_vpc_security_group_ingress_rule" "neptune_vpc" {
-  security_group_id = aws_security_group.neptune.id
-  cidr_ipv4         = var.vpc_cidr
-  ip_protocol       = "tcp"
-  from_port         = 8182
-  to_port           = 8182
-  description       = "VPC pods"
-}
+# Only the EKS nodes may open Gremlin connections: pods use the node security
+# group, and the chart's NetworkPolicy keeps the app-level path narrow. A
+# VPC-wide ingress rule would put the posture store's port in reach of every
+# workload in a shared VPC for no benefit. Operators who connect from a bastion
+# add their own rule (and its SG).
 
 resource "aws_vpc_security_group_egress_rule" "neptune" {
   security_group_id = aws_security_group.neptune.id
   cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  description       = "AWS endpoints (KMS, CloudWatch Logs) via NAT or interface endpoints"
 }
 
 resource "aws_neptune_subnet_group" "this" {

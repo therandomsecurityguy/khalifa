@@ -159,6 +159,21 @@ describe('API Neptune queries', () => {
     ).rejects.toThrow('Invalid pagination token');
   });
 
+  it('rejects a non-string cursor before it reaches Buffer semantics', async () => {
+    const graph = new NeptuneClient(
+      { endpoint: 'cluster.example.com' },
+      { runtime: runtime([[]]) }
+    );
+
+    await expect(
+      graph.browseAllLabels({
+        labels: ['IamRole'],
+        limit: 3,
+        nextToken: ['duplicated'] as unknown as string,
+      })
+    ).rejects.toThrow('Invalid pagination token');
+  });
+
   it("reads a job's output count and newest timestamp, and null when there is none", async () => {
     const shared = runtime([
       [

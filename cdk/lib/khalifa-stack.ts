@@ -35,9 +35,14 @@ export interface SecurityGraphIngestionStackProps extends cdk.StackProps {
   scannerSecurityGroupId?: string;
   /** Opt-in event-driven scanning: an SQS queue + Lambda that scans objects on S3 events. */
   enableDspmEventTrigger?: boolean;
-  /** Buckets the DSPM scanner may read object content from. Empty keeps the
-   *  historical all-buckets grant; setting it scopes s3:GetObject. */
+  /** Buckets the DSPM scanner may read object content from. Empty grants no
+   *  object access at all (the scanner lists bucket names only); setting it
+   *  scopes s3:GetObject. */
   dspmBucketAllowlist?: string[];
+  /** Bucket holding the organization CloudTrail logs. Athena reads from it and
+   *  writes query results under `khalifa-athena-results/`. Unset keeps the
+   *  legacy `cloudtrail-logs` name and surfaces a synth warning. */
+  cloudtrailLogsBucket?: string;
   /** Optional address subscribed to the stack's alarm topic (DLQ depth,
    *  stalled incremental queue, queue-processor errors). */
   alarmEmail?: string;
@@ -59,8 +64,24 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       accountIds,
       parentIds,
       collectionRegions,
+      cloudtrailLogsBucket,
     } = props;
     const neptuneResource = `arn:aws:neptune-db:${this.region}:${this.account}:${neptuneClusterResourceId}/*`;
+
+    // Never silently assume the trail bucket: the analyzer reads the
+    // organization trail from it and writes Athena results into it, so the
+    // wrong name is either a silent failure or a write against a bucket the
+    // deployment does not own (S3 names are globally unique).
+    const cloudtrailBucket = cloudtrailLogsBucket?.trim() || 'cloudtrail-logs';
+    if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(cloudtrailBucket)) {
+      throw new Error('cloudtrailLogsBucket must be a valid S3 bucket name');
+    }
+    if (!cloudtrailLogsBucket?.trim()) {
+      cdk.Annotations.of(this).addWarning(
+        'cloudtrailLogsBucket not set; defaulting to "cloudtrail-logs". Set ' +
+          'CLOUDTRAIL_LOGS_BUCKET to the bucket that holds the organization trail.'
+      );
+    }
 
     // One customer-managed key for every table below. Using a CMK means the
     // calling principal must hold kms:Decrypt / GenerateDataKey, which
@@ -404,7 +425,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         ACCESS_ANALYZER_TABLE: accessAnalyzerTable.tableName,
         ATHENA_WORKGROUP: 'khalifa-cloudtrail-analysis',
         ATHENA_DATABASE: 'khalifa_cloudtrail_db',
-        ATHENA_RESULTS_S3_LOCATION: 's3://cloudtrail-logs/khalifa-athena-results/',
+        ATHENA_RESULTS_S3_LOCATION: `s3://${cloudtrailBucket}/khalifa-athena-results/`,
         ANALYSIS_DAYS: '90',
         GRAPH_WRITER_FUNCTION_NAME: graphWriterFn.functionName,
         CANARY_PRINCIPAL_ARNS: canaryPrincipalArns.join(','),
@@ -445,14 +466,14 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['s3:GetObject', 's3:PutObject', 's3:AbortMultipartUpload'],
-        resources: ['arn:aws:s3:::cloudtrail-logs/*'],
+        resources: [`arn:aws:s3:::${cloudtrailBucket}/*`],
       })
     );
     cloudTrailAnalyzerFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['s3:GetBucketLocation', 's3:ListBucket'],
-        resources: ['arn:aws:s3:::cloudtrail-logs'],
+        resources: [`arn:aws:s3:::${cloudtrailBucket}`],
       })
     );
     cloudTrailAnalyzerFn.addToRolePolicy(
