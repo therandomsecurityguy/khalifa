@@ -47,4 +47,5 @@ new SecurityGraphIngestionStack(app, 'SecurityGraphIngestionStack', {
   scannerSecurityGroupId: process.env.SCANNER_SECURITY_GROUP_ID,
   enableDspmEventTrigger: process.env.ENABLE_DSPM_EVENT_TRIGGER === 'true',
   dspmBucketAllowlist: parseList(process.env.DSPM_BUCKET_ALLOWLIST),
+  cloudtrailLogsBucket: process.env.CLOUDTRAIL_LOGS_BUCKET,
 });

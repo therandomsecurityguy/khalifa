@@ -2,6 +2,18 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Security hardening (batch 2)
+
+### Security
+
+- **CORS is deny-by-default and mutations carry an Origin check** (review F-03, F-04): cross-origin headers go out only for an explicitly allowlisted origin, `Access-Control-Allow-Credentials` is gone (Bearer-only auth never needed it), `Vary: Origin` is set, and state-changing requests (POST/PUT/PATCH/DELETE) whose browser `Origin` is not allowlisted are rejected 403 — defense in depth behind the cookie-authenticated Cloudflare Access edge. Origin-less clients (scripts, MCP) are unaffected.
+- **Probe endpoints are throttled and readiness is cached** (F-05): `/readyz` — a Neptune query plus a DynamoDB read — caches its result for 5 seconds, and `/readyz` and `/metrics` sit behind a pre-auth, IP-keyed limiter (`PROBE_RATE_LIMIT_PER_MINUTE`, default 600/min) so a scrape loop cannot become backend load. Serving `/metrics` on an internal-only port remains a recommended deployment follow-up.
+- **Scan-heavy reads use the expensive limiter** (F-06): `/issues/stats`, `/resources/*arn`, `/ai/agents/*arn`, and `/identity/least-privilege/summary` join the 60/min expensive bucket; precomputed counters and a `resourcesInvolved` GSI remain the durable fix.
+- **Cursor decoding validates its input itself** (F-07, the CodeQL `js/type-confusion-through-parameter-tampering` critical): `decodeCursor` rejects non-string tokens before Buffer semantics can apply, instead of relying on caller-side checks.
+- **The CDK analyzer takes the CloudTrail bucket as a parameter** (F-08): `cloudtrailLogsBucket` (`CLOUDTRAIL_LOGS_BUCKET`) derives the Athena results location and the S3 grants; an invalid name fails synth, and an unset value keeps the legacy `cloudtrail-logs` default with an explicit synth warning.
+- **Neptune ingress is restricted to the EKS nodes** (F-09): the VPC-wide 8182 rule is removed (pods use the node security group; the chart's NetworkPolicy stays the app-level control) and egress narrows to TCP 443 for AWS endpoints. Operators connecting from a bastion add their own rule.
+- Documentation fix: the CDK `dspmBucketAllowlist` prop comment now matches the implemented fail-closed behavior (empty list grants no object access) — review F-27.
+
 ## [Unreleased] - Security hardening (batch 1)
 
 ### Security

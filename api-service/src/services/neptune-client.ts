@@ -1152,7 +1152,13 @@ function encodeCursor(kind: string, value: string): string {
 }
 
 function decodeCursor(token: string, expectedKind: string): string {
-  if (token.length > 2_048) throw new Error('Invalid pagination token');
+  // Callers validate that the request parameter is a string, but this function
+  // must not depend on caller discipline: a non-string (an array from a
+  // duplicated query parameter, say) has to fail here, not flow into Buffer
+  // semantics.
+  if (typeof token !== 'string' || token.length > 2_048) {
+    throw new Error('Invalid pagination token');
+  }
   try {
     const value = JSON.parse(Buffer.from(token, 'base64url').toString('utf8')) as {
       kind?: unknown;
