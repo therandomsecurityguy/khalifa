@@ -1,6 +1,13 @@
 import { createHmac, randomUUID } from 'crypto';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import type { IssueActionSink, IssueLike, RuleLike, ExternalRef, SinkFactory } from '../types';
+import type {
+  IssueActionSink,
+  IssueLike,
+  RuleLike,
+  ExternalRef,
+  IssueEvent,
+  SinkFactory,
+} from '../types';
 import { registerSink } from '../types';
 
 // Delivery hardening: a bounded number of attempts with growing backoff, and a
@@ -35,8 +42,9 @@ function readBoundedInteger(
  * POSTs issue events to an operator-configured endpoint, HMAC-signed.
  *
  * Headers: `X-Khalifa-Event` (`issue.created` on the first delivery for an
- * issue, `issue.updated` on later refreshes), `X-Khalifa-Delivery` (unique per
- * attempt sequence, for receiver-side idempotency),
+ * issue, `issue.updated` on later refreshes, `issue.resolved` and
+ * `issue.suppressed` on lifecycle transitions), `X-Khalifa-Delivery` (unique
+ * per attempt sequence, for receiver-side idempotency),
  * `X-Khalifa-Timestamp` (epoch seconds), and `X-Khalifa-Signature`
  * (`sha256=<hex>`). The signature covers `${timestamp}.${rawBody}`, so
  * receivers should recompute it over the received raw bytes, compare in
@@ -118,7 +126,7 @@ export class WebhookSink implements IssueActionSink {
     return raw;
   }
 
-  async emit(issue: IssueLike, rule: RuleLike): Promise<ExternalRef | null> {
+  async emit(issue: IssueLike, rule: RuleLike, event?: IssueEvent): Promise<ExternalRef | null> {
     const url = await this.resolveUrl();
     if (!url) return null;
     const signingSecret = await this.resolveSigningSecret();
@@ -132,11 +140,21 @@ export class WebhookSink implements IssueActionSink {
     const priorDelivery = (issue.externalRefs || []).some(
       (ref) => ref.system === this.system && ref.id === issue.id
     );
-    const event = priorDelivery ? 'issue.updated' : 'issue.created';
+    // An explicit event always wins; otherwise the status decides (lifecycle
+    // transitions) and the stored delivery refs separate created from updated.
+    const effectiveEvent =
+      event ??
+      (issue.status === 'suppressed'
+        ? 'issue.suppressed'
+        : issue.status === 'resolved'
+          ? 'issue.resolved'
+          : priorDelivery
+            ? 'issue.updated'
+            : 'issue.created');
     const uiUrl = process.env.UI_BASE_URL ? `${process.env.UI_BASE_URL}/issues/${issue.id}` : null;
 
     const body = JSON.stringify({
-      event,
+      event: effectiveEvent,
       deliveredAt: new Date().toISOString(),
       issue: {
         id: issue.id,
@@ -162,7 +180,7 @@ export class WebhookSink implements IssueActionSink {
     await this.deliver(url, body, {
       'content-type': 'application/json',
       'user-agent': 'khalifa-webhook/1.0',
-      'x-khalifa-event': event,
+      'x-khalifa-event': effectiveEvent,
       'x-khalifa-delivery': randomUUID(),
       'x-khalifa-timestamp': timestamp,
       'x-khalifa-signature': `sha256=${signature}`,

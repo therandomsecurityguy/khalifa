@@ -458,6 +458,28 @@ describe('RiskRuleRunner stale-issue fix', () => {
     expect(store.resolveIssue).toHaveBeenCalledWith(suppressedIssue, change);
   });
 
+  test('runRule emits issue.resolved for every issue it resolves', async () => {
+    const ticketedRule: RiskRule = { ...rule, autoTicketConfig: { enabled: true } };
+    const suppressedIssue: Issue = { ...existingIssue, id: 'RULE-001-def', status: 'suppressed' };
+    const runner = new RiskRuleRunner('localhost:8182');
+    const store = (runner as any).issueStore;
+    const neptune = (runner as any).neptuneClient;
+    neptune.executeQuery = jest.fn().mockResolvedValue([]);
+    store.getActiveIssuesByRule = jest.fn().mockResolvedValue([existingIssue, suppressedIssue]);
+    store.resolveIssue = jest.fn().mockResolvedValue(true);
+
+    await runner.runRule(ticketedRule);
+
+    expect(mockIntegrationEmit).toHaveBeenCalledTimes(2);
+    for (const issue of [existingIssue, suppressedIssue]) {
+      expect(mockIntegrationEmit).toHaveBeenCalledWith(
+        expect.objectContaining({ id: issue.id, status: 'resolved' }),
+        ticketedRule,
+        'issue.resolved'
+      );
+    }
+  });
+
   describe('a suppressed issue that still matches', () => {
     const DAY = 24 * 60 * 60 * 1000;
     const matchingPath = [

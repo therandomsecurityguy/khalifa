@@ -1,5 +1,12 @@
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import type { IssueActionSink, IssueLike, RuleLike, ExternalRef, SinkFactory } from '../types';
+import type {
+  IssueActionSink,
+  IssueLike,
+  RuleLike,
+  ExternalRef,
+  IssueEvent,
+  SinkFactory,
+} from '../types';
 import { registerSink } from '../types';
 
 const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
@@ -57,7 +64,11 @@ export class SlackSink implements IssueActionSink {
     return this.resolvedWebhookUrl;
   }
 
-  async emit(issue: IssueLike, rule: RuleLike): Promise<ExternalRef | null> {
+  async emit(issue: IssueLike, rule: RuleLike, event?: IssueEvent): Promise<ExternalRef | null> {
+    // Lifecycle transitions are machine signals carried by the webhook and SNS
+    // contracts; this channel stays alert-oriented and fires for created and
+    // updated issues only.
+    if (event === 'issue.resolved' || event === 'issue.suppressed') return null;
     const webhookUrl = await this.resolveWebhookUrl();
     if (!webhookUrl) return null;
     if (SEVERITY_RANK[issue.severity] < SEVERITY_RANK[this.minSeverity]) return null;

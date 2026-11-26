@@ -1,5 +1,5 @@
 import { IssueIntegrationsOrchestrator } from './orchestrator';
-import type { IssueLike, RuleLike } from './types';
+import type { IssueActionSink, IssueLike, RuleLike } from './types';
 
 const sampleIssue: IssueLike = {
   id: 'RULE-001-test',
@@ -90,5 +90,19 @@ describe('IssueIntegrationsOrchestrator', () => {
 
     const orchestrator = new IssueIntegrationsOrchestrator();
     expect(orchestrator.configuredSinks).toEqual(['sns']);
+  });
+
+  test('passes the lifecycle event through to every sink', async () => {
+    process.env.ISSUE_SINKS = 'slack';
+    process.env.SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/T000/B000/XXX';
+
+    const orchestrator = new IssueIntegrationsOrchestrator();
+    const sinks = (orchestrator as unknown as { sinks: IssueActionSink[] }).sinks;
+    const emitSpy = jest.spyOn(sinks[0], 'emit').mockResolvedValue(null);
+
+    await orchestrator.emit(sampleIssue, sampleRule, 'issue.suppressed');
+
+    expect(emitSpy).toHaveBeenCalledWith(sampleIssue, sampleRule, 'issue.suppressed');
+    emitSpy.mockRestore();
   });
 });

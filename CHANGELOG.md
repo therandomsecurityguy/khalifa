@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Issue lifecycle events
+
+### Added
+
+- **Issue lifecycle transitions flow through the sink framework**: the runner emits `issue.resolved` for every issue it resolves (including suppressed ones whose finding is gone — the payload shows the resolved status), and the API's suppression endpoint emits `issue.suppressed` after the transition is recorded. Sinks now receive an explicit `IssueEvent` instead of inferring lifecycle from delivery refs: the webhook contract carries `issue.created` / `issue.updated` / `issue.resolved` / `issue.suppressed` in `X-Khalifa-Event` and the body, with delivery refs persisted for idempotency exactly as before, and lifecycle emissions obey the same `autoTicketConfig.enabled` gate as created/updated. The Slack sink deliberately stays alert-oriented and skips lifecycle transitions; SNS publishes them with the issue's status. Suppression delivery happens after the HTTP response — a slow or failing sink never delays or fails the analyst's action, and delivery errors are logged rather than surfaced. A reopen currently reaches receivers as `issue.updated` on the next refresh that matches it (no dedicated event yet). 9 new tests: explicit and status-derived webhook events, the Slack skip, orchestrator pass-through, the runner's resolution emission, and the API paths (persisted refs, disabled/unknown rules, delivery failure).
+
 ## [Unreleased] - Service tokens
 
 ### Added

@@ -56,9 +56,15 @@ export interface RuleLike {
   autoTicketConfig: AutoTicketConfig;
 }
 
+// Issue lifecycle transitions delivered to sinks. `issue.created` and
+// `issue.updated` come from the rule runner; `issue.resolved` and
+// `issue.suppressed` are transitions beyond detection (the runner resolves an
+// issue that stopped matching; an analyst suppresses one through the API).
+export type IssueEvent = 'issue.created' | 'issue.updated' | 'issue.resolved' | 'issue.suppressed';
+
 export interface IssueActionSink {
   readonly system: string;
-  emit(issue: IssueLike, rule: RuleLike): Promise<ExternalRef | null>;
+  emit(issue: IssueLike, rule: RuleLike, event?: IssueEvent): Promise<ExternalRef | null>;
   healthCheck(): Promise<boolean>;
 }
 

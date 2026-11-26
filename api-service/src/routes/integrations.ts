@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
-import { IssueIntegrationsOrchestrator } from '@khalifa/integrations';
-import { DynamoDBIssueRepository } from '@khalifa/risk-engine';
+import { IssueIntegrationsOrchestrator, type IssueEvent } from '@khalifa/integrations';
+import { DynamoDBIssueRepository, getRuleById } from '@khalifa/risk-engine';
+import type { Issue } from '../types';
 
 const issueStore = new DynamoDBIssueRepository();
 
@@ -49,6 +50,35 @@ function badRequest(res: Response, message: string): void {
   res.status(400).json({ code: 'BAD_REQUEST', message });
 }
 
+// Lifecycle transitions reach the sink framework after the response is sent:
+// a slow or failing sink must not delay or fail the analyst's action, and the
+// transition itself is already recorded in DynamoDB. Delivery problems are
+// logged, not surfaced.
+async function emitIssueEvent(issue: Issue, event: IssueEvent): Promise<void> {
+  try {
+    const rule = getRuleById(issue.ruleId);
+    if (!rule?.autoTicketConfig?.enabled) return;
+
+    const orchestrator = new IssueIntegrationsOrchestrator();
+    const refs = await orchestrator.emit(issue, rule, event);
+    if (refs.length === 0) return;
+
+    const existing = issue.externalRefs || [];
+    const merged = [...existing, ...refs].filter(
+      (ref, idx, arr) => arr.findIndex((r) => r.system === ref.system && r.id === ref.id) === idx
+    );
+    const updated = await issueStore.updateExternalRefs(
+      { id: issue.id, ruleId: issue.ruleId },
+      merged
+    );
+    if (!updated) {
+      console.error(`Issue disappeared before external references were persisted: ${issue.id}`);
+    }
+  } catch (error) {
+    console.error('Issue integration delivery failed:', error);
+  }
+}
+
 export async function suppressIssue(req: Request<{ id: string }>, res: Response): Promise<void> {
   try {
     const { id } = req.params;
@@ -81,6 +111,7 @@ export async function suppressIssue(req: Request<{ id: string }>, res: Response)
       return;
     }
     res.json({ id, status: 'suppressed', reason, expiresAt: until });
+    await emitIssueEvent({ ...existing, status: 'suppressed' }, 'issue.suppressed');
   } catch (error) {
     console.error('Error suppressing issue:', error);
     res.status(500).json({

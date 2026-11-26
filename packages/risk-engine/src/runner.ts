@@ -15,6 +15,7 @@ import type {
   Severity,
 } from './types';
 import { extractRulePath, type RulePath } from './rule-path';
+import type { IssueEvent } from '@khalifa/integrations';
 import { coverageLevelForAge, type CoverageLevel } from './coverage';
 import { issueSlo } from './slo';
 import { pathLikelihood } from './likelihood';
@@ -157,7 +158,7 @@ export class RiskRuleRunner {
           const created = await this.issueStore.createIssue(issue);
           if (created) {
             issuesCreated++;
-            await this.emitToIntegrations(issue, rule);
+            await this.emitToIntegrations(issue, rule, 'issue.created');
           } else {
             const concurrentIssue = await this.issueStore.getIssue(this.issueKey(issue));
             if (concurrentIssue) {
@@ -177,7 +178,12 @@ export class RiskRuleRunner {
             by: SYSTEM_ACTOR,
             reason: `No longer matched by ${rule.id}`,
           });
-          if (resolved) issuesResolved++;
+          if (resolved) {
+            issuesResolved++;
+            // The stored object still carries the previous status; the event
+            // payload must show the transition that just happened.
+            await this.emitToIntegrations({ ...issue, status: 'resolved' }, rule, 'issue.resolved');
+          }
         }
       }
     } catch (error) {
@@ -615,7 +621,7 @@ export class RiskRuleRunner {
     };
 
     const updated = await this.issueStore.updateIssue(refreshed);
-    if (updated) await this.emitToIntegrations(refreshed, rule);
+    if (updated) await this.emitToIntegrations(refreshed, rule, 'issue.updated');
     return refreshed;
   }
 
@@ -645,7 +651,11 @@ export class RiskRuleRunner {
     if (reason) await this.issueStore.reopenIssue(issue, { by: SYSTEM_ACTOR, reason });
   }
 
-  private async emitToIntegrations(issue: Issue, rule: RiskRule): Promise<void> {
+  private async emitToIntegrations(
+    issue: Issue,
+    rule: RiskRule,
+    event?: IssueEvent
+  ): Promise<void> {
     if (!rule.autoTicketConfig?.enabled) return;
     if (issue.status === 'suppressed') return;
 
@@ -653,7 +663,7 @@ export class RiskRuleRunner {
     const orchestrator = new IssueIntegrationsOrchestrator();
     let refs;
     try {
-      refs = await orchestrator.emit(issue, rule);
+      refs = await orchestrator.emit(issue, rule, event);
     } catch (error) {
       console.error('Issue integration delivery failed:', error);
       return;
