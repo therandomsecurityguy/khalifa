@@ -4,7 +4,7 @@ Reusable AWS resources for a Khalifa EKS install:
 
 - DynamoDB tables, incremental FIFO queue + DLQ, and the issues SNS topic
 - Private Neptune Serverless cluster with IAM auth, scaling between `neptune_min_capacity` (default 16 NCU) and `neptune_max_capacity` (default 32). Do not lower the floor to save cost: at 2.5 NCU Neptune rejects even single-vertex writes with `MemoryLimitExceededException`, and writes fail for a few minutes during every scale transition.
-- Cognito user pool, UI client, and `khalifa-admin` / `khalifa-analyst` / `khalifa-viewer` groups
+- Cognito user pool (admin-created users only — self-service signup is disabled; `access_trusted_email_domain` optionally constrains the API's Viewer floor to one email domain), UI client, and `khalifa-admin` / `khalifa-analyst` / `khalifa-viewer` groups
 - Secrets Manager entries for collector ExternalId, graph-writer token, and Neptune auth
 - IRSA roles for the Helm ServiceAccounts, including `cloudtrail-analyzer` (AccessAnalyzerCache always; Athena, Glue, and trail-bucket reads only when `cloudtrail_logs_bucket` is set). Organization and incremental collector roles also have the home-account collection reads (same actions as `SecurityGraphCollectorRole`).
 - Athena over the organization CloudTrail, when `cloudtrail_logs_bucket` is set: a Glue database `${name_prefix}_khalifa_cloudtrail` with a `cloudtrail_logs` table (partition projection over `account_id` / `region` / `log_date`, accounts = the collection scope), an Athena workgroup that enforces SSE-KMS results in a module-owned bucket with a 7-day expiry, and the matching analyzer IAM. `helm_values.config` then carries `athenaDatabase`, `athenaWorkgroup`, and `athenaResultsLocation`.

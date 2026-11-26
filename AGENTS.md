@@ -118,9 +118,11 @@ release will roll back, which is safe but noisy.
 - **CIS reconciliation**: `securityhub_reader_role_arn` (audit account,
   read-only). Required before any trust-center publishing.
 - **Canaries / DSPM allowlist**: `ENABLE_CANARIES`, `dspm_bucket_allowlist`.
-- **Slack issue sink**: `SLACK_WEBHOOK_URL` at CDK deploy time (stored in
-  Secrets Manager and read as `SLACK_WEBHOOK_SECRET_ARN`). Never place the
-  webhook, or `PROD_ACCOUNT_IDS`, in files or chat.
+- **Slack issue sink**: create the `khalifa/slack-webhook` secret out-of-band
+  (CLI or console) and deploy with `SLACK_WEBHOOK_SECRET_ARN`; the stack
+  references the ARN only. Same for the generic webhook's signing key
+  (`khalifa/webhook-signing` + `WEBHOOK_SIGNING_SECRET_ARN`). Never place the
+  webhook value, or `PROD_ACCOUNT_IDS`, in files or chat.
 
 ### 1.8 Trust center (publishing the posture)
 
@@ -245,13 +247,13 @@ and in `CHANGELOG.md` under **Unreleased**:
 
 ## 3. Where to look
 
-| Topic                                          | Document                                                                                                                                   |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Install on EKS, module inputs, teardown        | [`deploy/terraform/examples/complete/README.md`](deploy/terraform/examples/complete/README.md)                                             |
-| Architecture, graph model, reconciliation flow | [`ARCHITECTURE.md`](ARCHITECTURE.md)                                                                                                       |
-| Runbooks: IRSA, analyzer, backup/restore, trust-center go-live | [`OPERATIONAL.md`](OPERATIONAL.md) (sections B, J, K; J.1 is the step-by-step)                                                                |
-| Compliance frameworks and mappings             | [`README.md`](README.md) §Compliance, [`packages/risk-engine/src/framework-citations.ts`](packages/risk-engine/src/framework-citations.ts) |
-| Trust-center sync and site                     | [`scripts/trust-center-sync/README.md`](scripts/trust-center-sync/README.md), [`trust-center/README.md`](trust-center/README.md)           |
-| Deployment validation                          | [`scripts/validate-deployment-modules.sh`](scripts/validate-deployment-modules.sh)                                                         |
-| Contributing (humans)                          | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                                                       |
-| Vulnerability disclosure                       | [`SECURITY.md`](SECURITY.md)                                                                                                               |
+| Topic                                                          | Document                                                                                                                                   |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Install on EKS, module inputs, teardown                        | [`deploy/terraform/examples/complete/README.md`](deploy/terraform/examples/complete/README.md)                                             |
+| Architecture, graph model, reconciliation flow                 | [`ARCHITECTURE.md`](ARCHITECTURE.md)                                                                                                       |
+| Runbooks: IRSA, analyzer, backup/restore, trust-center go-live | [`OPERATIONAL.md`](OPERATIONAL.md) (sections B, J, K; J.1 is the step-by-step)                                                             |
+| Compliance frameworks and mappings                             | [`README.md`](README.md) §Compliance, [`packages/risk-engine/src/framework-citations.ts`](packages/risk-engine/src/framework-citations.ts) |
+| Trust-center sync and site                                     | [`scripts/trust-center-sync/README.md`](scripts/trust-center-sync/README.md), [`trust-center/README.md`](trust-center/README.md)           |
+| Deployment validation                                          | [`scripts/validate-deployment-modules.sh`](scripts/validate-deployment-modules.sh)                                                         |
+| Contributing (humans)                                          | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                                                       |
+| Vulnerability disclosure                                       | [`SECURITY.md`](SECURITY.md)                                                                                                               |

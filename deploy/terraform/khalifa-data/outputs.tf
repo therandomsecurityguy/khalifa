@@ -107,6 +107,7 @@ output "helm_values" {
       cognitoUserPoolId           = aws_cognito_user_pool.this.id
       cognitoClientId             = aws_cognito_user_pool_client.this.id
       cognitoRegion               = data.aws_region.current.region
+      accessTrustedEmailDomain    = var.access_trusted_email_domain
       corsAllowedOrigins          = [var.ui_base_url]
       issueSinks                  = ["sns"]
       issuesTopicArn              = aws_sns_topic.issues.arn

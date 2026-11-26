@@ -53,6 +53,7 @@ config:
   cognitoRegion: us-west-2
   cloudflareAccessTeamDomain: example-team.cloudflareaccess.com
   cloudflareAccessAud: validation-khalifa-access-aud
+  accessTrustedEmailDomain: example.com
   corsAllowedOrigins:
     - https://khalifa.validation.invalid
   issueSinks:

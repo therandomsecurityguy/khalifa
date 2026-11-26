@@ -154,48 +154,49 @@ cdk deploy SecurityGraphIngestionStack
 
 EKS uses [`deploy/helm/khalifa/values.yaml`](deploy/helm/khalifa/values.yaml). The UI proxies `/api` to the in-cluster API Service. Lambda uses:
 
-| Variable                                      | Description                                                                                | Default                         |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------- |
-| `NEPTUNE_ENDPOINT`                            | Neptune Gremlin endpoint                                                                   | —                               |
-| `NEPTUNE_ENDPOINT` (auth)                     | Graph access uses SigV4 from the execution role; no Neptune auth secret is read            | —                               |
-| `ISSUES_TABLE`                                | DynamoDB issues table                                                                      | `SecurityIssues`                |
-| `ACCESS_ANALYZER_TABLE`                       | CloudTrail usage cache                                                                     | `AccessAnalyzerCache`           |
-| `TRAFFIC_OBSERVATIONS_TABLE`                  | Observed-traffic cache for the EC2 collector (empty disables the read)                     | `TrafficObservations`           |
-| `THREAT_INDICATORS_TABLE`                     | Threat-intel indicators read by the rule runner                                            | `ThreatIndicators`              |
-| `SERVICE_TOKENS_TABLE`                        | DynamoDB table holding service-token metadata and secret hashes                            | `ServiceTokens`                 |
-| `THREAT_INTEL_IP_LIST_S3_URI`                 | s3://bucket/key of the newline-separated IP indicator list (empty disables)                | —                               |
-| `THREAT_INTEL_ACCOUNT_LIST_S3_URI`            | s3://bucket/key of the newline-separated account-id list (empty disables)                  | —                               |
-| `THREAT_INTEL_TTL_DAYS`                       | Days an imported indicator stays valid (DynamoDB TTL)                                      | `90`                            |
-| `RECOMPUTE_QUEUE_URL`                         | FIFO queue the incremental collector signals and the recompute worker drains               | —                               |
-| `RECOMPUTE_MIN_INTERVAL_SECONDS`              | Minimum seconds between event-triggered policy evaluations (recompute worker)              | `900`                           |
-| `ATHENA_DATABASE`                             | Glue database for CloudTrail                                                               | `khalifa_cloudtrail_db`         |
-| `ATHENA_WORKGROUP`                            | Athena workgroup                                                                           | `khalifa-cloudtrail-analysis`   |
-| `CLOUDTRAIL_S3_LOCATION`                      | CloudTrail S3 prefix                                                                       | `s3://cloudtrail-logs/AWSLogs/` |
-| `ANALYSIS_DAYS`                               | CloudTrail lookback                                                                        | `90`                            |
-| `AWS_REGION`                                  | AWS region                                                                                 | `us-east-1`                     |
-| `HOME_ACCOUNT_ID`                             | Account that uses ambient credentials                                                      | —                               |
-| `COLLECTOR_EXTERNAL_ID`                       | Member-role ExternalId                                                                     | —                               |
-| `GRAPH_WRITER_TOKEN`                          | Bearer token for `/mutations`                                                              | —                               |
-| `COLLECTION_ACCOUNT_IDS`                      | Approved account IDs; names come from `ListAccounts` when the hub may call it              | —                               |
-| `COLLECTION_PARENT_IDS`                       | Approved org root or OU IDs (still requires Organizations APIs)                            | —                               |
-| `COLLECTION_REGIONS`                          | Approved Regions                                                                           | —                               |
-| `GRAPH_WRITER_FUNCTION_NAME`                  | Graph-writer Lambda for analyzer anomalies                                                 | —                               |
-| `CANARY_PRINCIPAL_ARNS`                       | Comma-separated canary IAM user ARNs; any CloudTrail activity becomes RULE-023             | —                               |
-| `PROD_ACCOUNT_IDS`                            | Collected accounts that hold production; RULE-032 flags prod secrets shared with the rest  | —                               |
-| `SLACK_WEBHOOK_SECRET_ARN`                    | Secrets Manager secret with the Slack webhook URL (bare URL or `{"SLACK_WEBHOOK_URL": …}`) | —                               |
-| `WEBHOOK_URL` / `WEBHOOK_URL_SECRET_ARN`      | Generic webhook destination (URL, or the secret holding it — bare or `{"WEBHOOK_URL": …}`) | —                               |
-| `WEBHOOK_SIGNING_SECRET_ARN`                  | Secrets Manager secret with the HMAC signing key (bare or `{"WEBHOOK_SIGNING_SECRET": …}`) | —                               |
-| `WEBHOOK_MAX_ATTEMPTS` / `WEBHOOK_TIMEOUT_MS` | Delivery attempts (1-5) and per-attempt timeout (1000-60000 ms)                            | 3 / 10000                       |
-| `RATE_LIMIT_PER_MINUTE`                       | Per-identity API request limit per minute                                                  | 600                             |
-| `RATE_LIMIT_EXPENSIVE_PER_MINUTE`             | Per-identity limit on expensive endpoints (attack paths, resource graph, reports)          | 60                              |
-| `DSPM_CLASSIFY_BUDGET_MS`                     | Hard CPU budget (ms) for classifying untrusted S3 content per scan                         | 30000                           |
-| `NEPTUNE_MUTATION_CHUNK`                      | Mutations per Gremlin write traversal (1-200)                                              | 25                              |
-| `COLLECTION_STAGE_CONCURRENCY`                | Independent collection stages in flight (1-20)                                             | 4                               |
-| `COLLECTION_RESOURCE_CONCURRENCY`             | Per-resource fan-out within a stage, e.g. S3 buckets and tag chunks (1-20)                 | 5                               |
+| Variable                                      | Description                                                                                                                         | Default                         |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `NEPTUNE_ENDPOINT`                            | Neptune Gremlin endpoint                                                                                                            | —                               |
+| `NEPTUNE_ENDPOINT` (auth)                     | Graph access uses SigV4 from the execution role; no Neptune auth secret is read                                                     | —                               |
+| `ISSUES_TABLE`                                | DynamoDB issues table                                                                                                               | `SecurityIssues`                |
+| `ACCESS_ANALYZER_TABLE`                       | CloudTrail usage cache                                                                                                              | `AccessAnalyzerCache`           |
+| `TRAFFIC_OBSERVATIONS_TABLE`                  | Observed-traffic cache for the EC2 collector (empty disables the read)                                                              | `TrafficObservations`           |
+| `THREAT_INDICATORS_TABLE`                     | Threat-intel indicators read by the rule runner                                                                                     | `ThreatIndicators`              |
+| `SERVICE_TOKENS_TABLE`                        | DynamoDB table holding service-token metadata and secret hashes                                                                     | `ServiceTokens`                 |
+| `THREAT_INTEL_IP_LIST_S3_URI`                 | s3://bucket/key of the newline-separated IP indicator list (empty disables)                                                         | —                               |
+| `THREAT_INTEL_ACCOUNT_LIST_S3_URI`            | s3://bucket/key of the newline-separated account-id list (empty disables)                                                           | —                               |
+| `THREAT_INTEL_TTL_DAYS`                       | Days an imported indicator stays valid (DynamoDB TTL)                                                                               | `90`                            |
+| `RECOMPUTE_QUEUE_URL`                         | FIFO queue the incremental collector signals and the recompute worker drains                                                        | —                               |
+| `RECOMPUTE_MIN_INTERVAL_SECONDS`              | Minimum seconds between event-triggered policy evaluations (recompute worker)                                                       | `900`                           |
+| `ATHENA_DATABASE`                             | Glue database for CloudTrail                                                                                                        | `khalifa_cloudtrail_db`         |
+| `ATHENA_WORKGROUP`                            | Athena workgroup                                                                                                                    | `khalifa-cloudtrail-analysis`   |
+| `CLOUDTRAIL_S3_LOCATION`                      | CloudTrail S3 prefix                                                                                                                | `s3://cloudtrail-logs/AWSLogs/` |
+| `ANALYSIS_DAYS`                               | CloudTrail lookback                                                                                                                 | `90`                            |
+| `AWS_REGION`                                  | AWS region                                                                                                                          | `us-east-1`                     |
+| `HOME_ACCOUNT_ID`                             | Account that uses ambient credentials                                                                                               | —                               |
+| `COLLECTOR_EXTERNAL_ID`                       | Member-role ExternalId                                                                                                              | —                               |
+| `GRAPH_WRITER_TOKEN`                          | Bearer token for `/mutations`                                                                                                       | —                               |
+| `COLLECTION_ACCOUNT_IDS`                      | Approved account IDs; names come from `ListAccounts` when the hub may call it                                                       | —                               |
+| `COLLECTION_PARENT_IDS`                       | Approved org root or OU IDs (still requires Organizations APIs)                                                                     | —                               |
+| `COLLECTION_REGIONS`                          | Approved Regions                                                                                                                    | —                               |
+| `GRAPH_WRITER_FUNCTION_NAME`                  | Graph-writer Lambda for analyzer anomalies                                                                                          | —                               |
+| `CANARY_PRINCIPAL_ARNS`                       | Comma-separated canary IAM user ARNs; any CloudTrail activity becomes RULE-023                                                      | —                               |
+| `PROD_ACCOUNT_IDS`                            | Collected accounts that hold production; RULE-032 flags prod secrets shared with the rest                                           | —                               |
+| `ACCESS_TRUSTED_EMAIL_DOMAIN`                 | Email domain allowed to reach the Viewer floor without a role group (chart: `accessTrustedEmailDomain`; unset = any verified email) | —                               |
+| `SLACK_WEBHOOK_SECRET_ARN`                    | Secrets Manager secret with the Slack webhook URL (bare URL or `{"SLACK_WEBHOOK_URL": …}`)                                          | —                               |
+| `WEBHOOK_URL` / `WEBHOOK_URL_SECRET_ARN`      | Generic webhook destination (URL, or the secret holding it — bare or `{"WEBHOOK_URL": …}`)                                          | —                               |
+| `WEBHOOK_SIGNING_SECRET_ARN`                  | Secrets Manager secret with the HMAC signing key (bare or `{"WEBHOOK_SIGNING_SECRET": …}`)                                          | —                               |
+| `WEBHOOK_MAX_ATTEMPTS` / `WEBHOOK_TIMEOUT_MS` | Delivery attempts (1-5) and per-attempt timeout (1000-60000 ms)                                                                     | 3 / 10000                       |
+| `RATE_LIMIT_PER_MINUTE`                       | Per-identity API request limit per minute                                                                                           | 600                             |
+| `RATE_LIMIT_EXPENSIVE_PER_MINUTE`             | Per-identity limit on expensive endpoints (attack paths, resource graph, reports)                                                   | 60                              |
+| `DSPM_CLASSIFY_BUDGET_MS`                     | Hard CPU budget (ms) for classifying untrusted S3 content per scan                                                                  | 30000                           |
+| `NEPTUNE_MUTATION_CHUNK`                      | Mutations per Gremlin write traversal (1-200)                                                                                       | 25                              |
+| `COLLECTION_STAGE_CONCURRENCY`                | Independent collection stages in flight (1-20)                                                                                      | 4                               |
+| `COLLECTION_RESOURCE_CONCURRENCY`             | Per-resource fan-out within a stage, e.g. S3 buckets and tag chunks (1-20)                                                          | 5                               |
 
 Canary credentials are deployed with `ENABLE_CANARIES=true` in the CDK environment (`cdk/bin/khalifa.ts`): two permission-less IAM users (`khalifa-canary-1/2`) whose access keys are stored in Secrets Manager (`khalifa-canary/credentials-1/2`). The keys have no legitimate use, so any CloudTrail activity from them is treated as a security incident. Off by default.
 
-The Slack sink prefers `SLACK_WEBHOOK_SECRET_ARN` (a bearer-equivalent credential should not ride along as a plaintext Lambda environment variable): the CDK stack stores `SLACK_WEBHOOK_URL` in `khalifa/slack-webhook` at deploy time and grants the risk engine read. The plaintext `SLACK_WEBHOOK_URL` remains only as a local-development fallback.
+The Slack sink prefers `SLACK_WEBHOOK_SECRET_ARN` (a bearer-equivalent credential should not ride along as a plaintext Lambda environment variable): create the `khalifa/slack-webhook` secret out-of-band and deploy with `SLACK_WEBHOOK_SECRET_ARN` — the CDK stack references the ARN and grants the risk engine read, and never synthesises the value into the CloudFormation template. The same pattern applies to the generic webhook's signing key (`khalifa/webhook-signing` + `WEBHOOK_SIGNING_SECRET_ARN`). The plaintext `SLACK_WEBHOOK_URL` remains only as a local-development fallback.
 
 The generic webhook sink (`webhook` in `ISSUE_SINKS`) POSTs issue events as HMAC-signed JSON: `X-Khalifa-Signature: sha256=<hex>` over `<timestamp>.<raw body>`, with `X-Khalifa-Event` (`issue.created` on first delivery, `issue.updated` on refreshes, and the lifecycle transitions `issue.resolved` when the finding stops matching and `issue.suppressed` when an analyst suppresses it), a delivery id for receiver-side idempotency, and bounded retries with backoff (5xx/429/network only; 4xx fails fast). A configured URL without a signing secret refuses to deliver — unsigned payloads would invite receivers to trust unauthenticated content — and `/integrations/status` reports the sink's health. Lifecycle events are gated the same way as created/updated: only rules with `autoTicketConfig.enabled` emit. The Slack sink stays alert-oriented and posts for created/updated only; a reopen is delivered as `issue.updated` on the next refresh that matches it.
 

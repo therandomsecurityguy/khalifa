@@ -795,29 +795,30 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       displayName: 'Khalifa Security Issues',
     });
 
-    // A Slack webhook URL is a bearer-equivalent credential, so it must not
-    // ride along as a plaintext Lambda environment variable (readable by
-    // anyone with lambda:GetFunctionConfiguration). When a webhook is
-    // configured at deploy time it is stored in Secrets Manager and the risk
-    // engine resolves it at runtime via SLACK_WEBHOOK_SECRET_ARN, mirroring
-    // how the collector external ID is delivered.
-    const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL || '';
-    const slackWebhookSecret = slackWebhookUrl
-      ? new secretsmanager.Secret(this, 'SlackWebhookSecret', {
-          secretName: 'khalifa/slack-webhook',
-          secretStringValue: cdk.SecretValue.unsafePlainText(slackWebhookUrl),
-        })
+    // Webhook credentials (a Slack URL is bearer-equivalent; the generic
+    // webhook's signing key is a credential) are referenced from Secrets
+    // Manager by ARN only. The operator creates the secret out-of-band and
+    // passes its ARN here; the stack never synthesises a secret value from an
+    // environment variable, which would land as plaintext in the
+    // CloudFormation template — readable far more widely than
+    // secretsmanager:GetSecretValue. The runtime resolves the value at call
+    // time through the ARN.
+    const slackWebhookSecretArn = process.env.SLACK_WEBHOOK_SECRET_ARN || '';
+    const slackWebhookSecret = slackWebhookSecretArn
+      ? secretsmanager.Secret.fromSecretCompleteArn(
+          this,
+          'SlackWebhookSecret',
+          slackWebhookSecretArn
+        )
       : undefined;
 
-    // The generic webhook's signing key is a credential: deploy-time value in,
-    // Secrets Manager at rest, ARN on the function. The destination URL is not
-    // a credential in the general case and rides the environment; operators
-    // whose URL embeds a token should use WEBHOOK_URL_SECRET_ARN instead.
-    const webhookSigningSecret = process.env.WEBHOOK_SIGNING_SECRET
-      ? new secretsmanager.Secret(this, 'WebhookSigningSecret', {
-          secretName: 'khalifa/webhook-signing',
-          secretStringValue: cdk.SecretValue.unsafePlainText(process.env.WEBHOOK_SIGNING_SECRET),
-        })
+    const webhookSigningSecretArn = process.env.WEBHOOK_SIGNING_SECRET_ARN || '';
+    const webhookSigningSecret = webhookSigningSecretArn
+      ? secretsmanager.Secret.fromSecretCompleteArn(
+          this,
+          'WebhookSigningSecret',
+          webhookSigningSecretArn
+        )
       : undefined;
 
     const riskEngineFn = new lambda.Function(this, 'RiskEngineFn', {
@@ -832,10 +833,10 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         POSTURE_TRENDS_TABLE: postureTrendsTable.tableName,
         ISSUES_TOPIC_ARN: issuesTopic.topicArn,
         ISSUE_SINKS: process.env.ISSUE_SINKS || 'sns',
-        SLACK_WEBHOOK_SECRET_ARN: slackWebhookSecret?.secretArn ?? '',
+        SLACK_WEBHOOK_SECRET_ARN: slackWebhookSecretArn,
         SLACK_MIN_SEVERITY: process.env.SLACK_MIN_SEVERITY || 'high',
         WEBHOOK_URL: process.env.WEBHOOK_URL || '',
-        WEBHOOK_SIGNING_SECRET_ARN: webhookSigningSecret?.secretArn ?? '',
+        WEBHOOK_SIGNING_SECRET_ARN: webhookSigningSecretArn,
         UI_BASE_URL: process.env.UI_BASE_URL || '',
       },
     });
