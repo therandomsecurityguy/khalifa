@@ -3,13 +3,22 @@ import type { Request, Response } from 'express';
 const getIssueById = jest.fn();
 const suppressIssueInStore = jest.fn();
 const reopenIssueInStore = jest.fn();
+const updateExternalRefsInStore = jest.fn();
+const getRuleById = jest.fn();
+const emitMock = jest.fn();
 
 jest.mock('@khalifa/risk-engine', () => ({
   DynamoDBIssueRepository: jest.fn().mockImplementation(() => ({
     getIssueById,
     suppressIssue: suppressIssueInStore,
     reopenIssue: reopenIssueInStore,
+    updateExternalRefs: updateExternalRefsInStore,
   })),
+  getRuleById,
+}));
+
+jest.mock('@khalifa/integrations', () => ({
+  IssueIntegrationsOrchestrator: jest.fn().mockImplementation(() => ({ emit: emitMock })),
 }));
 
 let suppressIssue: typeof import('../routes/integrations').suppressIssue;
@@ -46,6 +55,9 @@ describe('issue lifecycle routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getIssueById.mockResolvedValue(stored);
+    getRuleById.mockReset();
+    emitMock.mockReset();
+    updateExternalRefsInStore.mockReset();
   });
 
   it('pins the same limits the route enforces', () => {
@@ -125,5 +137,53 @@ describe('issue lifecycle routes', () => {
 
     expect(res.statusCode).toBe(409);
     expect(res.body).toEqual({ code: 'CONFLICT', message: 'Issue state changed: issue-id' });
+  });
+
+  it('emits issue.suppressed and persists delivery refs for ticketed rules', async () => {
+    getRuleById.mockReturnValue({ id: 'RULE-001', autoTicketConfig: { enabled: true } });
+    suppressIssueInStore.mockResolvedValue(true);
+    emitMock.mockResolvedValue([{ system: 'webhook', id: 'issue-id', emittedAt: 'now' }]);
+    updateExternalRefsInStore.mockResolvedValue(true);
+    const expiresAt = inDays(7);
+    const res = response();
+
+    await suppressIssue(request({ reason: 'accepted', expiresAt }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(emitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'issue-id', ruleId: 'RULE-001', status: 'suppressed' }),
+      expect.objectContaining({ id: 'RULE-001' }),
+      'issue.suppressed'
+    );
+    expect(updateExternalRefsInStore).toHaveBeenCalledWith({ id: 'issue-id', ruleId: 'RULE-001' }, [
+      { system: 'webhook', id: 'issue-id', emittedAt: 'now' },
+    ]);
+  });
+
+  it('does not emit when the rule is unknown or auto-ticketing is off', async () => {
+    suppressIssueInStore.mockResolvedValue(true);
+
+    getRuleById.mockReturnValue(undefined);
+    await suppressIssue(request({ reason: 'accepted', expiresAt: inDays(7) }), response());
+
+    getRuleById.mockReturnValue({ id: 'RULE-001', autoTicketConfig: { enabled: false } });
+    await suppressIssue(request({ reason: 'accepted', expiresAt: inDays(7) }), response());
+
+    expect(emitMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the recorded suppression when delivery fails', async () => {
+    getRuleById.mockReturnValue({ id: 'RULE-001', autoTicketConfig: { enabled: true } });
+    suppressIssueInStore.mockResolvedValue(true);
+    emitMock.mockRejectedValue(new Error('sink down'));
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const res = response();
+    await suppressIssue(request({ reason: 'accepted', expiresAt: inDays(7) }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ status: 'suppressed' });
+    expect(error).toHaveBeenCalledWith('Issue integration delivery failed:', expect.any(Error));
+    error.mockRestore();
   });
 });

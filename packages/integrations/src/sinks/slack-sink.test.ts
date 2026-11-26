@@ -116,4 +116,17 @@ describe('SlackSink', () => {
     expect(ref).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  test('skips lifecycle transitions: this channel is alert-oriented', async () => {
+    process.env.SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/T000/B000/XXX';
+    fetchMock.mockResolvedValue({ ok: true });
+
+    const sink = new SlackSink();
+
+    expect(await sink.emit(sampleIssue, sampleRule, 'issue.resolved')).toBeNull();
+    expect(
+      await sink.emit({ ...sampleIssue, status: 'suppressed' }, sampleRule, 'issue.suppressed')
+    ).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

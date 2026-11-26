@@ -142,6 +142,34 @@ describe('WebhookSink', () => {
     expect(JSON.parse(init.body).event).toBe('issue.updated');
   });
 
+  test('carries an explicit lifecycle event through the header and body', async () => {
+    process.env.WEBHOOK_URL = 'https://hooks.example.com/khalifa';
+    process.env.WEBHOOK_SIGNING_SECRET = SIGNING_SECRET;
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+
+    const sink = new WebhookSink();
+    await sink.emit({ ...sampleIssue, status: 'suppressed' }, sampleRule, 'issue.suppressed');
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers['x-khalifa-event']).toBe('issue.suppressed');
+    const payload = JSON.parse(init.body);
+    expect(payload.event).toBe('issue.suppressed');
+    expect(payload.issue.status).toBe('suppressed');
+  });
+
+  test('derives a lifecycle event from the status when none is given', async () => {
+    process.env.WEBHOOK_URL = 'https://hooks.example.com/khalifa';
+    process.env.WEBHOOK_SIGNING_SECRET = SIGNING_SECRET;
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+
+    const sink = new WebhookSink();
+    await sink.emit({ ...sampleIssue, status: 'resolved' }, sampleRule);
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers['x-khalifa-event']).toBe('issue.resolved');
+    expect(JSON.parse(init.body).issue.status).toBe('resolved');
+  });
+
   test('retries a 5xx with backoff and succeeds', async () => {
     jest.useFakeTimers();
     process.env.WEBHOOK_URL = 'https://hooks.example.com/khalifa';

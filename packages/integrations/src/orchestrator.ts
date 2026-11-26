@@ -1,4 +1,4 @@
-import type { IssueActionSink, IssueLike, RuleLike, ExternalRef } from './types';
+import type { IssueActionSink, IssueLike, RuleLike, ExternalRef, IssueEvent } from './types';
 import { getSink } from './types';
 import './sinks/sns-sink';
 import './sinks/slack-sink';
@@ -24,7 +24,7 @@ export class IssueIntegrationsOrchestrator {
       .filter((sink): sink is IssueActionSink => sink !== null);
   }
 
-  async emit(issue: IssueLike, rule: RuleLike): Promise<ExternalRef[]> {
+  async emit(issue: IssueLike, rule: RuleLike, event?: IssueEvent): Promise<ExternalRef[]> {
     if (this.sinks.length === 0) return [];
 
     const refs: ExternalRef[] = [];
@@ -32,7 +32,7 @@ export class IssueIntegrationsOrchestrator {
 
     for (const sink of this.sinks) {
       try {
-        const ref = await sink.emit(issue, rule);
+        const ref = await sink.emit(issue, rule, event);
         if (ref) refs.push(ref);
       } catch (e) {
         errors.push(`${sink.system}: ${e instanceof Error ? e.message : String(e)}`);
