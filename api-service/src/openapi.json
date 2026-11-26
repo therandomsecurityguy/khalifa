@@ -1398,6 +1398,32 @@
         }
       }
     },
+    "/ai/bom": {
+      "get": {
+        "tags": ["AI inventory"],
+        "operationId": "getAiBom",
+        "summary": "AI bill of materials (service-level inventory export)",
+        "description": "Requires **Viewer**. A flat component export of the collected AI estate with a schema version, per-type totals, and truncation flags named explicitly. Service-level inventory collected read-only from AWS APIs — not a code-level SBOM (no libraries, container digests, or prompt contents) and not a CycloneDX or SPDX document.",
+        "responses": {
+          "200": {
+            "description": "`schemaVersion`, `documentType`, `generatedAt`, `scope`, `totals` (per type, null when the count traversal failed), `truncatedTypes`, and `components` (one per inventory item, carrying `componentType`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/ai/agents/{arn}": {
       "get": {
         "tags": ["AI inventory"],
