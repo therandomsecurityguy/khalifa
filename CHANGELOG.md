@@ -14,6 +14,12 @@ All notable changes to Khalifa.
 
 - **Generic webhook issue sink** (`webhook` in `ISSUE_SINKS`, alongside `sns` and `slack`): issue events POST as HMAC-SHA256-signed JSON (`X-Khalifa-Signature: sha256=<hex>` over `<timestamp>.<raw body>`, so receivers can verify over the raw bytes and enforce a replay window), with `X-Khalifa-Event` (`issue.created` on the first delivery for an issue, `issue.updated` on refreshes — resolved/suppressed transitions do not flow through the sink framework yet), a unique delivery id for idempotency, and a compact payload (core issue fields, rule identity, and a UI link; paths and metadata stay behind the link). Deliveries retry with backoff on 5xx/429/network failures (bounded attempts, per-attempt timeout) and fail fast on other 4xx. Configuration: `WEBHOOK_URL` or `WEBHOOK_URL_SECRET_ARN` for the destination (credential-bearing URLs belong in Secrets Manager), `WEBHOOK_SIGNING_SECRET_ARN` (or the plaintext development fallback) for the key; a URL without a signing secret refuses to deliver. Wired through the Helm chart (values + schema, whose `issueSinks` enum now also accepts `slack` and `webhook`) and the CDK stack (signing key stored in `khalifa/webhook-signing`, read granted to the risk engine); `/integrations/status` reports its health.
 
+## [Unreleased] - Next.js security update
+
+### Security
+
+- **Upgraded Next.js from 16.4.3 to 16.4.6** in `ui`, the first release outside all seven advisories of the November 2026 Next.js security release (the October 2026 critical RCE and DoS fixes landed in 16.4.1). The lockfile now also resolves `sharp` 0.35.5, the fixed version for the image-optimization advisory. `ui/next.config.js` pins `experimental.agentUpgrade` to `security`, keeping the build-time advisory check on its fail-visible policy instead of relying on the default. No application code changes.
+
 ## [Unreleased] - Bearer parsing without backtracking
 
 ### Fixed
