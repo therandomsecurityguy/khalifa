@@ -13,7 +13,7 @@ import { listAccounts, searchAttackPaths, simulateAttackPaths } from './routes/a
 import { listAttackScenarios, runAttackScenario } from './routes/attack-scenarios';
 import { getDataSources } from './routes/data-sources';
 import { createServiceToken, listServiceTokens, revokeServiceToken } from './routes/service-tokens';
-import { getAiAgent, getAiInventory } from './routes/ai';
+import { getAiAgent, getAiBom, getAiInventory } from './routes/ai';
 import {
   createAiUseCase,
   deleteAiUseCase,
@@ -173,6 +173,7 @@ app.get('/resources/graph', requireViewer, expensiveRateLimiter, getResourceGrap
 app.get('/resources/*arn', validateArnPathParam('arn'), requireViewer, getResource);
 
 app.get('/ai/inventory', requireViewer, expensiveRateLimiter, getAiInventory);
+app.get('/ai/bom', requireViewer, expensiveRateLimiter, getAiBom);
 app.get('/ai/agents/*arn', validateArnPathParam('arn'), requireViewer, getAiAgent);
 
 app.get('/ai/use-cases', requireViewer, listAiUseCases);

@@ -53,6 +53,40 @@ export async function getAiInventory(req: Request, res: Response): Promise<void>
   }
 }
 
+export const AI_BOM_SCHEMA_VERSION = '1.0';
+// A BOM is an export, so each type gets a larger bound than the inventory
+// page; truncation is still flagged per type rather than hidden.
+const AI_BOM_LIMIT_PER_TYPE = 1000;
+
+// A service-level AI bill of materials: the collected AI estate as one flat
+// component list for governance exports and tooling. It is explicitly NOT a
+// code-level SBOM — instrumentation comes from read-only AWS API collection
+// (management plane), so there are no libraries, container digests, or prompt
+// contents to enumerate, and it is not a CycloneDX or SPDX document.
+export async function getAiBom(_req: Request, res: Response): Promise<void> {
+  try {
+    const sections = await neptuneClient.listAiInventory(AI_BOM_LIMIT_PER_TYPE);
+    const components = sections.flatMap((section) =>
+      section.items.map((item) => ({ componentType: section.type, ...item }))
+    );
+    res.json({
+      schemaVersion: AI_BOM_SCHEMA_VERSION,
+      documentType: 'ai-bom',
+      generatedAt: new Date().toISOString(),
+      scope:
+        'Service-level inventory collected read-only from AWS APIs (management plane). Not a code-level SBOM: no libraries, container digests, or prompt contents; not a CycloneDX or SPDX document.',
+      totals: Object.fromEntries(sections.map((section) => [section.type, section.count])),
+      truncatedTypes: sections
+        .filter((section) => section.truncated)
+        .map((section) => section.type),
+      components,
+    });
+  } catch (error) {
+    console.error('Error exporting AI BOM:', error);
+    res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to export AI BOM' });
+  }
+}
+
 export async function getAiAgent(
   req: Request<{ arn: string | string[] }>,
   res: Response

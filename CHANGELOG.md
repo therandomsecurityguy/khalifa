@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI BOM export
+
+### Added
+
+- **`GET /ai/bom`** (Viewer+): a service-level AI bill of materials — one flat `components` list of the collected AI estate (agents, knowledge bases, guardrails, models, endpoints, notebooks, domains), each component carrying `componentType` plus the inventory item's curated fields, alongside `schemaVersion`, `documentType`, `generatedAt`, per-type `totals` (null when the grouped count traversal failed, never a fake zero), and `truncatedTypes` so a capped export says so instead of looking complete. The document states its own scope in its body: read-only management-plane AWS API collection, explicitly not a code-level SBOM (no libraries, container digests, or prompt contents) and not a CycloneDX or SPDX document. Bounded per type (1000) behind the expensive-endpoint rate limiter; new OpenAPI operation and tests covering the flattened export, null totals, truncation flags, and the failure path.
+
 ## [Unreleased] - Issue lifecycle events
 
 ### Added
