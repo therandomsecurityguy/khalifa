@@ -30,6 +30,7 @@ data:
   COGNITO_REGION: {{ default .Values.config.awsRegion .Values.config.cognitoRegion | quote }}
   CLOUDFLARE_ACCESS_TEAM_DOMAIN: {{ default "" .Values.config.cloudflareAccessTeamDomain | quote }}
   CLOUDFLARE_ACCESS_AUD: {{ default "" .Values.config.cloudflareAccessAud | quote }}
+  ACCESS_TRUSTED_EMAIL_DOMAIN: {{ default "" .Values.config.accessTrustedEmailDomain | quote }}
   CORS_ALLOWED_ORIGINS: {{ join "," .Values.config.corsAllowedOrigins | quote }}
   ISSUE_SINKS: {{ join "," .Values.config.issueSinks | quote }}
   ISSUES_TOPIC_ARN: {{ .Values.config.issuesTopicArn | quote }}

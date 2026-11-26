@@ -14,6 +14,14 @@ resource "aws_cognito_user_pool" "this" {
     "email",
   ]
 
+  # No self-service signup: every user is created by an administrator (see the
+  # install runbook). The API's Viewer floor trusts verified emails only
+  # because of this — a self-registered internet identity must never obtain a
+  # token the RBAC layer would accept.
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
+
   software_token_mfa_configuration {
     enabled = true
   }

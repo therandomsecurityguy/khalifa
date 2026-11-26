@@ -129,6 +129,17 @@ variable "ui_base_url" {
   }
 }
 
+variable "access_trusted_email_domain" {
+  description = "Email domain whose verified addresses reach the API's Viewer floor when they carry no Cognito role group. Empty leaves the floor to whatever identity provider admission (Cognito admin creation or the Cloudflare Access policy) allowed in."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.access_trusted_email_domain == "" || can(regex("^[a-z0-9.-]+$", var.access_trusted_email_domain))
+    error_message = "access_trusted_email_domain must be a lowercase domain name, or empty."
+  }
+}
+
 variable "dspm_bucket_allowlist" {
   description = "Buckets the DSPM scanner may read object content from. Empty keeps the historical all-buckets grant."
   type        = list(string)

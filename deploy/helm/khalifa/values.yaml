@@ -96,6 +96,10 @@ config:
   # Issuer host for Access JWT verify. When set, API egress includes 0.0.0.0/0:443 for JWKS.
   cloudflareAccessTeamDomain: ''
   cloudflareAccessAud: ''
+  # Email domain whose verified addresses reach the Viewer floor when they
+  # carry no Cognito role group. Empty leaves the floor to whatever admission
+  # allowed in (Cognito admin creation / the Access policy).
+  accessTrustedEmailDomain: ''
   corsAllowedOrigins: []
   issueSinks: []
   issuesTopicArn: ''

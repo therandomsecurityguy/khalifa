@@ -2,6 +2,13 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Security hardening (batch 1)
+
+### Security
+
+- **Cognito self-service signup is disabled** in the reference module (`admin_create_user_config { allow_admin_create_user_only = true }`): the API's Viewer floor trusts verified emails, so public signup let an internet identity self-register and read the graph at Viewer level. `access_trusted_email_domain` (`accessTrustedEmailDomain`) is now surfaced through the data module and the chart (values + schema + configmap as `ACCESS_TRUSTED_EMAIL_DOMAIN`) to optionally constrain that floor to one email domain; deploy users with `admin-create-user` as the runbook already describes. From security review F-01.
+- **The CDK stack no longer synthesises webhook secrets into the CloudFormation template.** Slack and webhook-signing credentials are referenced by ARN only (`SLACK_WEBHOOK_SECRET_ARN` / `WEBHOOK_SIGNING_SECRET_ARN`); create `khalifa/slack-webhook` and `khalifa/webhook-signing` out-of-band before deploying. The old deploy-time `SLACK_WEBHOOK_URL` / `WEBHOOK_SIGNING_SECRET` plumbing (whose values were emitted as plaintext `SecretString` in the template and `cdk.out`) is gone; AGENTS.md and the README describe the ARN flow. From security review F-02.
+
 ## [Unreleased] - AI BOM export
 
 ### Added

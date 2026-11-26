@@ -137,6 +137,7 @@
         "cognitoRegion": { "type": "string", "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$" },
         "cloudflareAccessTeamDomain": { "type": "string" },
         "cloudflareAccessAud": { "type": "string" },
+        "accessTrustedEmailDomain": { "type": "string", "pattern": "^$|^[a-z0-9.-]+$" },
         "corsAllowedOrigins": {
           "type": "array",
           "minItems": 1,
