@@ -261,6 +261,7 @@ describe('CloudTrail analyzer', () => {
       secretRows,
       newApiRows,
       unusualHourRows,
+      { ResultSet: { Rows: [detailHeader] } },
       deniedRows,
     ]);
     type AnomalyNode = { id: string; properties: Record<string, unknown> };
@@ -322,7 +323,7 @@ describe('CloudTrail analyzer', () => {
     const startedQueries = athenaSend.mock.calls.filter(
       ([command]) => command instanceof StartQueryExecutionCommand
     );
-    expect(startedQueries).toHaveLength(6);
+    expect(startedQueries).toHaveLength(7);
   });
 
   it('detects canary credential usage when canary principals are configured', async () => {
@@ -364,6 +365,7 @@ describe('CloudTrail analyzer', () => {
       usagePage,
       emptyRows,
       emptyRows,
+      emptyDetailRows,
       emptyDetailRows,
       emptyDetailRows,
       emptyRows,
@@ -412,7 +414,102 @@ describe('CloudTrail analyzer', () => {
     expect(canaryQuery).toBeDefined();
     expect(
       athenaSend.mock.calls.filter(([c]) => c instanceof StartQueryExecutionCommand)
-    ).toHaveLength(7);
+    ).toHaveLength(8);
+  });
+
+  it('flags shadow AI usage except for allowlisted principals', async () => {
+    const usagePage = { ResultSet: { Rows: [header, row(0)] } };
+    const detailHeader = {
+      ResultSet: {
+        Rows: [
+          ['principal_arn', 'source_ip', 'event_count', 'first_seen', 'last_seen', 'detail'].map(
+            (VarCharValue) => ({ VarCharValue })
+          ),
+        ],
+      },
+    };
+    const anomalyHeader = {
+      ResultSet: {
+        Rows: [
+          ['principal_arn', 'source_ip', 'event_count', 'first_seen', 'last_seen'].map(
+            (VarCharValue) => ({ VarCharValue })
+          ),
+        ],
+      },
+    };
+    const shadowRows = {
+      ResultSet: {
+        Rows: [
+          detailHeader.ResultSet.Rows[0],
+          {
+            Data: [
+              'arn:aws:iam::111122223333:user/approved-bot',
+              '203.0.113.9',
+              '2',
+              '2026-09-09T10:00:00Z',
+              '2026-09-09T11:00:00Z',
+              'ListAgents',
+            ].map((VarCharValue) => ({ VarCharValue })),
+          },
+          {
+            Data: [
+              'arn:aws:sts::111122223333:assumed-role/BedrockTeam',
+              '203.0.113.10',
+              '5',
+              '2026-09-09T09:00:00Z',
+              '2026-09-09T12:00:00Z',
+              'CreateAgent, StartJob',
+            ].map((VarCharValue) => ({ VarCharValue })),
+          },
+          {
+            Data: [
+              'arn:aws:sts::111122223333:assumed-role/MysteryTeam',
+              '203.0.113.11',
+              '1',
+              '2026-09-09T08:00:00Z',
+              '2026-09-09T08:30:00Z',
+              'CreateModelCustomizationJob',
+            ].map((VarCharValue) => ({ VarCharValue })),
+          },
+        ],
+      },
+    };
+    const athenaSend = athena([
+      usagePage,
+      anomalyHeader,
+      anomalyHeader,
+      detailHeader,
+      detailHeader,
+      shadowRows,
+      detailHeader,
+    ]);
+    const writeAnomalies = jest.fn(async (batch: { nodes: unknown[] }) => ({
+      written: batch.nodes.length,
+    }));
+
+    const result = await analyzeCloudTrail(
+      {},
+      { ...dependencies(athenaSend, jest.fn().mockResolvedValue({})), writeAnomalies },
+      {
+        ...environment,
+        GRAPH_WRITER_FUNCTION_NAME: 'graph-writer-fn',
+        AI_PRINCIPAL_ALLOWLIST:
+          'arn:aws:iam::111122223333:user/approved-bot, arn:aws:iam::111122223333:role/BedrockTeam',
+      }
+    );
+
+    expect(result.anomalies).toBe(1);
+    const nodeBatches = writeAnomalies.mock.calls
+      .map((call) => call[0])
+      .filter((batch) => batch.nodes.length > 0);
+    expect(nodeBatches).toHaveLength(1);
+    const node = nodeBatches[0].nodes[0] as { properties: Record<string, unknown> };
+    expect(node.properties).toMatchObject({
+      anomaly_type: 'SHADOW_AI_USAGE',
+      principal_arn: 'arn:aws:sts::111122223333:assumed-role/MysteryTeam',
+      source_ip: '203.0.113.11',
+      detail: 'CreateModelCustomizationJob',
+    });
   });
 
   it('rejects invalid canary ARNs before starting any queries', async () => {

@@ -3,11 +3,15 @@ import {
   anomalyAccountId,
   assertAthenaDatabase,
   assertAnomalyQueryDays,
+  assumedRoleToIamArn,
   buildAnomalyNodes,
   buildAnomalyQueries,
+  detectShadowAiUsage,
+  parseAiPrincipalAllowlist,
   parseAnomalyRow,
   parseCanaryPrincipalArns,
   reconcileAnomalies,
+  type AnomalyRecord,
 } from './anomalies';
 
 const DATABASE = 'khalifa_cloudtrail_db';
@@ -51,7 +55,7 @@ describe('buildAnomalyQueries input guards', () => {
 });
 
 describe('buildAnomalyQueries', () => {
-  it('builds the five detection queries with the database and window bound in', () => {
+  it('builds the six detection queries with the database and window bound in', () => {
     const queries = buildAnomalyQueries(DATABASE, 90);
 
     expect(queries.map((q) => q.type)).toEqual([
@@ -59,6 +63,7 @@ describe('buildAnomalyQueries', () => {
       'SECRET_READ_NEW_SOURCE_IP',
       'NEW_API_FOR_PRINCIPAL',
       'UNUSUAL_HOUR_ACTIVITY',
+      'SHADOW_AI_USAGE',
       'ACCESS_DENIED_SPIKE',
     ]);
 
@@ -84,11 +89,23 @@ describe('buildAnomalyQueries', () => {
 
     // Denied spikes: daily counts for the baseline evaluator, no fixed
     // threshold in SQL.
-    expect(queries[4].sql).toContain("errorcode = 'AccessDenied'");
-    expect(queries[4].sql).toContain('AS day');
-    expect(queries[4].sql).toContain("'%Y-%m-%d'");
-    expect(queries[4].sql).not.toContain('HAVING');
-    expect(queries[4].sql).not.toContain(`>= ${ACCESS_DENIED_SPIKE_THRESHOLD}`);
+    expect(queries[5].sql).toContain("errorcode = 'AccessDenied'");
+    expect(queries[5].sql).toContain('AS day');
+    expect(queries[5].sql).toContain("'%Y-%m-%d'");
+    expect(queries[5].sql).not.toContain('HAVING');
+    expect(queries[5].sql).not.toContain(`>= ${ACCESS_DENIED_SPIKE_THRESHOLD}`);
+
+    // Shadow AI: canonicalized assumed-role principals over the behavioural
+    // window, restricted to the managed AI event sources.
+    expect(queries[4].sql).toContain('assumed-role/[^/]+)/.+$');
+    expect(queries[4].sql).toContain("'bedrock.amazonaws.com'");
+    expect(queries[4].sql).toContain("'bedrock-agent.amazonaws.com'");
+    expect(queries[4].sql).toContain("'bedrock-agent-runtime.amazonaws.com'");
+    expect(queries[4].sql).toContain("'sagemaker.amazonaws.com'");
+    expect(queries[4].sql).toContain("'sagemaker-runtime.amazonaws.com'");
+    expect(queries[4].sql).toContain('GROUP BY 1, 2');
+    expect(queries[4].sql).toContain("interval '7' day");
+    expect(queries[4].sql).not.toContain('principal_arn IN');
   });
 
   it('parses a detail-bearing row and caps an oversized detail', () => {
@@ -161,17 +178,17 @@ describe('buildAnomalyQueries', () => {
       'arn:aws:iam::111122223333:user/khalifa-canary-2',
     ]);
 
-    expect(queries).toHaveLength(6);
-    expect(queries[5].type).toBe('CANARY_USED');
-    expect(queries[5].sql).toContain(
+    expect(queries).toHaveLength(7);
+    expect(queries[6].type).toBe('CANARY_USED');
+    expect(queries[6].sql).toContain(
       "useridentity.arn IN ('arn:aws:iam::111122223333:user/khalifa-canary-1', 'arn:aws:iam::111122223333:user/khalifa-canary-2')"
     );
-    expect(queries[5].sql).toContain("interval '90' day");
+    expect(queries[6].sql).toContain("interval '90' day");
   });
 
   it('never emits a CANARY_USED query without canary principals', () => {
-    expect(buildAnomalyQueries(DATABASE, 90)).toHaveLength(5);
-    expect(buildAnomalyQueries(DATABASE, 90, [])).toHaveLength(5);
+    expect(buildAnomalyQueries(DATABASE, 90)).toHaveLength(6);
+    expect(buildAnomalyQueries(DATABASE, 90, [])).toHaveLength(6);
   });
 
   it('bounds the behavioural-breadth queries with their own baseline window', () => {
@@ -364,5 +381,81 @@ describe('reconcileAnomalies', () => {
       runId: 'run-1',
       observedAt: '2026-09-10T12:00:00.000Z',
     });
+  });
+});
+
+describe('parseAiPrincipalAllowlist', () => {
+  it('accepts users and roles, trimmed', () => {
+    expect(
+      parseAiPrincipalAllowlist(
+        ' arn:aws:iam::111122223333:role/BedrockTeam , arn:aws:iam::111122223333:user/ai-bot '
+      )
+    ).toEqual([
+      'arn:aws:iam::111122223333:role/BedrockTeam',
+      'arn:aws:iam::111122223333:user/ai-bot',
+    ]);
+    expect(parseAiPrincipalAllowlist(undefined)).toEqual([]);
+    expect(parseAiPrincipalAllowlist('  ')).toEqual([]);
+  });
+
+  it.each([
+    "arn:aws:iam::111122223333:role/X'; DROP TABLE logs",
+    'arn:aws:sts::111122223333:assumed-role/X/session',
+    'arn:aws:iam::111:role/x',
+    'arn:aws:iam::111122223333:group/team',
+    'not-an-arn',
+  ])('rejects invalid allowlist entry %s', (arn) => {
+    expect(() => parseAiPrincipalAllowlist(arn)).toThrow(
+      'AI_PRINCIPAL_ALLOWLIST contains an invalid IAM user or role ARN'
+    );
+  });
+});
+
+describe('assumedRoleToIamArn', () => {
+  it('maps canonical and session-scoped assumed-role ARNs to their role', () => {
+    expect(assumedRoleToIamArn('arn:aws:sts::111122223333:assumed-role/BedrockTeam')).toBe(
+      'arn:aws:iam::111122223333:role/BedrockTeam'
+    );
+    expect(
+      assumedRoleToIamArn('arn:aws-us-gov:sts::111122223333:assumed-role/R/session-name')
+    ).toBe('arn:aws-us-gov:iam::111122223333:role/R');
+    expect(assumedRoleToIamArn('arn:aws:iam::111122223333:user/ai-bot')).toBeNull();
+  });
+});
+
+describe('detectShadowAiUsage', () => {
+  const record = (principalArn: string, sourceIp = '203.0.113.9'): AnomalyRecord => ({
+    type: 'SHADOW_AI_USAGE',
+    principalArn,
+    sourceIp,
+    eventCount: 3,
+    firstSeen: '2026-11-20T10:00:00Z',
+    lastSeen: '2026-11-20T11:00:00Z',
+    detail: 'CreateNotebookInstance',
+  });
+
+  it('flags every principal when the allowlist is empty', () => {
+    const records = [record('arn:aws:iam::111122223333:user/ai-bot')];
+    expect(detectShadowAiUsage(records, [])).toEqual(records);
+  });
+
+  it('drops a directly allowlisted user and keeps the rest', () => {
+    const records = [
+      record('arn:aws:iam::111122223333:user/approved-bot'),
+      record('arn:aws:iam::111122223333:user/mystery'),
+    ];
+    const kept = detectShadowAiUsage(records, ['arn:aws:iam::111122223333:user/approved-bot']);
+    expect(kept.map((r) => r.principalArn)).toEqual(['arn:aws:iam::111122223333:user/mystery']);
+  });
+
+  it('covers assumed-role sessions through their role allowlist entry', () => {
+    const records = [
+      record('arn:aws:sts::111122223333:assumed-role/BedrockTeam'),
+      record('arn:aws:sts::111122223333:assumed-role/OtherTeam'),
+    ];
+    const kept = detectShadowAiUsage(records, ['arn:aws:iam::111122223333:role/BedrockTeam']);
+    expect(kept.map((r) => r.principalArn)).toEqual([
+      'arn:aws:sts::111122223333:assumed-role/OtherTeam',
+    ]);
   });
 });

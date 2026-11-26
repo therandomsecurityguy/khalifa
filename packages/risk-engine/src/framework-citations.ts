@@ -717,9 +717,9 @@ export const FRAMEWORK_CITATIONS: FrameworkCitation[] = [
     section: 'AI system life cycle',
     title: 'AI systems are operated with monitoring',
     description:
-      'AI workloads run as non-administrative roles, and Bedrock agents carry guardrail protections while in operation.',
-    controls: ['KH-AI-1', 'KH-AI-2'],
-    why: 'Least-privilege operation and runtime guardrails evidence the controlled operation of the AI estate.',
+      'AI workloads run as non-administrative roles, Bedrock agents carry guardrail protections while in operation, and AI-service usage outside the deployment-approved principals is flagged as shadow AI.',
+    controls: ['KH-AI-1', 'KH-AI-2', 'KH-AI-4'],
+    why: 'Least-privilege operation, runtime guardrails, and unapproved-usage detection evidence the monitored operation of the AI estate.',
   },
   {
     framework: 'ISO_42001',

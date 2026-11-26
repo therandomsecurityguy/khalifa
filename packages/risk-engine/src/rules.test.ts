@@ -5,7 +5,7 @@ const MANAGED_HOP = "optional(outE('CONTAINS').inV().hasLabel('IamPolicyDocument
 
 describe('riskRules', () => {
   test('should have exactly 42 rules', () => {
-    expect(riskRules.length).toBe(42);
+    expect(riskRules.length).toBe(43);
   });
 
   test('each rule should have required fields', () => {
@@ -68,7 +68,7 @@ describe('getEnabledRules', () => {
 
   test('should return 42 enabled rules', () => {
     const enabledRules = getEnabledRules();
-    expect(enabledRules.length).toBe(42);
+    expect(enabledRules.length).toBe(43);
   });
 });
 
@@ -140,6 +140,7 @@ describe('getRuleById', () => {
     ['RULE-023', 'Canary', ['CloudTrailAnomaly', 'CANARY_USED']],
     ['RULE-035', 'Never Used Before', ['CloudTrailAnomaly', 'NEW_API_FOR_PRINCIPAL']],
     ['RULE-036', 'Unusual Hour', ['CloudTrailAnomaly', 'UNUSUAL_HOUR_ACTIVITY']],
+    ['RULE-043', 'Unapproved Principal', ['CloudTrailAnomaly', 'SHADOW_AI_USAGE']],
     ['RULE-024', 'IMDS', ['Ec2Instance', 'metadata_http_tokens', 'HAS_IAM_ROLE']],
     [
       'RULE-029',

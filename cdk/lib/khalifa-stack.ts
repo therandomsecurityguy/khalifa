@@ -415,6 +415,18 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
       }
     }
 
+    // The collector roles are sanctioned users of the AI service APIs by
+    // definition — their own reads must never flag as shadow AI. Operators add
+    // more principals through the AI_PRINCIPAL_ALLOWLIST environment value.
+    const aiPrincipalAllowlist = [
+      collectorRole.roleArn,
+      incrementalCollectorRole.roleArn,
+      ...(process.env.AI_PRINCIPAL_ALLOWLIST || '')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ];
+
     const cloudTrailAnalyzerFn = new lambda.Function(this, 'CloudTrailAnalyzerFn', {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
@@ -429,6 +441,7 @@ export class SecurityGraphIngestionStack extends cdk.Stack {
         ANALYSIS_DAYS: '90',
         GRAPH_WRITER_FUNCTION_NAME: graphWriterFn.functionName,
         CANARY_PRINCIPAL_ARNS: canaryPrincipalArns.join(','),
+        AI_PRINCIPAL_ALLOWLIST: aiPrincipalAllowlist.join(','),
       },
     });
     cloudTrailAnalyzerFn.addToRolePolicy(

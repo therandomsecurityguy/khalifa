@@ -159,6 +159,10 @@ const REVIEWED_MAPPING: Record<string, { controls: string[]; why: string }> = {
     controls: ['KH-IAM-1'],
     why: 'AI-service-trusted role holding a wildcard-resource Allow: externally trusted and broadly privileged',
   },
+  'RULE-043': {
+    controls: ['KH-AI-4'],
+    why: 'unsanctioned AI-service usage by a principal outside the deployment allowlist',
+  },
 };
 
 // Mapping is per rule, so every finding a rule raises lands on every control it
@@ -212,6 +216,7 @@ describe('rule-backed controls', () => {
     expect(ruleBacked).toEqual(
       [
         '1.7',
+        'KH-AI-4',
         'KH-DET-1',
         'KH-DET-2',
         'KH-DET-3',

@@ -115,6 +115,10 @@ config:
   athenaResultsLocation: ''
   analysisDays: 90
   canaryPrincipalArns: []
+  # AI principals whose Bedrock/SageMaker usage is sanctioned, as IAM user or
+  # role ARNs. The data module always adds the home collector roles; with none
+  # listed, every other principal using those APIs is flagged as shadow AI.
+  aiPrincipalAllowlist: []
   dspmScanMode: 'tagged-only'
   macieEnabled: false
   rateLimitPerMinute: 0

@@ -664,6 +664,7 @@ describe('detection and posture rules', () => {
     ['RULE-023', 'CANARY_USED'],
     ['RULE-035', 'NEW_API_FOR_PRINCIPAL'],
     ['RULE-036', 'UNUSUAL_HOUR_ACTIVITY'],
+    ['RULE-043', 'SHADOW_AI_USAGE'],
   ])('%s matches only %s anomalies', async (ruleId, type) => {
     for (const anomaly of [
       'ROOT_USAGE',
@@ -672,6 +673,7 @@ describe('detection and posture rules', () => {
       'CANARY_USED',
       'NEW_API_FOR_PRINCIPAL',
       'UNUSUAL_HOUR_ACTIVITY',
+      'SHADOW_AI_USAGE',
     ]) {
       await vertex('CloudTrailAnomaly', `anomaly-${anomaly}`, { anomaly_type: anomaly });
     }
