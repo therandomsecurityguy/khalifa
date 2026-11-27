@@ -408,6 +408,42 @@ export interface AiUseCaseCoverage {
   truncated: boolean;
 }
 
+export type RiskCategory = 'security' | 'compliance' | 'privacy' | 'operational' | 'ai';
+export type RiskStatus = 'open' | 'monitoring' | 'accepted' | 'closed';
+export type RiskTreatment = 'mitigate' | 'accept' | 'transfer' | 'avoid';
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
+export interface RiskRating {
+  likelihood: number;
+  impact: number;
+}
+
+export interface RiskRegisterEntry {
+  id: string;
+  title: string;
+  description: string;
+  category: RiskCategory;
+  owner: string;
+  status: RiskStatus;
+  inherent: RiskRating;
+  residual: RiskRating | null;
+  treatment: RiskTreatment;
+  acceptanceExpiry: string | null;
+  reviewCadenceDays: number;
+  lastReviewedAt: string | null;
+  linkedIssueIds: string[];
+  linkedControls: string[];
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  inherentScore: number;
+  inherentLevel: RiskLevel;
+  residualScore: number | null;
+  residualLevel: RiskLevel | null;
+  nextReviewAt: string | null;
+}
+
 export interface AiAgentDetail {
   agent: GraphVertex;
   role: GraphVertex | null;
