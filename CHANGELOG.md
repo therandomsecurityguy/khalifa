@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Risk register UI
+
+### Added
+
+- **Risk register in the UI** (`/risks`, in the Risks nav section): the list shows category, status, owner, inherent/residual levels with scores, and the next review date flagged when overdue; Analyst+ gets a create form (title plus inherent 1–5 ratings) and the detail page adds the full edit form — residual-assessment toggle, treatment with a conditional acceptance date (save stays disabled until it is set for `accept`), review cadence and last-reviewed date, linked issue ids (rendered as links) and canonical control ids (badges) — plus a two-step delete. Writes go through the existing Analyst-gated API; the UI gates are display-only, as elsewhere.
+
 ## [Unreleased] - Risk register (Phase 5)
 
 ### Added

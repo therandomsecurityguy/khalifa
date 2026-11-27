@@ -35,6 +35,7 @@ import type {
   ShadowAiResponse,
   AiUseCase,
   AiUseCaseCoverage,
+  RiskRegisterEntry,
   TrendSeries,
   UnusedPermissions,
 } from '@/types';
@@ -483,6 +484,46 @@ export function deleteAiUseCase(
 
 export function getAiUseCaseCoverage(options: RequestOptions = {}): Promise<AiUseCaseCoverage> {
   return request('/ai/use-cases/coverage', options);
+}
+
+export function getRisks(
+  options: RequestOptions = {}
+): Promise<{ items: RiskRegisterEntry[]; truncated: boolean }> {
+  return request('/risks', options);
+}
+
+export function getRisk(id: string, options: RequestOptions = {}): Promise<RiskRegisterEntry> {
+  return request<{ risk: RiskRegisterEntry }>(`/risks/${encodeURIComponent(id)}`, options).then(
+    (body) => body.risk
+  );
+}
+
+export function createRisk(
+  fields: Record<string, unknown>,
+  options: RequestOptions = {}
+): Promise<RiskRegisterEntry> {
+  return request<{ risk: RiskRegisterEntry }>('/risks', options, {
+    method: 'POST',
+    body: JSON.stringify(fields),
+  }).then((body) => body.risk);
+}
+
+export function updateRisk(
+  id: string,
+  fields: Record<string, unknown>,
+  options: RequestOptions = {}
+): Promise<RiskRegisterEntry> {
+  return request<{ risk: RiskRegisterEntry }>(`/risks/${encodeURIComponent(id)}`, options, {
+    method: 'PUT',
+    body: JSON.stringify(fields),
+  }).then((body) => body.risk);
+}
+
+export function deleteRisk(
+  id: string,
+  options: RequestOptions = {}
+): Promise<{ id: string; deleted: boolean }> {
+  return request(`/risks/${encodeURIComponent(id)}`, options, { method: 'DELETE' });
 }
 
 export interface ComplianceAssessmentSummary {
