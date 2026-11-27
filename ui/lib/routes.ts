@@ -28,7 +28,10 @@ export const APP_SECTIONS: ReadonlyArray<{ label: string; routes: readonly AppRo
   },
   {
     label: 'AI',
-    routes: [{ href: '/ai', label: 'AI inventory' }],
+    routes: [
+      { href: '/ai', label: 'AI inventory' },
+      { href: '/ai/shadow', label: 'Shadow AI' },
+    ],
   },
   {
     label: 'Connectors',
@@ -45,9 +48,13 @@ const within = (pathname: string, href: string) =>
   pathname === href || pathname.startsWith(`${href}/`);
 
 export function activeRoute(pathname: string): AppRoute | undefined {
-  return APP_ROUTES.find((route) =>
-    [route.href, ...(route.includes ?? [])].some((href) => within(pathname, href))
-  );
+  // The most specific matching route wins, so a parent path (`/ai`) does not
+  // swallow its children (`/ai/shadow`).
+  return [...APP_ROUTES]
+    .filter((route) =>
+      [route.href, ...(route.includes ?? [])].some((href) => within(pathname, href))
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0];
 }
 
 export const IDENTITY_ROUTES = [

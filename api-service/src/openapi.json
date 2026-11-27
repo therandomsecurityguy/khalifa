@@ -1424,6 +1424,46 @@
         }
       }
     },
+    "/ai/shadow": {
+      "get": {
+        "tags": ["AI inventory"],
+        "operationId": "getShadowAiAnomalies",
+        "summary": "Shadow-AI usage: active anomalies and coverage statement",
+        "description": "Requires **Viewer**. Active `SHADOW_AI_USAGE` anomalies — Bedrock/SageMaker management-plane usage by principals outside `AI_PRINCIPAL_ALLOWLIST`, resolved from the graph — with the API calls seen in `detail`. The `coverage` block states the plane explicitly: data-plane (model-invocation) events are visible only when CloudTrail data events are enabled, and `lastAnomalyObservedAt` is the analyzer's last recorded marker (`null` means unknown freshness, not a clean estate — the analyzer writes vertices only when it finds something).",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Anomalies to return, 1-200 (default 50).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`anomalies` (principal, source IP, account, event count, first/last seen, detail, observedAt) and `coverage` (`plane`, `windowDays`, `detail`, `lastAnomalyObservedAt`, `freshness`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/ai/agents/{arn}": {
       "get": {
         "tags": ["AI inventory"],

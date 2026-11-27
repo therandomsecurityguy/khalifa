@@ -32,6 +32,7 @@ import type {
   Session,
   Severity,
   SeverityStatusCounts,
+  ShadowAiResponse,
   TrendSeries,
   UnusedPermissions,
 } from '@/types';
@@ -429,6 +430,13 @@ export function getAiInventory(
 
 export function getAiAgent(arn: string, options: RequestOptions = {}): Promise<AiAgentDetail> {
   return request(`/ai/agents/${encodeURIComponent(arn)}`, options);
+}
+
+export function getAiShadow(
+  params: { limit?: number } = {},
+  options: RequestOptions = {}
+): Promise<ShadowAiResponse> {
+  return request(`/ai/shadow${queryString(params)}`, options);
 }
 
 export interface ComplianceAssessmentSummary {
