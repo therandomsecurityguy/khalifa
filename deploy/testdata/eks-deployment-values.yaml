@@ -48,6 +48,7 @@ config:
   leastPrivilegeTable: validation-khalifa-least-privilege
   aiUseCasesTable: validation-khalifa-ai-use-cases
   serviceTokensTable: validation-khalifa-service-tokens
+  riskRegisterTable: validation-khalifa-risk-register
   cognitoUserPoolId: us-west-2_validation
   cognitoClientId: validationclient
   cognitoRegion: us-west-2

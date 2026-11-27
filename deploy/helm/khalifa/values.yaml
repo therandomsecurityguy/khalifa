@@ -90,6 +90,7 @@ config:
   leastPrivilegeTable: ''
   aiUseCasesTable: ''
   serviceTokensTable: ''
+  riskRegisterTable: ''
   cognitoUserPoolId: ''
   cognitoClientId: ''
   cognitoRegion: ''

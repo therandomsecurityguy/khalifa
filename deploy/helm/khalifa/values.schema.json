@@ -97,6 +97,7 @@
         "leastPrivilegeTable",
         "aiUseCasesTable",
         "serviceTokensTable",
+        "riskRegisterTable",
         "cognitoUserPoolId",
         "cognitoClientId",
         "cognitoRegion",
@@ -129,6 +130,7 @@
         "leastPrivilegeTable": { "type": "string", "minLength": 1 },
         "aiUseCasesTable": { "type": "string", "minLength": 1 },
         "serviceTokensTable": { "type": "string", "minLength": 1 },
+        "riskRegisterTable": { "type": "string", "minLength": 1 },
         "cognitoUserPoolId": {
           "type": "string",
           "pattern": "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+_[A-Za-z0-9]+$"

@@ -22,6 +22,7 @@ import {
   listAiUseCases,
   updateAiUseCase,
 } from './routes/ai-use-cases';
+import { listRisks, createRisk, getRisk, updateRisk, deleteRisk } from './routes/risks';
 import {
   getResource,
   searchResources,
@@ -200,6 +201,12 @@ app.post('/ai/use-cases', requireAnalyst, createAiUseCase);
 app.get('/ai/use-cases/:id', requireViewer, getAiUseCase);
 app.put('/ai/use-cases/:id', requireAnalyst, updateAiUseCase);
 app.delete('/ai/use-cases/:id', requireAnalyst, deleteAiUseCase);
+
+app.get('/risks', requireViewer, listRisks);
+app.post('/risks', requireAnalyst, createRisk);
+app.get('/risks/:id', requireViewer, getRisk);
+app.put('/risks/:id', requireAnalyst, updateRisk);
+app.delete('/risks/:id', requireAnalyst, deleteRisk);
 
 app.get('/compliance/frameworks', requireViewer, listFrameworks);
 app.get('/compliance/frameworks/:framework/controls', requireViewer, getFrameworkControls);

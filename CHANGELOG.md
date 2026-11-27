@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Risk register (Phase 5)
+
+### Added
+
+- **Risk register backend**: risk objects over the collected estate — title, description, category (security/compliance/privacy/operational/ai), owner, status (open/monitoring/accepted/closed), 1–5 likelihood × impact **inherent and residual** ratings with scores and levels derived on read, treatment (mitigate/accept/transfer/avoid), **acceptance with a mandatory future expiry** (≤ 3650 days, required exactly when the treatment is accept), review cadence (1–365 days, default 90) with a derived `nextReviewAt`, and links to issues and canonical controls (unknown control ids are rejected against the catalogue). CRUD at `/risks` (read Viewer+, write Analyst+; slug ids derived from the title, 409 on collision, 404 on malformed/missing ids); stored in a new `risk-register` DynamoDB table (PITR, CMK encryption, deletion protection, API-only IAM) surfaced as `riskRegisterTable` → `RISK_REGISTER_TABLE`. New OpenAPI "Risks" tag covering all five operations.
+
 ## [Unreleased] - AI use-case registry UI
 
 ### Added
