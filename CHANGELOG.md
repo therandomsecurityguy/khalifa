@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - AI use-case registry UI
+
+### Added
+
+- **AI use-case registry in the UI**: `/ai/use-cases` lists the registry (status, owner, risk tier, asset counts, updated) beside a coverage card that names collected AI assets no use case covers and registered assets missing from the graph, with bounded lists flagged when truncated. The detail page shows the use case, its covered assets as resource links, and the lite impact assessment. Analyst+ identities get a create form (name/owner), an edit form for every API-accepted field (assets one ARN per line, data classes comma-separated, the assessment subset, with the assessment sent as null when none exists and nothing was entered), and a two-step delete; Viewer sees everything read-only. Writes go through the existing Analyst-gated API — the UI gates are display-only, as elsewhere. New route helpers (`aiUseCaseHref`) and API client functions; the AI nav section gains "Use cases". Tests cover rendering and coverage gaps, create-and-navigate, the parsed-asset save payload, delete confirmation, and role gating.
+
 ## [Unreleased] - Security hardening (batch 3)
 
 ### Security

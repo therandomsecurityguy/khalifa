@@ -33,6 +33,8 @@ import type {
   Severity,
   SeverityStatusCounts,
   ShadowAiResponse,
+  AiUseCase,
+  AiUseCaseCoverage,
   TrendSeries,
   UnusedPermissions,
 } from '@/types';
@@ -437,6 +439,50 @@ export function getAiShadow(
   options: RequestOptions = {}
 ): Promise<ShadowAiResponse> {
   return request(`/ai/shadow${queryString(params)}`, options);
+}
+
+export function getAiUseCases(
+  options: RequestOptions = {}
+): Promise<{ items: AiUseCase[]; truncated: boolean }> {
+  return request('/ai/use-cases', options);
+}
+
+export function getAiUseCase(id: string, options: RequestOptions = {}): Promise<AiUseCase> {
+  return request<{ useCase: AiUseCase }>(`/ai/use-cases/${encodeURIComponent(id)}`, options).then(
+    (body) => body.useCase
+  );
+}
+
+export function createAiUseCase(
+  fields: Record<string, unknown>,
+  options: RequestOptions = {}
+): Promise<AiUseCase> {
+  return request<{ useCase: AiUseCase }>('/ai/use-cases', options, {
+    method: 'POST',
+    body: JSON.stringify(fields),
+  }).then((body) => body.useCase);
+}
+
+export function updateAiUseCase(
+  id: string,
+  fields: Record<string, unknown>,
+  options: RequestOptions = {}
+): Promise<AiUseCase> {
+  return request<{ useCase: AiUseCase }>(`/ai/use-cases/${encodeURIComponent(id)}`, options, {
+    method: 'PUT',
+    body: JSON.stringify(fields),
+  }).then((body) => body.useCase);
+}
+
+export function deleteAiUseCase(
+  id: string,
+  options: RequestOptions = {}
+): Promise<{ id: string; deleted: boolean }> {
+  return request(`/ai/use-cases/${encodeURIComponent(id)}`, options, { method: 'DELETE' });
+}
+
+export function getAiUseCaseCoverage(options: RequestOptions = {}): Promise<AiUseCaseCoverage> {
+  return request('/ai/use-cases/coverage', options);
 }
 
 export interface ComplianceAssessmentSummary {

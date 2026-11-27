@@ -360,6 +360,54 @@ export interface ShadowAiResponse {
   };
 }
 
+export type AiUseCaseStatus = 'draft' | 'approved' | 'retired';
+export type AiAssessmentStatus = 'draft' | 'approved' | 'rejected';
+export type AiRiskTier = 'low' | 'medium' | 'high';
+
+export interface AiAssessment {
+  status: AiAssessmentStatus;
+  riskTier: AiRiskTier;
+  owner: string;
+  humanOversight: string;
+  impacts: string;
+  notes: string;
+  reviewedAt: string | null;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface AiUseCase {
+  id: string;
+  name: string;
+  description: string;
+  owner: string;
+  status: AiUseCaseStatus;
+  assets: string[];
+  dataClasses: string[];
+  assessment: AiAssessment | null;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface UnregisteredAiAsset {
+  arn: string;
+  type: string;
+  label: string;
+  name: string | null;
+  account_id: string | null;
+  region: string | null;
+}
+
+export interface AiUseCaseCoverage {
+  useCaseCount: number;
+  registeredAssets: number;
+  unregistered: UnregisteredAiAsset[];
+  missing: Array<{ arn: string; useCaseId: string }>;
+  truncated: boolean;
+}
+
 export interface AiAgentDetail {
   agent: GraphVertex;
   role: GraphVertex | null;
