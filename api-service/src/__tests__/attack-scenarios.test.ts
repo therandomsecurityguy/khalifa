@@ -91,14 +91,22 @@ describe('attack scenarios routes', () => {
       if (query.includes('SOURCE_IP')) throw new Error('timeout after 5000ms');
       return [[element('ec2', 'Ec2Instance')]];
     });
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const { req, res } = call({}, { id: 'leaked-credential-to-data' });
     await route.runAttackScenario(req, res);
 
     expect(res.statusCode).toBe(200);
     const failed = res.body.steps.find((step: any) => step.ruleId === 'RULE-021');
-    expect(failed.error).toContain('timeout');
+    // The response carries a constant; the internal detail stays in the log.
+    expect(failed.error).toBe('step evaluation failed');
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('RULE-021'),
+      expect.objectContaining({ message: 'timeout after 5000ms' })
+    );
+    expect(JSON.stringify(res.body)).not.toContain('timeout');
     expect(res.body.matchedSteps).toBeGreaterThanOrEqual(1);
+    error.mockRestore();
   });
 
   it('500s when every step fails', async () => {

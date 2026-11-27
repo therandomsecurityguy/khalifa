@@ -219,6 +219,37 @@ export class LeastPrivilegeStore {
   }
 
   private decodeToken(token: string): Record<string, AttributeValue> {
-    return JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+    return parseLeastPrivilegeToken(token);
   }
+}
+
+// The pagination cursor is client-controlled, so it is re-validated before it
+// can become an ExclusiveStartKey: the table's key shape (accountId,
+// principalArn as strings) and a length cap, failing closed on anything else.
+export function parseLeastPrivilegeToken(token: string): Record<string, AttributeValue> {
+  if (typeof token !== 'string' || token.length > 2_048) {
+    throw new Error('Invalid pagination token');
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+  } catch {
+    throw new Error('Invalid pagination token');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Invalid pagination token');
+  }
+  const key = parsed as Record<string, AttributeValue>;
+  const accountId = stringKeyValue(key.accountId);
+  const principalArn = stringKeyValue(key.principalArn);
+  if (!accountId || !principalArn) {
+    throw new Error('Invalid pagination token');
+  }
+  return { accountId: { S: accountId }, principalArn: { S: principalArn } };
+}
+
+function stringKeyValue(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const text = (value as { S?: unknown }).S;
+  return typeof text === 'string' && text.length > 0 && text.length <= 2_048 ? text : null;
 }

@@ -1,4 +1,8 @@
-import { mapFindingRecord, parseRecommendedPolicy } from '../services/least-privilege-store';
+import {
+  mapFindingRecord,
+  parseLeastPrivilegeToken,
+  parseRecommendedPolicy,
+} from '../services/least-privilege-store';
 
 describe('parseRecommendedPolicy', () => {
   it('parses a valid policy JSON string', () => {
@@ -55,5 +59,34 @@ describe('mapFindingRecord', () => {
     expect(finding.removedActions).toEqual([]);
     expect(finding.recommendedPolicy).toEqual([]);
     expect(finding.riskLevel).toBe('low');
+  });
+});
+
+describe('parseLeastPrivilegeToken', () => {
+  const token = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64');
+  const key = {
+    accountId: { S: '111122223333' },
+    principalArn: { S: 'arn:aws:iam::111122223333:role/x' },
+  };
+
+  it('accepts and re-shapes the table key', () => {
+    expect(parseLeastPrivilegeToken(token(key))).toEqual(key);
+  });
+
+  it.each([
+    ['not JSON', Buffer.from('not json').toString('base64')],
+    ['an array', token([1, 2])],
+    ['a missing key', token({ accountId: { S: '111122223333' } })],
+    ['a non-string key value', token({ accountId: { N: '1' }, principalArn: { S: 'x' } })],
+    [
+      'an oversized key value',
+      token({ accountId: { S: 'a'.repeat(2_049) }, principalArn: { S: 'x' } }),
+    ],
+  ])('rejects %s', (_case, value) => {
+    expect(() => parseLeastPrivilegeToken(value)).toThrow('Invalid pagination token');
+  });
+
+  it('caps the encoded token length', () => {
+    expect(() => parseLeastPrivilegeToken('x'.repeat(2_049))).toThrow('Invalid pagination token');
   });
 });

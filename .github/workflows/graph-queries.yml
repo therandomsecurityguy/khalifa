@@ -58,6 +58,17 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate Gremlin image pin
+        # The repository variable may override the default; it must stay
+        # digest-pinned so PR runs never execute a mutable tag.
+        env:
+          GREMLIN_SERVER_IMAGE: ${{ vars.GREMLIN_SERVER_IMAGE || 'ghcr.io/therandomsecurityguy/khalifa-gremlin-server@sha256:b090b1242ece1e98a6dce5203b1b4f86512273690fba92ef86e3aa6244759a8d' }}
+        run: |
+          if ! printf '%s' "$GREMLIN_SERVER_IMAGE" | grep -qE '@sha256:[0-9a-f]{64}$'; then
+            echo "GREMLIN_SERVER_IMAGE must be digest-pinned (repo@sha256:<64 hex>); got: $GREMLIN_SERVER_IMAGE"
+            exit 1
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

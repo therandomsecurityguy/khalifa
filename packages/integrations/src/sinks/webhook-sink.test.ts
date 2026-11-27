@@ -266,4 +266,36 @@ describe('WebhookSink', () => {
       'arn:aws:secretsmanager:us-east-1:111122223333:secret:khalifa/webhook-signing';
     expect(await new WebhookSink().healthCheck()).toBe(true);
   });
+
+  test('refuses a plaintext remote endpoint but allows localhost for development', async () => {
+    process.env.WEBHOOK_URL = 'http://hooks.example.com/khalifa';
+    process.env.WEBHOOK_SIGNING_SECRET = SIGNING_SECRET;
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const sink = new WebhookSink();
+    expect(await sink.emit(sampleIssue, sampleRule)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('must be https'));
+
+    process.env.WEBHOOK_URL = 'http://localhost:9099/hooks';
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+    expect(await new WebhookSink().emit(sampleIssue, sampleRule)).toMatchObject({
+      system: 'webhook',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    error.mockRestore();
+  });
+
+  test('does not follow redirects: a 3xx fails fast without retrying', async () => {
+    process.env.WEBHOOK_URL = 'https://hooks.example.com/khalifa';
+    process.env.WEBHOOK_SIGNING_SECRET = SIGNING_SECRET;
+    fetchMock.mockResolvedValue({ ok: false, status: 302, text: async () => '' });
+
+    const sink = new WebhookSink();
+
+    await expect(sink.emit(sampleIssue, sampleRule)).rejects.toThrow('Webhook returned 302');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.redirect).toBe('manual');
+  });
 });

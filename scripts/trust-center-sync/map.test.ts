@@ -1,4 +1,4 @@
-import { CIS_NAME, buildTrustFragment } from './map';
+import { CIS_NAME, assertSanitizedValue, buildTrustFragment } from './map';
 import type { PublishableResponse } from './types';
 
 const response: PublishableResponse = {
@@ -232,5 +232,20 @@ describe('projections', () => {
 
   it('omits projections entirely when the API sends none', () => {
     expect(buildTrustFragment(base).projections).toBeUndefined();
+  });
+});
+
+describe('assertSanitizedValue', () => {
+  it('trips on account, ARN, key, organization, and keyword identifiers', () => {
+    for (const value of [
+      'account 111122223333',
+      'arn:aws:s3:::bucket',
+      'AKIAIOSFODNN7EXAMPLE',
+      'org o-abcdef123456',
+      'evidence',
+    ]) {
+      expect(() => assertSanitizedValue({ note: value })).toThrow('forbidden value');
+    }
+    expect(() => assertSanitizedValue({ note: 'fine' })).not.toThrow();
   });
 });

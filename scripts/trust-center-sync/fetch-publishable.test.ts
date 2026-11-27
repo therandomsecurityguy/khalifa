@@ -179,6 +179,19 @@ describe('parsePublishableResponse', () => {
     });
   });
 
+  it('rejects a generatedAt that is not a timestamp', () => {
+    expect(() =>
+      parsePublishableResponse({ status: 'OK', requirements: [], generatedAt: 'yesterday' })
+    ).toThrow('non-timestamp generatedAt');
+    expect(() =>
+      parsePublishableResponse({
+        status: 'OK',
+        requirements: [],
+        generatedAt: 'arn:aws:iam::111122223333:role/x',
+      })
+    ).toThrow('non-timestamp generatedAt');
+  });
+
   it('parses mapped-framework requirements and rejects unknown frameworks', () => {
     const parsed = parsePublishableResponse({
       status: 'OK',

@@ -84,12 +84,15 @@ export async function runAttackScenario(
         truncated,
       });
     } catch (error) {
+      // The response carries a constant: internal driver/AWS messages stay in
+      // the log, not in a Viewer-visible payload.
+      console.error(`Attack scenario step ${step.ruleId} failed:`, error);
       steps.push({
         ...step,
         matchedPaths: 0,
         resources: [],
         truncated: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: 'step evaluation failed',
       });
     }
   }

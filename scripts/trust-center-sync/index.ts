@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fetchPublishable } from './fetch-publishable';
-import { CIS_NAME, assertSanitized, buildTrustFragment } from './map';
+import { CIS_NAME, assertSanitized, assertSanitizedValue, buildTrustFragment } from './map';
 import { buildQuestionnaire } from './questionnaire';
 import { currentPosture, diffPosture, loadPreviousState, nextState } from './state';
 import type { BuildMeta, TrustConfigFragment } from './types';
@@ -80,6 +80,9 @@ export async function runSync(
   assertSanitized(fragment);
 
   const meta = buildMeta(response, apiUrl, builtAt, log);
+  // The meta object reaches the public page; it gets the same tripwire as the
+  // fragment rather than trusting the caller's field validation.
+  assertSanitizedValue(meta);
   const questionnaire = buildQuestionnaire(response, builtAt);
 
   mkdirSync(outDir, { recursive: true });

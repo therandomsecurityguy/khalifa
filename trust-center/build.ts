@@ -40,7 +40,37 @@ export function loadSiteConfig(path: string): SiteConfig {
   if (expiresDays !== undefined && (!Number.isSafeInteger(expiresDays) || expiresDays < 1)) {
     throw new Error(`${path} securityTxt.expiresDays must be a positive integer`);
   }
+  assertUrlScheme(`${path} company.website`, config.company.website);
+  config.links?.forEach((link, index) =>
+    assertUrlScheme(`${path} links[${index}].href`, link.href)
+  );
+  assertUrlScheme(`${path} monitoring.statusPageUrl`, config.monitoring?.statusPageUrl);
+  config.subprocessors?.forEach((entry, index) =>
+    assertUrlScheme(`${path} subprocessors[${index}].dpaUrl`, entry.dpaUrl)
+  );
+  config.documents?.forEach((entry, index) =>
+    assertUrlScheme(`${path} documents[${index}].url`, entry.url)
+  );
+  assertUrlScheme(`${path} securityTxt.policyUrl`, config.securityTxt?.policyUrl);
   return config;
+}
+
+// Links on the public page carry deployment-owned URLs; HTML escaping alone
+// does not stop a `javascript:` URL, so the scheme is allowlisted at load
+// time and the build fails on anything else.
+const ALLOWED_URL_SCHEMES = new Set(['https:', 'http:', 'mailto:']);
+
+function assertUrlScheme(path: string, value: string | undefined): void {
+  if (!value) return;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${path} must be a valid URL`);
+  }
+  if (!ALLOWED_URL_SCHEMES.has(parsed.protocol)) {
+    throw new Error(`${path} must use https, http, or mailto (got ${parsed.protocol})`);
+  }
 }
 
 export function loadGenerated(dir: string): {

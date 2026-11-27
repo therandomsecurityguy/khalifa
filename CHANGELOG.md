@@ -2,6 +2,22 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Security hardening (batch 3)
+
+### Security
+
+- **Cleanups from the 2026-11-26 security review** (F-16, F-19–F-26, F-30–F-32):
+  - Helmet now sends a deny-all CSP (`default-src 'none'`, `frame-ancestors 'none'`) instead of disabling the header (F-22; clears CodeQL's `js/insecure-helmet-configuration`).
+  - The AI inventory `type` check uses `Object.hasOwn`, so prototype keys (`?type=constructor`) get a clean 400 (F-19).
+  - The least-privilege pagination cursor is re-validated against the table key shape (and length-capped) before it can become an `ExclusiveStartKey`; a bad token answers 400, not 500 (F-20).
+  - Service-token verification treats a malformed `expiresAt` as expired and any non-null revocation marker as revoked; both are pure, unit-tested helpers (F-21).
+  - Attack-scenario step errors in responses are a constant; the internal driver/AWS message stays in the server log (F-16).
+  - The webhook sink refuses non-https destinations (http only for localhost) and no longer follows redirects — a 3xx fails fast without retrying, so the signed payload goes exactly where the operator configured it (F-31).
+  - Compliance evidence pairs use `replaceAll('|', ' ')` (F-23).
+  - Dead `optionalAuthenticate` removed; `.dockerignore` excludes `terraform.tfvars` and state files (F-32).
+  - Trust-center: `generatedAt` must parse as a timestamp; the build-meta object gets the same sanitizer as the fragment; both identifier tripwires gain an AWS organization-id pattern (F-24); configured URL fields are scheme-allowlisted (https/http/mailto) at load time, so a `javascript:` link fails the build instead of publishing (F-25).
+  - The trust-center deploy workflow passes `TRUST_CENTER_PROJECT` through the environment instead of interpolating it into a shell command that holds deploy credentials (F-26), and the Gremlin CI job validates that an image override stays digest-pinned (F-30).
+
 ## [Unreleased] - Shadow-AI data-event depth (Phase 2)
 
 ### Changed

@@ -70,6 +70,7 @@ const FORBIDDEN_PATTERNS: RegExp[] = [
   /\b\d{12}\b/,
   /arn:[a-z0-9-]+:/i,
   /\bAKIA[0-9A-Z]{16}\b/,
+  /\bo-[a-z0-9]{10,32}\b/,
   /\b(evidence|finding|resourceArn|accountId|principalArn)\b/i,
 ];
 
