@@ -31,6 +31,7 @@ export const APP_SECTIONS: ReadonlyArray<{ label: string; routes: readonly AppRo
     routes: [
       { href: '/ai', label: 'AI inventory' },
       { href: '/ai/shadow', label: 'Shadow AI' },
+      { href: '/ai/use-cases', label: 'Use cases' },
     ],
   },
   {
@@ -100,6 +101,10 @@ export function resourceHref(arn: string): string {
 
 export function aiAgentHref(arn: string): string {
   return `/ai/detail?arn=${encodeURIComponent(arn)}`;
+}
+
+export function aiUseCaseHref(id: string): string {
+  return `/ai/use-cases/detail?id=${encodeURIComponent(id)}`;
 }
 
 export function principalHref(path: string, principal: string): string {
