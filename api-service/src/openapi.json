@@ -72,6 +72,10 @@
     {
       "name": "Administration",
       "description": "Automation credentials (service tokens)."
+    },
+    {
+      "name": "Risks",
+      "description": "The risk register: inherent/residual ratings, treatment, acceptance with expiry, review cadence, and links to issues and controls."
     }
   ],
   "paths": {
@@ -1854,6 +1858,253 @@
         "responses": {
           "200": {
             "description": "Revocation confirmation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/risks": {
+      "get": {
+        "tags": ["Risks"],
+        "operationId": "listRisks",
+        "summary": "Risk register",
+        "description": "Requires **Viewer**. Hand-maintained risk objects with derived scores (`inherentScore`/`residualScore`), levels, and `nextReviewAt` from the review cadence; truncation is flagged.",
+        "responses": {
+          "200": {
+            "description": "Risks and a truncation flag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Risks"],
+        "operationId": "createRisk",
+        "summary": "Create a risk",
+        "description": "Requires **Analyst**. `id` (slug) is optional; it is derived from the title when absent. An accepted risk must carry a future `acceptanceExpiry` (≤ 3650 days); `linkedControls` must be canonical control ids. A colliding id answers 409.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "inherent"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "title": { "type": "string", "maxLength": 200 },
+                  "description": { "type": "string", "maxLength": 2000 },
+                  "category": {
+                    "type": "string",
+                    "enum": ["security", "compliance", "privacy", "operational", "ai"]
+                  },
+                  "owner": { "type": "string", "maxLength": 120 },
+                  "status": {
+                    "type": "string",
+                    "enum": ["open", "monitoring", "accepted", "closed"]
+                  },
+                  "inherent": {
+                    "type": "object",
+                    "description": "1-5 likelihood × impact.",
+                    "properties": {
+                      "likelihood": { "type": "integer", "minimum": 1, "maximum": 5 },
+                      "impact": { "type": "integer", "minimum": 1, "maximum": 5 }
+                    }
+                  },
+                  "residual": {
+                    "type": "object",
+                    "nullable": true,
+                    "description": "1-5 likelihood × impact after treatment; null when not assessed."
+                  },
+                  "treatment": {
+                    "type": "string",
+                    "enum": ["mitigate", "accept", "transfer", "avoid"]
+                  },
+                  "acceptanceExpiry": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Required (future ISO timestamp) when treatment is accept."
+                  },
+                  "reviewCadenceDays": { "type": "integer", "minimum": 1, "maximum": 365 },
+                  "lastReviewedAt": { "type": "string", "nullable": true },
+                  "linkedIssueIds": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": { "type": "string", "maxLength": 64 }
+                  },
+                  "linkedControls": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": { "type": "string", "maxLength": 64 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created risk.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/risks/{id}": {
+      "get": {
+        "tags": ["Risks"],
+        "operationId": "getRisk",
+        "summary": "One risk",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Risk id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The risk with derived scores, level, and next review date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Risks"],
+        "operationId": "updateRisk",
+        "summary": "Update a risk",
+        "description": "Requires **Analyst**. Same field validation as create; the record is replaced with the submitted fields.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Risk id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated risk.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Risks"],
+        "operationId": "deleteRisk",
+        "summary": "Delete a risk",
+        "description": "Requires **Analyst**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Risk id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deletion confirmation.",
             "content": {
               "application/json": {
                 "schema": {
