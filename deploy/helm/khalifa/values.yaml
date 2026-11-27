@@ -91,6 +91,7 @@ config:
   aiUseCasesTable: ''
   serviceTokensTable: ''
   riskRegisterTable: ''
+  vendorRegisterTable: ''
   cognitoUserPoolId: ''
   cognitoClientId: ''
   cognitoRegion: ''

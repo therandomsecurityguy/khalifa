@@ -23,6 +23,7 @@ import {
   updateAiUseCase,
 } from './routes/ai-use-cases';
 import { listRisks, createRisk, getRisk, updateRisk, deleteRisk } from './routes/risks';
+import { listVendors, createVendor, getVendor, updateVendor, deleteVendor } from './routes/vendors';
 import {
   getResource,
   searchResources,
@@ -207,6 +208,12 @@ app.post('/risks', requireAnalyst, createRisk);
 app.get('/risks/:id', requireViewer, getRisk);
 app.put('/risks/:id', requireAnalyst, updateRisk);
 app.delete('/risks/:id', requireAnalyst, deleteRisk);
+
+app.get('/vendors', requireViewer, listVendors);
+app.post('/vendors', requireAnalyst, createVendor);
+app.get('/vendors/:id', requireViewer, getVendor);
+app.put('/vendors/:id', requireAnalyst, updateVendor);
+app.delete('/vendors/:id', requireAnalyst, deleteVendor);
 
 app.get('/compliance/frameworks', requireViewer, listFrameworks);
 app.get('/compliance/frameworks/:framework/controls', requireViewer, getFrameworkControls);

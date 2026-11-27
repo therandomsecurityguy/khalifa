@@ -76,6 +76,10 @@
     {
       "name": "Risks",
       "description": "The risk register: inherent/residual ratings, treatment, acceptance with expiry, review cadence, and links to issues and controls."
+    },
+    {
+      "name": "Vendors",
+      "description": "The vendor register: categories, data classes, DPA links, subprocessor disclosure fields, renewal dates, and review cadence."
     }
   ],
   "paths": {
@@ -2097,6 +2101,237 @@
             "in": "path",
             "required": true,
             "description": "Risk id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deletion confirmation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/vendors": {
+      "get": {
+        "tags": ["Vendors"],
+        "operationId": "listVendors",
+        "summary": "Vendor register",
+        "description": "Requires **Viewer**. Hand-maintained vendor relationships with a derived `nextReviewAt` from the review cadence; truncation is flagged.",
+        "responses": {
+          "200": {
+            "description": "Vendors and a truncation flag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Vendors"],
+        "operationId": "createVendor",
+        "summary": "Create a vendor",
+        "description": "Requires **Analyst**. `id` (slug) is optional; it is derived from the name when absent. `dpaUrl` must be https; flagging a vendor as a subprocessor requires `purpose` and `location` (the trust center's disclosure fields). A colliding id answers 409.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "name": { "type": "string", "maxLength": 200 },
+                  "category": {
+                    "type": "string",
+                    "enum": ["cloud", "ai", "security", "saas", "infrastructure", "other"]
+                  },
+                  "purpose": { "type": "string", "maxLength": 200 },
+                  "location": { "type": "string", "maxLength": 120 },
+                  "dpaUrl": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "https URL of the data-processing agreement."
+                  },
+                  "dataClasses": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": { "type": "string", "maxLength": 64 }
+                  },
+                  "owner": { "type": "string", "maxLength": 120 },
+                  "status": {
+                    "type": "string",
+                    "enum": ["active", "under-review", "terminated"]
+                  },
+                  "subprocessor": {
+                    "type": "boolean",
+                    "description": "Listed on the trust center; requires purpose and location."
+                  },
+                  "renewalAt": { "type": "string", "nullable": true },
+                  "reviewCadenceDays": { "type": "integer", "minimum": 1, "maximum": 365 },
+                  "lastReviewedAt": { "type": "string", "nullable": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created vendor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/vendors/{id}": {
+      "get": {
+        "tags": ["Vendors"],
+        "operationId": "getVendor",
+        "summary": "One vendor",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Vendor id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The vendor with its derived next review date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Vendors"],
+        "operationId": "updateVendor",
+        "summary": "Update a vendor",
+        "description": "Requires **Analyst**. Same field validation as create; the record is replaced with the submitted fields.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Vendor id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated vendor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Vendors"],
+        "operationId": "deleteVendor",
+        "summary": "Delete a vendor",
+        "description": "Requires **Analyst**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Vendor id (slug).",
             "schema": {
               "type": "string"
             }
