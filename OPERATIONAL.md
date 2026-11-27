@@ -156,6 +156,19 @@ The trail bucket and its KMS key are owned by the audit account, so two grants m
 
 Then set `cloudtrailAnalyzer.suspend = false` in the environment's Helm values. The first run scans `ANALYSIS_DAYS` (default 90) days of the collected accounts; every query bounds the `log_date` partition, so Athena reads only that window. A `Query cannot be completed` or `AccessDenied` from Athena on the first run means one of the two grants above is missing.
 
+### Runbook: Enabling Bedrock and SageMaker data events (shadow-AI depth)
+
+Shadow-AI detection (`SHADOW_AI_USAGE` → RULE-043 → KH-AI-4) reads the management plane by default: Bedrock and SageMaker control-plane calls are in every organization trail. Model-invocation calls — `InvokeModel`, `InvokeModelWithResponseStream`, `Converse`, `ConverseStream`, `InvokeAgent`, `InvokeEndpoint` — are data-plane events: CloudTrail records them only when the trail has data-event selectors for those services. The behavior mirrors observed reachability without flow logs: the surfaces state the gap rather than implying completeness.
+
+The trail belongs to the audit account; `khalifa-data` cannot change it. To add data-plane depth:
+
+1. In the audit account, add data-event selectors to the organization trail for the Bedrock and SageMaker resource types the account actually uses (narrowest possible ARNs) — console or `aws cloudtrail put-event-selectors` with advanced selectors. Data events are billed per event in CloudTrail and scanned by Athena like management events, so scope them deliberately.
+2. Confirm delivery: org trails normally write data events to the same S3 path (`AWSLogs/<org id>/...`), which the analyzer's existing bucket and KMS grants already cover. If the trail delivers them elsewhere, extend the analyzer role's grants (bucket policy and key policy, as in the analyzer runbook above).
+3. Nothing to change in Khalifa: the shadow-AI query already includes the data-plane event sources, so invocation calls appear in `SHADOW_AI_USAGE` anomalies (subject to `AI_PRINCIPAL_ALLOWLIST`) with the event names in the anomaly detail, and on `/ai/shadow`.
+4. Verify: after the next analyzer run, an anomalous principal's detail on `/ai/shadow` names an invocation call, and the audit account's CloudTrail event history shows the same `InvokeModel`-class events for the window.
+5. Coverage honesty: the API's coverage statement never claims data-plane completeness, because Khalifa cannot read the trail's data-event configuration. Treat "no invocation calls" as "none recorded in the trail", not as "none happened".
+6. Rollback: remove the data-event selectors. Anomalies expire with the 7-day evaluation window (the analyzer's reconcile removes them); no Khalifa configuration needs reverting.
+
 ## G. Security Hardening
 
 ### Must Do Before Production
@@ -421,15 +434,15 @@ fail-closed behavior, not a bug.
 
 ### What is covered
 
-| Data                                    | Mechanism                                                                                              | Window                       |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------- |
-| Neptune graph                           | Automated cluster snapshots (`backup_retention_period = 7` in `khalifa-data`) plus a final snapshot on cluster deletion | 7 days         |
-| DynamoDB (all nine tables)              | Point-in-time recovery enabled per table (`dynamodb.tf`)                                                | 35 days                      |
-| Secrets Manager (`<name_prefix>-khalifa/runtime`, `<name_prefix>-khalifa/neptune-auth`) | Secret recovery window                                                                  | 30 days after deletion       |
-| Athena results / access logs (S3)       | Lifecycle-expired (query results after 7 days) and regenerated on demand                                | n/a                          |
-| Trust center site                       | Regenerated nightly from the publishable endpoint                                                       | n/a — stateless              |
-| Cognito users                           | **Not backed up** — re-create or invite users (`admin-create-user`)                                     | —                            |
-| EKS cluster                             | Operator-owned; recreated from Terraform                                                                | —                            |
+| Data                                                                                    | Mechanism                                                                                                               | Window                 |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Neptune graph                                                                           | Automated cluster snapshots (`backup_retention_period = 7` in `khalifa-data`) plus a final snapshot on cluster deletion | 7 days                 |
+| DynamoDB (all nine tables)                                                              | Point-in-time recovery enabled per table (`dynamodb.tf`)                                                                | 35 days                |
+| Secrets Manager (`<name_prefix>-khalifa/runtime`, `<name_prefix>-khalifa/neptune-auth`) | Secret recovery window                                                                                                  | 30 days after deletion |
+| Athena results / access logs (S3)                                                       | Lifecycle-expired (query results after 7 days) and regenerated on demand                                                | n/a                    |
+| Trust center site                                                                       | Regenerated nightly from the publishable endpoint                                                                       | n/a — stateless        |
+| Cognito users                                                                           | **Not backed up** — re-create or invite users (`admin-create-user`)                                                     | —                      |
+| EKS cluster                                                                             | Operator-owned; recreated from Terraform                                                                                | —                      |
 
 ### Restoring DynamoDB
 

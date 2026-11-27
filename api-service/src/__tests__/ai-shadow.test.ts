@@ -86,6 +86,8 @@ describe('GET /ai/shadow', () => {
       freshness: 'fresh',
     });
     expect(res.body.coverage.detail).toContain('data events are enabled');
+    expect(res.body.coverage.detail).toContain('OPERATIONAL.md');
+    expect(res.body.coverage.detail).toContain('never claims data-plane completeness');
     expect(res.body.coverage.lastAnomalyObservedAt).toEqual(expect.any(String));
   });
 

@@ -157,7 +157,7 @@ export async function getShadowAiAnomalies(req: Request, res: Response): Promise
         plane: 'management',
         windowDays: 7,
         detail:
-          'Bedrock and SageMaker management-plane API calls recorded in CloudTrail. Model-invocation (data-plane) events — InvokeModel, InvokeAgent, InvokeEndpoint — are visible only when CloudTrail data events are enabled; Khalifa cannot verify that setting, so treat this as the management-plane view.',
+          "Bedrock and SageMaker management-plane API calls recorded in CloudTrail, plus model-invocation (data-plane) calls when the organization trail's data events are enabled (see OPERATIONAL.md — Enabling Bedrock and SageMaker data events). Khalifa cannot read the trail's configuration, so this statement never claims data-plane completeness: treat the absence of invocation calls as 'not recorded', not as 'none happened'.",
         lastAnomalyObservedAt: lastObservedAt,
         freshness: freshnessFor(ageHours),
       },
