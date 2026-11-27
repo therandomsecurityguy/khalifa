@@ -38,7 +38,7 @@ describe('AppNav', () => {
       within(pages)
         .getAllByRole('link')
         .map((link) => link.textContent)
-    ).toEqual(['Issues', 'Risk register', 'Compliance', 'Rules']);
+    ).toEqual(['Issues', 'Risk register', 'Vendor register', 'Compliance', 'Rules']);
     expect(within(pages).getByRole('link', { name: 'Compliance' })).toHaveAttribute(
       'aria-current',
       'page'

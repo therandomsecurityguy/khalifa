@@ -13,6 +13,7 @@ export const APP_SECTIONS: ReadonlyArray<{ label: string; routes: readonly AppRo
     routes: [
       { href: '/issues', label: 'Issues' },
       { href: '/risks', label: 'Risk register' },
+      { href: '/vendors', label: 'Vendor register' },
       { href: '/compliance', label: 'Compliance' },
       { href: '/rules', label: 'Rules' },
     ],
@@ -110,6 +111,10 @@ export function aiUseCaseHref(id: string): string {
 
 export function riskHref(id: string): string {
   return `/risks/detail?id=${encodeURIComponent(id)}`;
+}
+
+export function vendorHref(id: string): string {
+  return `/vendors/detail?id=${encodeURIComponent(id)}`;
 }
 
 export function principalHref(path: string, principal: string): string {

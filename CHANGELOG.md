@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Vendor register UI
+
+### Added
+
+- **Vendor register in the UI** (`/vendors`, in the Risks nav section): the list shows category, status, the subprocessor flag, owner, renewal dates (flagged when passed), and the derived next review (flagged when overdue); Analyst+ gets a create form (name + category) and the detail page adds the full edit form — purpose/location disclosure fields, an https DPA URL, data classes, a subprocessor checkbox that **blocks saving until purpose and location are filled** (mirroring the server rule), renewal date, and review cadence/last-reviewed — plus a two-step delete. The DPA link opens in a new tab with `rel="noopener noreferrer"`. Writes go through the existing Analyst-gated API; the UI gates are display-only.
+
 ## [Unreleased] - Vendor register (Phase 5)
 
 ### Added
