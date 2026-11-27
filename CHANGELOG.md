@@ -2,6 +2,12 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Vendor register (Phase 5)
+
+### Added
+
+- **Vendor register backend**: third-party relationships over the same pattern as the risk register — name, category (cloud/ai/security/saas/infrastructure/other), purpose, location, an **https** DPA link, data classes, owner, status (active/under-review/terminated), renewal date, review cadence (1–365 days, default 365) with a derived `nextReviewAt`, and a `subprocessor` flag for the trust center that **requires purpose and location** — a listing can never be a bare name. CRUD at `/vendors` (read Viewer+, write Analyst+; slug ids, 409/404 semantics, malformed ids never reach the store); stored in a new `vendor-register` DynamoDB table (PITR, CMK encryption, deletion protection, API-only IAM) surfaced as `vendorRegisterTable` → `VENDOR_REGISTER_TABLE`. New OpenAPI "Vendors" tag. (Consuming the register from the trust-center sync — which runs on the service-token surface — is a follow-up with its own auth review.)
+
 ## [Unreleased] - Risk register UI
 
 ### Added

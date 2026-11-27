@@ -105,6 +105,7 @@ output "helm_values" {
       aiUseCasesTable             = aws_dynamodb_table.ai_use_cases.name
       serviceTokensTable          = aws_dynamodb_table.service_tokens.name
       riskRegisterTable           = aws_dynamodb_table.risk_register.name
+      vendorRegisterTable         = aws_dynamodb_table.vendor_register.name
       cognitoUserPoolId           = aws_cognito_user_pool.this.id
       cognitoClientId             = aws_cognito_user_pool_client.this.id
       cognitoRegion               = data.aws_region.current.region

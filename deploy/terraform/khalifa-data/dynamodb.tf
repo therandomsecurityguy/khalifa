@@ -343,6 +343,32 @@ resource "aws_dynamodb_table" "service_tokens" {
   tags = merge(var.tags, { Name = "${local.name}-service-tokens" })
 }
 
+# The vendor register: third-party relationships maintained through the API,
+# including the trust-center subprocessor disclosure fields. API-only.
+resource "aws_dynamodb_table" "vendor_register" {
+  name         = "${local.name}-vendor-register"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  deletion_protection_enabled = true
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.this.arn
+  }
+
+  tags = merge(var.tags, { Name = "${local.name}-vendor-register" })
+}
+
 # The risk register: workflow risk objects maintained through the API. A
 # hand-maintained table, so it stays small and needs no indexes. API-only.
 resource "aws_dynamodb_table" "risk_register" {
