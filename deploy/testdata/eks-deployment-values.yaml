@@ -50,6 +50,7 @@ config:
   serviceTokensTable: validation-khalifa-service-tokens
   riskRegisterTable: validation-khalifa-risk-register
   vendorRegisterTable: validation-khalifa-vendor-register
+  accessReviewsTable: validation-khalifa-access-reviews
   cognitoUserPoolId: us-west-2_validation
   cognitoClientId: validationclient
   cognitoRegion: us-west-2

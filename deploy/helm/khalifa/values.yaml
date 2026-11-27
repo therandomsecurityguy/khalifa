@@ -92,6 +92,7 @@ config:
   serviceTokensTable: ''
   riskRegisterTable: ''
   vendorRegisterTable: ''
+  accessReviewsTable: ''
   cognitoUserPoolId: ''
   cognitoClientId: ''
   cognitoRegion: ''
