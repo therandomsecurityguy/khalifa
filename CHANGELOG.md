@@ -2,6 +2,16 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Shadow-AI data-event depth (Phase 2)
+
+### Changed
+
+- **The shadow-AI coverage statement now spans both trail configurations**: management-plane calls are always recorded; model-invocation calls appear when the organization trail's data events are enabled (the text points at the new runbook); and Khalifa cannot read the trail's configuration, so the statement never claims data-plane completeness — the absence of invocation calls means "not recorded", not "none happened".
+
+### Added
+
+- **Runbook "Enabling Bedrock and SageMaker data events"** (`OPERATIONAL.md`, after the analyzer runbook): add advanced data-event selectors for the Bedrock/SageMaker resource types in the audit account, confirm delivery uses the path the analyzer's existing bucket and KMS grants already cover (extend if the trail delivers elsewhere), expect no Khalifa-side configuration change (the shadow-AI query already reads the data-plane sources), verify via `/ai/shadow` details and CloudTrail event history, keep data-event cost scoped, and roll back by removing the selectors — anomalies expire with the 7-day evaluation window.
+
 ## [Unreleased] - Shadow-AI surfaces (Phase 2)
 
 ### Added
