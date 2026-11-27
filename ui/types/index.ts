@@ -444,6 +444,30 @@ export interface RiskRegisterEntry {
   nextReviewAt: string | null;
 }
 
+export type VendorCategory = 'cloud' | 'ai' | 'security' | 'saas' | 'infrastructure' | 'other';
+export type VendorStatus = 'active' | 'under-review' | 'terminated';
+
+export interface VendorRegisterEntry {
+  id: string;
+  name: string;
+  category: VendorCategory;
+  purpose: string;
+  location: string;
+  dpaUrl: string | null;
+  dataClasses: string[];
+  owner: string;
+  status: VendorStatus;
+  subprocessor: boolean;
+  renewalAt: string | null;
+  reviewCadenceDays: number;
+  lastReviewedAt: string | null;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  nextReviewAt: string | null;
+}
+
 export interface AiAgentDetail {
   agent: GraphVertex;
   role: GraphVertex | null;

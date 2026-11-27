@@ -36,6 +36,7 @@ import type {
   AiUseCase,
   AiUseCaseCoverage,
   RiskRegisterEntry,
+  VendorRegisterEntry,
   TrendSeries,
   UnusedPermissions,
 } from '@/types';
@@ -524,6 +525,47 @@ export function deleteRisk(
   options: RequestOptions = {}
 ): Promise<{ id: string; deleted: boolean }> {
   return request(`/risks/${encodeURIComponent(id)}`, options, { method: 'DELETE' });
+}
+
+export function getVendors(
+  options: RequestOptions = {}
+): Promise<{ items: VendorRegisterEntry[]; truncated: boolean }> {
+  return request('/vendors', options);
+}
+
+export function getVendor(id: string, options: RequestOptions = {}): Promise<VendorRegisterEntry> {
+  return request<{ vendor: VendorRegisterEntry }>(
+    `/vendors/${encodeURIComponent(id)}`,
+    options
+  ).then((body) => body.vendor);
+}
+
+export function createVendor(
+  fields: Record<string, unknown>,
+  options: RequestOptions = {}
+): Promise<VendorRegisterEntry> {
+  return request<{ vendor: VendorRegisterEntry }>('/vendors', options, {
+    method: 'POST',
+    body: JSON.stringify(fields),
+  }).then((body) => body.vendor);
+}
+
+export function updateVendor(
+  id: string,
+  fields: Record<string, unknown>,
+  options: RequestOptions = {}
+): Promise<VendorRegisterEntry> {
+  return request<{ vendor: VendorRegisterEntry }>(`/vendors/${encodeURIComponent(id)}`, options, {
+    method: 'PUT',
+    body: JSON.stringify(fields),
+  }).then((body) => body.vendor);
+}
+
+export function deleteVendor(
+  id: string,
+  options: RequestOptions = {}
+): Promise<{ id: string; deleted: boolean }> {
+  return request(`/vendors/${encodeURIComponent(id)}`, options, { method: 'DELETE' });
 }
 
 export interface ComplianceAssessmentSummary {
