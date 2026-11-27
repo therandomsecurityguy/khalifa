@@ -250,7 +250,10 @@ export async function getLeastPrivilegeFindings(req: Request, res: Response): Pr
 
     res.json(result);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith('limit must be')) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith('limit must be') || error.message.includes('pagination token'))
+    ) {
       res.status(400).json({ code: 'BAD_REQUEST', message: error.message });
       return;
     }

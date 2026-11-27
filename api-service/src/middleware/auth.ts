@@ -287,16 +287,3 @@ async function verifyCognitoBearer(
     });
   }
 }
-
-export function optionalAuthenticate(req: Request, _res: Response, next: NextFunction): void {
-  const config = getCognitoConfig();
-  if (!config) {
-    next();
-    return;
-  }
-  if (!bearerToken(req.headers.authorization)) {
-    next();
-    return;
-  }
-  authenticate(req, _res, next).catch(next);
-}

@@ -62,6 +62,10 @@ describe('GET /ai/inventory', () => {
     const unknownType = await call(route.getAiInventory, { query: { type: 'robots' } });
     expect(unknownType.statusCode).toBe(400);
 
+    // Prototype keys must not pass the key check (Object.hasOwn, not `in`).
+    const inheritedKey = await call(route.getAiInventory, { query: { type: 'constructor' } });
+    expect(inheritedKey.statusCode).toBe(400);
+
     const badLimit = await call(route.getAiInventory, { query: { limit: '0' } });
     expect(badLimit.statusCode).toBe(400);
     expect(listAiInventory).not.toHaveBeenCalled();

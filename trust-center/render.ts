@@ -420,7 +420,12 @@ export function escapeHtml(value: string): string {
 
 // Defense in depth on top of the sync tool's projection: nothing that can
 // identify an account or resource may reach the published page.
-const FORBIDDEN_PATTERNS: RegExp[] = [/\b\d{12}\b/, /arn:[a-z0-9-]+:/i, /\bAKIA[0-9A-Z]{16}\b/];
+const FORBIDDEN_PATTERNS: RegExp[] = [
+  /\b\d{12}\b/,
+  /arn:[a-z0-9-]+:/i,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bo-[a-z0-9]{10,32}\b/,
+];
 
 export function assertNoIdentifiers(html: string): void {
   for (const pattern of FORBIDDEN_PATTERNS) {

@@ -72,4 +72,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler pages deploy trust-center/dist --project-name "${{ vars.TRUST_CENTER_PROJECT }}"
+          # Through the environment, not interpolated into the command line:
+          # a variable value must never be able to run shell syntax in a step
+          # that holds deploy credentials.
+          TRUST_CENTER_PROJECT: ${{ vars.TRUST_CENTER_PROJECT }}
+        run: npx wrangler pages deploy trust-center/dist --project-name "$TRUST_CENTER_PROJECT"

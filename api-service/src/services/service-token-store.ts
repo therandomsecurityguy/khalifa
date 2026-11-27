@@ -124,6 +124,19 @@ function isConditionalFailure(error: unknown): boolean {
   return error instanceof Error && error.name === 'ConditionalCheckFailedException';
 }
 
+// Expiry fails closed: a missing or malformed timestamp is treated as expired,
+// never as a token that never expires.
+export function isServiceTokenExpired(expiresAt: string, nowMs: number = Date.now()): boolean {
+  const parsed = Date.parse(expiresAt);
+  return !Number.isFinite(parsed) || parsed <= nowMs;
+}
+
+// Any non-null revocation marker counts, valid timestamp or not: a malformed
+// record must not read as revoked-free.
+export function isServiceTokenRevoked(revokedAt: unknown): boolean {
+  return revokedAt !== undefined && revokedAt !== null;
+}
+
 export class ServiceTokenStore {
   private docClient: DynamoDBDocumentClient;
   private tableName: string;
@@ -211,8 +224,8 @@ export class ServiceTokenStore {
     if (!item) return null;
 
     const record = mapServiceTokenRecord(item);
-    if (record.revokedAt) return null;
-    if (!record.expiresAt || Date.parse(record.expiresAt) <= Date.now()) return null;
+    if (isServiceTokenRevoked(item.revokedAt)) return null;
+    if (isServiceTokenExpired(record.expiresAt)) return null;
     const storedHash = typeof item.secretHash === 'string' ? item.secretHash : '';
     if (!storedHash || !serviceSecretMatches(parsed.secret, storedHash)) return null;
 

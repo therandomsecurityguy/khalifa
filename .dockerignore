@@ -23,3 +23,11 @@ tasks
 **/.env.*
 *.pem
 **/*.pem
+# Terraform state and variables: the documented install creates
+# terraform.tfvars inside the repo, and COPY . . must not pull state into the
+# build context or cache.
+*.tfvars
+*.tfstate
+*.tfstate.*
+.terraform/
+**/.terraform/

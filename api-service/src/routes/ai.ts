@@ -29,7 +29,7 @@ export async function getAiInventory(req: Request, res: Response): Promise<void>
     const requested = req.query.type;
     if (
       requested !== undefined &&
-      (typeof requested !== 'string' || !(requested in AI_INVENTORY_LABELS))
+      (typeof requested !== 'string' || !Object.hasOwn(AI_INVENTORY_LABELS, requested))
     ) {
       res.status(400).json({
         code: 'BAD_REQUEST',

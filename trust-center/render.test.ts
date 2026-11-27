@@ -224,6 +224,9 @@ describe('renderSite', () => {
         null
       )
     ).toThrow('forbidden value');
+    expect(() =>
+      renderSite(config, { frameworks: [{ name: 'Org o-abcdef123456', status: 'planned' }] }, null)
+    ).toThrow('forbidden value');
   });
 });
 

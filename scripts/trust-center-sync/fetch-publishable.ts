@@ -75,8 +75,14 @@ export function parsePublishableResponse(body: unknown): PublishableResponse {
   if (status !== 'OK' && status !== 'STALE' && status !== 'MISSING') {
     throw new Error(`publishable endpoint returned an unknown status: ${String(status)}`);
   }
-  const generatedAt =
-    typeof record.generatedAt === 'string' && record.generatedAt ? record.generatedAt : null;
+  const rawGeneratedAt = record.generatedAt;
+  let generatedAt: string | null = null;
+  if (typeof rawGeneratedAt === 'string' && rawGeneratedAt) {
+    if (!Number.isFinite(Date.parse(rawGeneratedAt))) {
+      throw new Error('publishable endpoint returned a non-timestamp generatedAt');
+    }
+    generatedAt = rawGeneratedAt;
+  }
   if (!Array.isArray(record.requirements)) {
     throw new Error('publishable endpoint payload has no requirements array');
   }

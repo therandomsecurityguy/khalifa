@@ -115,6 +115,33 @@ describe('buildSite', () => {
     expect(() => loadSiteConfig(configPath)).toThrow('not valid JSON');
   });
 
+  it('rejects non-http link schemes but accepts https and mailto', () => {
+    const configPath = join(workspace, 'site.config.json');
+
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        company: { name: 'x' },
+        links: [{ label: 'open', href: 'javascript:alert(1)' }],
+      })
+    );
+    expect(() => loadSiteConfig(configPath)).toThrow('must use https, http, or mailto');
+
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        company: { name: 'x' },
+        links: [{ label: 'mail', href: 'mailto:security@example.com' }],
+        subprocessors: [
+          { name: 'v', purpose: 'p', location: 'l', dpaUrl: 'https://example.com/dpa' },
+        ],
+        documents: [{ label: 'privacy', url: 'https://example.com/privacy' }],
+        securityTxt: { policyUrl: 'https://example.com/security' },
+      })
+    );
+    expect(() => loadSiteConfig(configPath)).not.toThrow();
+  });
+
   it('emits RFC 9116 security.txt from the configured contact', () => {
     const { configPath, generatedDir } = writeFixtures();
     const outDir = join(workspace, 'dist');

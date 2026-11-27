@@ -75,8 +75,16 @@ app.disable('x-powered-by');
 app.use(metricsMiddleware);
 app.use(
   helmet({
-    // The API serves JSON only; CSP is enforced at the edge and in the UI.
-    contentSecurityPolicy: false,
+    // JSON-only API: a deny-all policy replaces the disabled default so the
+    // header is enforced rather than absent; the UI and edge serve their own
+    // CSP for HTML.
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        'default-src': ["'none'"],
+        'frame-ancestors': ["'none'"],
+      },
+    },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );

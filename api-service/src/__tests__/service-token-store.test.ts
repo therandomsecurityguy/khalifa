@@ -1,5 +1,7 @@
 import {
   hashServiceSecret,
+  isServiceTokenExpired,
+  isServiceTokenRevoked,
   mapServiceTokenRecord,
   parseServiceToken,
   parseServiceTokenInput,
@@ -98,5 +100,26 @@ describe('mapServiceTokenRecord', () => {
     const record = mapServiceTokenRecord({ id: 'x', lastUsedAt: 7 });
 
     expect(record).toMatchObject({ name: '', role: 'viewer', expiresAt: '', lastUsedAt: null });
+  });
+});
+
+describe('service-token state checks', () => {
+  it('treats a malformed or empty expiry as expired, never as permanent', () => {
+    const now = Date.parse('2026-11-27T00:00:00.000Z');
+    expect(isServiceTokenExpired('', now)).toBe(true);
+    expect(isServiceTokenExpired('garbage', now)).toBe(true);
+    expect(isServiceTokenExpired('2026-12-01T00:00:00.000Z', now)).toBe(false);
+    expect(isServiceTokenExpired('2026-11-01T00:00:00.000Z', now)).toBe(true);
+    // The exact expiry instant counts as expired.
+    expect(isServiceTokenExpired('2026-11-27T00:00:00.000Z', now)).toBe(true);
+  });
+
+  it('treats any non-null revocation marker as revoked', () => {
+    expect(isServiceTokenRevoked(undefined)).toBe(false);
+    expect(isServiceTokenRevoked(null)).toBe(false);
+    expect(isServiceTokenRevoked('2026-11-01T00:00:00.000Z')).toBe(true);
+    // A malformed marker (a number, an object) still counts.
+    expect(isServiceTokenRevoked(123)).toBe(true);
+    expect(isServiceTokenRevoked({ at: 'x' })).toBe(true);
   });
 });

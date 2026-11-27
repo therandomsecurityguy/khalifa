@@ -24,6 +24,23 @@ const MAX_HINT_LENGTH = 500;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+// The destination must be https, or http only for a local development
+// receiver: a signed payload (or a URL read from Secrets Manager) must not be
+// able to land on a plaintext remote endpoint or an unexpected scheme.
+export function isDeliverableWebhookUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol === 'https:') return true;
+  return (
+    parsed.protocol === 'http:' &&
+    ['localhost', '127.0.0.1', '::1', '[::1]'].includes(parsed.hostname)
+  );
+}
+
 function readBoundedInteger(
   value: string | undefined,
   fallback: number,
@@ -129,6 +146,12 @@ export class WebhookSink implements IssueActionSink {
   async emit(issue: IssueLike, rule: RuleLike, event?: IssueEvent): Promise<ExternalRef | null> {
     const url = await this.resolveUrl();
     if (!url) return null;
+    if (!isDeliverableWebhookUrl(url)) {
+      console.error(
+        'Webhook URL must be https (or http on localhost); refusing to deliver signed payloads to other endpoints'
+      );
+      return null;
+    }
     const signingSecret = await this.resolveSigningSecret();
     if (!signingSecret) {
       console.error(
@@ -207,6 +230,9 @@ export class WebhookSink implements IssueActionSink {
           method: 'POST',
           headers,
           body,
+          // Redirects are not followed: the signed payload must go exactly
+          // where the operator configured it.
+          redirect: 'manual',
           signal: AbortSignal.timeout(this.timeoutMs),
         });
       } catch (error) {
@@ -218,7 +244,8 @@ export class WebhookSink implements IssueActionSink {
       if (response.ok) return;
       const detail = (await response.text().catch(() => '')).slice(0, 200);
       lastError = new Error(`Webhook returned ${response.status}${detail ? `: ${detail}` : ''}`);
-      // 4xx (except rate limiting) will not succeed on retry.
+      // Redirects and 4xx (except rate limiting) will not succeed on retry.
+      if (response.status >= 300 && response.status < 400) throw lastError;
       if (response.status !== 429 && response.status < 500) throw lastError;
     }
     throw lastError;

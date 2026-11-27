@@ -163,10 +163,10 @@ function perAccountRegionResult(
         details: {
           accountRegionsAssessed: assessed.length,
           accountRegionsFailing: failing.length,
-          failingAccountRegions: failing.map((pair) => pair.replace('|', ' ')),
+          failingAccountRegions: failing.map((pair) => pair.replaceAll('|', ' ')),
           // The assessed set, not just its size: a pair absent from the failures
           // passed only if it was assessed. CIS reconciliation relies on it.
-          assessedAccountRegions: [...assessed].sort().map((pair) => pair.replace('|', ' ')),
+          assessedAccountRegions: [...assessed].sort().map((pair) => pair.replaceAll('|', ' ')),
           ...extraDetails,
         },
         collectedAt: new Date().toISOString(),
