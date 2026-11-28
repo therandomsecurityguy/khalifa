@@ -2,6 +2,14 @@
 
 All notable changes to Khalifa.
 
+## [Unreleased] - Access reviews (Phase 5)
+
+### Added
+
+- **Access review campaigns**: a review covers 1–200 IAM user/role ARNs (shape-validated, deduplicated), carries a name, description, status (draft/active/completed) and optional due date, and accepts **one reviewer decision per covered principal** — `approve`, `revoke`, or `abstain`, with a bounded note, attributed to the verified caller. Decisions are only meaningful **while the campaign is active** (409 otherwise) and only for covered principals (400 otherwise), so a decision can never point outside the campaign's scope; dropping a principal from the scope drops their decision with it.
+- **Completion evidence snapshot**: moving a campaign to `completed` performs one bounded graph read of every covered principal and stores, in the same write, per-principal facts (existence, label, admin flag) plus decision counts — an audit trail of what the reviewed access looked like at closure. A graph-read failure **fails the completion** (no hollow summary). The snapshot lives in the campaign record: the API can only read the compliance evidence table, so writing there would have weakened that split; post-campaign re-evaluation against later graph states is a follow-up the snapshot enables.
+- **API**: `GET/POST /access-reviews`, `GET/PUT/DELETE /access-reviews/:id`, `POST /access-reviews/:id/decisions` — read Viewer+, write Analyst+; slug ids, 409/404 semantics, derived `decided`/`pending` counts. New OpenAPI "Access reviews" tag. Stored in a new `access-reviews` DynamoDB table (PITR, CMK encryption, deletion protection, API-only IAM) surfaced as `accessReviewsTable` → `ACCESS_REVIEWS_TABLE`.
+
 ## [Unreleased] - Vendor register UI
 
 ### Added

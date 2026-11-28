@@ -25,6 +25,7 @@ locals {
     aws_dynamodb_table.service_tokens.arn,
     aws_dynamodb_table.risk_register.arn,
     aws_dynamodb_table.vendor_register.arn,
+    aws_dynamodb_table.access_reviews.arn,
   ]
   dynamodb_full_actions = [
     "dynamodb:BatchGetItem",

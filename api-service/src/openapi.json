@@ -80,6 +80,10 @@
     {
       "name": "Vendors",
       "description": "The vendor register: categories, data classes, DPA links, subprocessor disclosure fields, renewal dates, and review cadence."
+    },
+    {
+      "name": "Access reviews",
+      "description": "Campaigns over IAM users and roles: covered principals, per-principal reviewer decisions while active, and a completion evidence snapshot of the graph state."
     }
   ],
   "paths": {
@@ -2353,6 +2357,289 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/access-reviews": {
+      "get": {
+        "tags": ["Access reviews"],
+        "operationId": "listAccessReviews",
+        "summary": "Access review campaigns",
+        "description": "Requires **Viewer**. Campaigns with derived decided/pending counts; truncation is flagged.",
+        "responses": {
+          "200": {
+            "description": "Reviews and a truncation flag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Access reviews"],
+        "operationId": "createAccessReview",
+        "summary": "Create an access review",
+        "description": "Requires **Analyst**. `id` (slug) is optional; it is derived from the name when absent. `principals` is required: 1-200 IAM user or role ARNs. A colliding id answers 409.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "principals"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "name": { "type": "string", "maxLength": 200 },
+                  "description": { "type": "string", "maxLength": 2000 },
+                  "status": {
+                    "type": "string",
+                    "enum": ["draft", "active", "completed"]
+                  },
+                  "dueAt": { "type": "string", "nullable": true },
+                  "principals": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "items": { "type": "string", "description": "IAM user or role ARN." }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created review.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/access-reviews/{id}": {
+      "get": {
+        "tags": ["Access reviews"],
+        "operationId": "getAccessReview",
+        "summary": "One access review",
+        "description": "Requires **Viewer**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Review id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The review with decisions, derived counts, and any completion snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Access reviews"],
+        "operationId": "updateAccessReview",
+        "summary": "Update an access review",
+        "description": "Requires **Analyst**. Same field validation as create. Moving the status to `completed` captures the evidence snapshot (one bounded graph read of every covered principal) in the same write; a graph read failure fails the completion. Decisions for principals dropped from `principals` are removed.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Review id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated review.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Access reviews"],
+        "operationId": "deleteAccessReview",
+        "summary": "Delete an access review",
+        "description": "Requires **Analyst**.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Review id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deletion confirmation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/access-reviews/{id}/decisions": {
+      "post": {
+        "tags": ["Access reviews"],
+        "operationId": "recordAccessReviewDecision",
+        "summary": "Record a reviewer decision",
+        "description": "Requires **Analyst**. One decision per covered principal (upsert): `approve`, `revoke`, or `abstain`, with an optional note. Answers 409 while the review is not `active` and 400 when the principal is not covered — decisions only exist for the campaign's own scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Review id (slug).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["principalArn", "decision"],
+                "properties": {
+                  "principalArn": {
+                    "type": "string",
+                    "description": "IAM user or role ARN covered by the review."
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": ["approve", "revoke", "abstain"]
+                  },
+                  "note": { "type": "string", "maxLength": 500 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The review with the recorded decision and updated counts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"

@@ -27,6 +27,7 @@ data:
   SERVICE_TOKENS_TABLE: {{ .Values.config.serviceTokensTable | quote }}
   RISK_REGISTER_TABLE: {{ .Values.config.riskRegisterTable | quote }}
   VENDOR_REGISTER_TABLE: {{ .Values.config.vendorRegisterTable | quote }}
+  ACCESS_REVIEWS_TABLE: {{ .Values.config.accessReviewsTable | quote }}
   COGNITO_USER_POOL_ID: {{ .Values.config.cognitoUserPoolId | quote }}
   COGNITO_CLIENT_ID: {{ .Values.config.cognitoClientId | quote }}
   COGNITO_REGION: {{ default .Values.config.awsRegion .Values.config.cognitoRegion | quote }}

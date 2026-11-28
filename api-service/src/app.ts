@@ -25,6 +25,14 @@ import {
 import { listRisks, createRisk, getRisk, updateRisk, deleteRisk } from './routes/risks';
 import { listVendors, createVendor, getVendor, updateVendor, deleteVendor } from './routes/vendors';
 import {
+  listAccessReviews,
+  createAccessReview,
+  getAccessReview,
+  updateAccessReview,
+  recordAccessReviewDecision,
+  deleteAccessReview,
+} from './routes/access-reviews';
+import {
   getResource,
   searchResources,
   getResourceGraph,
@@ -214,6 +222,13 @@ app.post('/vendors', requireAnalyst, createVendor);
 app.get('/vendors/:id', requireViewer, getVendor);
 app.put('/vendors/:id', requireAnalyst, updateVendor);
 app.delete('/vendors/:id', requireAnalyst, deleteVendor);
+
+app.get('/access-reviews', requireViewer, listAccessReviews);
+app.post('/access-reviews', requireAnalyst, createAccessReview);
+app.get('/access-reviews/:id', requireViewer, getAccessReview);
+app.put('/access-reviews/:id', requireAnalyst, updateAccessReview);
+app.delete('/access-reviews/:id', requireAnalyst, deleteAccessReview);
+app.post('/access-reviews/:id/decisions', requireAnalyst, recordAccessReviewDecision);
 
 app.get('/compliance/frameworks', requireViewer, listFrameworks);
 app.get('/compliance/frameworks/:framework/controls', requireViewer, getFrameworkControls);
